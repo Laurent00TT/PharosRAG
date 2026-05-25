@@ -74,9 +74,9 @@ NaviKB 在两件事上都选了相反的立场:**小体积、深度尊重结构�
 | [README](README.zh.md)(当前) | ✅ 公开 | 30 秒理解 |
 | [docs/status.zh.md](docs/status.zh.md) | ✅ 公开 | 代码状态、发布时间、release 阻塞项 |
 | [docs/design/architecture.zh.md](docs/design/architecture.zh.md) | ✅ 公开 | 四层架构: ingest → storage → retrieve → serve |
-| `docs/design/navigation-first.zh.md` | 🔄 进行中 | 为什么 NavIndex;指针-only 设计;vs chunking 的取舍 |
-| `docs/design/security-model.zh.md` | 🔄 进行中 | hard-cutover auth、two-phase audit、软删除、maintenance flag、GC retention |
-| `docs/design/comparison.zh.md` | 🔄 进行中 | 与 LangChain / LlamaIndex / GraphRAG / NaviRAG 的深度对比 |
+| [docs/design/navigation-first.zh.md](docs/design/navigation-first.zh.md) | ✅ 公开 | 为什么 NavIndex;指针-only 设计;vs chunking 的取舍 |
+| [docs/design/security-model.zh.md](docs/design/security-model.zh.md) | ✅ 公开 | hard-cutover auth、two-phase audit、软删除、maintenance flag、GC retention |
+| [docs/design/comparison.zh.md](docs/design/comparison.zh.md) | ✅ 公开 | 与 LangChain / LlamaIndex / GraphRAG / NaviRAG 的深度对比 |
 | [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md) | ✅ 公开 | 当前阶段欢迎和不欢迎的贡献类型 |
 
 ## 快速链接

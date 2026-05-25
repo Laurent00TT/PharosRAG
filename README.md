@@ -89,9 +89,9 @@ A fuller comparison with reasoning will land in `docs/design/comparison.md`.
 | [README](README.md) (you are here) | ✅ public | 30-second overview |
 | [docs/status.md](docs/status.md) | ✅ public | Where the code is, when it ships, what blocks release |
 | [docs/design/architecture.md](docs/design/architecture.md) | ✅ public | Four-layer architecture: ingest → storage → retrieve → serve |
-| `docs/design/navigation-first.md` | 🔄 in progress | Why NavIndex; pointer-only design; trade-offs vs chunking |
-| `docs/design/security-model.md` | 🔄 in progress | Hard-cutover auth, two-phase audit, soft delete, maintenance flag, GC retention |
-| `docs/design/comparison.md` | 🔄 in progress | Deep comparison with LangChain / LlamaIndex / GraphRAG / NaviRAG |
+| [docs/design/navigation-first.md](docs/design/navigation-first.md) | ✅ public | Why NavIndex; pointer-only design; trade-offs vs chunking |
+| [docs/design/security-model.md](docs/design/security-model.md) | ✅ public | Hard-cutover auth, two-phase audit, soft delete, maintenance flag, GC retention |
+| [docs/design/comparison.md](docs/design/comparison.md) | ✅ public | Deep comparison with LangChain / LlamaIndex / GraphRAG / NaviRAG |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | ✅ public | What feedback is welcome right now (and what isn't) |
 
 ## Quick links
