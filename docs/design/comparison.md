@@ -208,10 +208,10 @@ NaviKB if we were being asked by someone evaluating us.
   retriever returns and trust it to cite responsibly. NaviKB
   partitions evidence vs hint at the API surface.
 - **Cross-process correctness.** Most projects don't separate
-  ingestion worker from serving process; the ones that do (e.g. Celery
-  + a web app) rely on message brokers. NaviKB uses SQLite as the
-  cross-process coordinator and pays the small-deployment cost (one
-  machine) to skip the broker complexity.
+  ingestion worker from serving process; the ones that do (e.g.
+  Celery paired with a web app) rely on message brokers. NaviKB uses
+  SQLite as the cross-process coordinator and pays the small-deployment
+  cost (one machine) to skip the broker complexity.
 - **Navigation-first as a design commitment.** Many frameworks have
   hierarchical retrieval as an option. NaviKB makes it the default
   and makes the pointer-only contract explicit in the API.

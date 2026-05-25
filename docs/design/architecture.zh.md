@@ -17,7 +17,7 @@ Model Context Protocol (MCP)。
 
 ## 四层结构
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  4. Serve     FastAPI tool server  +  MCP sub-app  +  REST API  │
 │               Auth · Audit · Maintenance · Backup · GC          │
@@ -92,7 +92,7 @@ serve、walk、expand,不需要 load 任何重的内容通道。
 
 检索特意做成正交阶段的小型组合:
 
-```
+```text
 query
   │
   ├─► (可选) HyDE 扩展 + Multi-Query (query rewrite adapter)
@@ -151,8 +151,9 @@ serve 层把 retrieval engine 包成三张脸:
   `manage_users.py create` 发的有效 API key。users 表为空时 server 拒绝
   启动(bootstrap-refuse-start 不变量)
 - **Audit**: 三种语义类 —— *单阶段强制* (用户管理操作)、*两阶段* (delete
-  和 reassign)、*best-effort* (其他)。两阶段保证: 要么动作 + `.completed`
-  审计行都成功,要么动作的效果可回滚(例如软删除 + `.attempted` 行存在)
+  和 reassign)、*best-effort* (其他)。两阶段保证: 要么动作和它的
+  `.completed` 审计行都成功,要么动作的效果可回滚(例如软删除时
+  `.attempted` 行已落盘可作 trail)
 - **Maintenance**: SQLite-backed flag,两个进程都读。写入方在 mutate
   之前观察;admin 端点等 active worker claim drain 完才返回 `drained:true`
 - **软删除 + GC**: DELETE 永远不动 Qdrant 或图片;只翻状态 + 写
@@ -166,7 +167,7 @@ auth / audit / maintenance / 软删除 / GC 的深入讨论会放在
 
 ## 进程拓扑
 
-```
+```text
 ┌──────────────────────────────┐         ┌──────────────────────────────┐
 │  FastAPI tool_server          │         │  后台 worker                  │
 │  - REST + MCP sub-app         │         │  - 从 ingestion_jobs claim    │

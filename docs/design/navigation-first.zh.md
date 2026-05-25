@@ -103,7 +103,7 @@ vision、description)仍然是骨架,覆盖导航靠结构够不到的场景:
 
 选择是关于**优先级**和**首次响应**的。当两边都有话要说时,NaviKB 返回:
 
-```
+```text
 evidence (可引用):                N 个 text/vision chunk,带 cross-encoder rerank
 suggested_fetches (导航):         M 个 NavEntry 指针,覆盖周围结构
 ```

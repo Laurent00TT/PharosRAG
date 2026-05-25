@@ -68,7 +68,7 @@ Verba 等),并且认为我们的 `comparison.zh.md` 描述错了,开 issue。我
 
 ## 怎么开一个好的 design-feedback issue
 
-```
+```text
 Title: [design-feedback] §<章节>: <一句话总结>
 
 Document: docs/design/architecture.zh.md (或别的)

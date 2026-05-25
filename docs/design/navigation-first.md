@@ -130,7 +130,7 @@ backbone for the cases navigation can't reach by structure alone:
 The choice is about *priority* and *first response*. When both
 channels have something to say, NaviKB returns:
 
-```
+```text
 evidence (cite-able):           N text/vision chunks with cross-encoder rerank
 suggested_fetches (navigate):   M NavEntry pointers covering surrounding structure
 ```

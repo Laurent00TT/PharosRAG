@@ -80,7 +80,7 @@ one, because every calendar date we've internally promised has slipped.
 
 ## How to open a good design-feedback issue
 
-```
+```text
 Title: [design-feedback] §<section>: <one-line summary>
 
 Document: docs/design/architecture.md (or whichever)

@@ -47,7 +47,7 @@ NaviKB 为一个**刻意限制的威胁模型**设计。明确说清楚它防御
   请求整形、自己没 WAF。把它暴露超出 `127.0.0.1` 的 operator 应该放在
   真 reverse proxy 后面(Caddy / nginx / Cloudflare Tunnel),带 TLS +
   (可选)mTLS 或更高层的 auth gate。
-- **被入侵的维护者机器。** 如果跑 NaviKB 的主机被入侵了,一切都无所谓: 
+- **被入侵的维护者机器。** 如果跑 NaviKB 的主机被入侵了,一切都无所谓:
   攻击者拿到带每个用户 token hash 的 SQLite 文件、每条 audit 行、每份
   文档的向量表示。我们不假装防御这个。
 - **LLM 的侧信道攻击。** 来自用户提交文档内容的 prompt injection 是任何
@@ -75,7 +75,7 @@ admin user,没人能认证,但每个端点还会 401 —— 看起来像通用 a
 
 所以第一次 setup 流程是:
 
-```
+```text
 1. 初始化数据库(跑任何调 UsersStore.init 的脚本)
 2. python scripts/manage_users.py create <名字> --role admin
 3. 现在 server 能启动了
@@ -132,7 +132,7 @@ Action 类型: `doc.delete`、`doc.reassign`。
 这些是 destructive 文档操作,audit trail 必须**即使操作中途失败也要存活**。
 契约:
 
-```
+```text
 1. audit_log.write_attempted("doc.delete", target_id=..., ...)
      → 写 doc.delete.attempted 行,best-effort
 2. 主操作运行(例如 mark_deleted + cache invalidate)
@@ -146,6 +146,7 @@ Action 类型: `doc.delete`、`doc.reassign`。
 ```
 
 这意味着:
+
 - 如果 `.attempted` 在磁盘但 `.completed` 不在,操作可能发生也可能没 ——
   admin 调查
 - 如果两个都在磁盘,操作成功且有 trail
@@ -273,7 +274,7 @@ await cache_epoch_store.bump()                 # UPDATE epoch = epoch + 1
 
 Operator 驱动的备份用 `scripts/backup_kb.py`。协议:
 
-```
+```text
 1. POST /admin/maintenance_mode {on: true}     # 等最多 5 分钟 drain
 2. 每个 KB SQLite DB: sqlite3.Connection.backup()
                                               # online backup API,

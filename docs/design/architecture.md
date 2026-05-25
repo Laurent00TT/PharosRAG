@@ -20,7 +20,7 @@ model APIs, and the Model Context Protocol (MCP).
 
 ## Four layers
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  4. Serve     FastAPI tool server  +  MCP sub-app  +  REST API  │
 │               Auth · Audit · Maintenance · Backup · GC          │
@@ -108,7 +108,7 @@ expanded without ever loading the heavy content channels.
 
 Retrieval is intentionally a small composition of orthogonal stages:
 
-```
+```text
 query
   │
   ├─► (optional) HyDE expansion + Multi-Query (query rewrite adapter)
@@ -177,9 +177,9 @@ Cross-cutting concerns live across the serve layer:
   (bootstrap-refuse-start invariant)
 - **Audit**: three semantic classes — *single-phase mandatory* for
   user-management ops, *two-phase* for delete and reassign, *best-effort*
-  for everything else. Two-phase guarantees that either the action
-  + a `.completed` audit row both succeed, or the action's effect
-  is reversible (e.g. soft delete + a `.attempted` row exists)
+  for everything else. Two-phase guarantees that the action and its
+  `.completed` audit row both succeed, or the action's effect
+  is reversible (e.g. soft delete with a `.attempted` row already on disk)
 - **Maintenance**: SQLite-backed flag both processes read. Writers
   observe it before mutating; the admin endpoint waits for active
   worker claims to drain before reporting `drained:true`
@@ -195,7 +195,7 @@ GC will live in `docs/design/security-model.md`.
 
 ## Process topology
 
-```
+```text
 ┌──────────────────────────────┐         ┌──────────────────────────────┐
 │  FastAPI tool_server          │         │  Background worker            │
 │  - REST + MCP sub-app         │         │  - claims from ingestion_jobs │

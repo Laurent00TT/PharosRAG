@@ -1,0 +1,86 @@
+name: Security-design feedback
+description: Report a concern about NaviKB's design-layer security model
+title: "[security-design] §<section>: <one-line summary>"
+labels: ["security-design", "design-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for concerns about NaviKB's **design-layer**
+        security — the threat model, auth contract, audit semantics,
+        soft-delete invariants, etc. as described in
+        [docs/design/security-model.md](https://github.com/Laurent00TT/navikb/blob/main/docs/design/security-model.md).
+
+        **Not** for code-level vulnerability reports. NaviKB is in
+        Stage 0 (design preview); there is no code to find a CVE in.
+        See [SECURITY.md](https://github.com/Laurent00TT/navikb/blob/main/SECURITY.md)
+        for the full policy and the Stage 2 plan for code-vuln reporting.
+
+        Sensitive issues that should NOT be world-readable: email the
+        maintainer instead (address on the GitHub profile). This form
+        creates a public issue.
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which part of the security model
+      options:
+        - Threat model — scope (in/out of scope)
+        - Auth contract — token hashing / brute-force / bootstrap-refuse-start
+        - Audit semantics — best-effort / single-phase / two-phase
+        - Soft-delete + GC — retention, restore, residue
+        - Maintenance flag — cross-process pause / drain
+        - Backup protocol — consistency / WAL / qdrant ignore patterns
+        - Evidence vs hint partition — citation discipline
+        - Doctor / reconcile — orphan detection
+        - Cross-process cache invalidation (cache_epoch)
+        - Other (specify in "Specific concern" below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: concern
+    attributes:
+      label: Specific concern
+      description: What does the design currently claim, and where does it fall short?
+      placeholder: |
+        security-model.md §"Two-phase" says ".attempted then main-op
+        then .completed". An attacker who can pause the process between
+        steps 1 and 2 leaves an .attempted row that suggests an
+        operation that didn't actually happen — admin reconciles by
+        looking at actual state. But if main-op did happen and only
+        .completed fails into the JSONL fallback, the admin can't
+        distinguish "fallback succeeded" from "fallback also failed
+        and we silently lost it" without inspecting the fallback file.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attack_scenario
+    attributes:
+      label: Attack scenario or weakness scenario
+      description: |
+        A concrete sequence of events that exposes the gap. Distinguish
+        between "an attacker can do X" and "an operator running normally
+        encounters X."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_fix
+    attributes:
+      label: What you think the fix should look like
+      description: Optional. Even a rough sketch helps.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope_acknowledgement
+    attributes:
+      label: Scope acknowledgement
+      description: Confirm you're in the right place
+      options:
+        - label: This is about the design as documented, not a code-level vulnerability (NaviKB has no public code yet)
+          required: true
+        - label: I understand this creates a public issue; sensitive reports should go to the maintainer via email instead
+          required: true

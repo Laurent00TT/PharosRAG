@@ -24,8 +24,14 @@ At Stage 0, the only attack surface NaviKB exposes publicly is its
 - The evidence-vs-hint partition in MCP responses
 
 If you find a hole in any of the above as described, please open an
-issue using the [design-feedback template](.github/ISSUE_TEMPLATE/design_feedback.yml)
-with the label `security-design`.
+issue using the [security-design template](https://github.com/Laurent00TT/navikb/issues/new?template=security_design.yml).
+The template auto-applies both `security-design` and `design-feedback`
+labels — non-maintainers usually can't add labels themselves on a
+public repo, so the template handles it for you.
+
+For reports you don't want to be world-readable, email the maintainer
+instead (address on the GitHub profile); see the bottom of this
+document for the full reasoning.
 
 ## What's NOT in scope until Stage 2
 

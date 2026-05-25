@@ -94,7 +94,7 @@ obvious.
 
 The first-time setup flow is therefore:
 
-```
+```text
 1. Initialize the database (run any script that calls UsersStore.init)
 2. python scripts/manage_users.py create <name> --role admin
 3. Now the server can start
@@ -162,7 +162,7 @@ Action types: `doc.delete`, `doc.reassign`.
 These are destructive document operations where the audit trail must
 survive even if the operation fails mid-way. The contract:
 
-```
+```text
 1. audit_log.write_attempted("doc.delete", target_id=..., ...)
      → writes a doc.delete.attempted row, best-effort
 2. main op runs (e.g. mark_deleted + cache invalidate)
@@ -177,6 +177,7 @@ survive even if the operation fails mid-way. The contract:
 ```
 
 This means:
+
 - If `.attempted` is on disk but `.completed` is not, the operation
   may or may not have happened — admin investigates
 - If both `.attempted` and `.completed` are on disk, the operation
@@ -330,7 +331,7 @@ Cheap and worth it.
 
 Operator-driven backup uses `scripts/backup_kb.py`. The protocol:
 
-```
+```text
 1. POST /admin/maintenance_mode {on: true}     # wait up to 5min for drain
 2. For each KB SQLite DB: sqlite3.Connection.backup()
                                               # online backup API,

@@ -176,7 +176,7 @@ Continue、Cline 等)且你在意"谁能做什么"超出单用户,选 NaviKB。
 - **引用纪律。** 多数栈把 retriever 返回的所有东西给 LLM,信任它负责任地
   引用。NaviKB 在 API 表面分区 evidence vs hint。
 - **跨进程正确性。** 多数项目不把 ingestion worker 跟 serving 进程分开;
-  分开的(例如 Celery + 一个 web app)依赖 message broker。NaviKB 用
+  分开的(例如 Celery 配上一个 web app)依赖 message broker。NaviKB 用
   SQLite 作跨进程协调器,付小部署的代价(一台机器)跳过 broker 复杂度。
 - **Navigation-first 作为设计承诺。** 很多框架有层次检索作为选项。NaviKB
   把它当作默认,并把 pointer-only 契约在 API 里显式化。
