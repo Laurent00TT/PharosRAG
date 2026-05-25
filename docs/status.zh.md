@@ -82,8 +82,10 @@ under-promise。
 - **⭐ Star 或 watch 本仓库** —— Stage 1 邀请和 Stage 2 发布都会在这里宣布
 - **🐛 开 issue** 带 `design-feedback` 标签 —— 每个 issue 都会被读,
   即便 Stage 2 之前不接受 code PR
-- **📋 跟进设计文档** 陆续上线 —— `navigation-first.zh.md`、
-  `security-model.zh.md`、`comparison.zh.md` 是接下来的
+- **📋 读设计文档** —— [architecture](design/architecture.zh.md)、
+  [navigation-first](design/navigation-first.zh.md)、
+  [security-model](design/security-model.zh.md)、
+  [comparison](design/comparison.zh.md) 都已上线
 
 ## Stage 2 之前我们会公开的物料
 

@@ -1,0 +1,42 @@
+name: Docs clarity
+description: Report a typo, broken link, confusing passage, or out-of-sync EN/ZH pair
+title: "[docs-clarity] <file>: <one-line summary>"
+labels: ["docs-clarity"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Small fixes are fastest as PRs — but if you spot something
+        and don't want to do the fix yourself, this template is the
+        place to flag it.
+
+        For typos and broken links: please open a PR directly.
+        For confusing-passage / out-of-sync issues: this template.
+
+  - type: input
+    id: file
+    attributes:
+      label: File
+      placeholder: "docs/design/architecture.zh.md"
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's confusing / wrong / mismatched
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - typo / broken link (consider opening a PR instead)
+        - confusing passage (needs rewrite)
+        - out-of-sync EN/ZH pair (one language changed but the other didn't)
+        - inconsistency between two design docs
+        - other
+    validations:
+      required: true

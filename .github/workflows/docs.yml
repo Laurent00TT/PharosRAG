@@ -1,0 +1,82 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - ".github/workflows/docs.yml"
+      - ".markdownlint.json"
+      - ".markdown-link-check.json"
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/workflows/docs.yml"
+      - ".markdownlint.json"
+      - ".markdown-link-check.json"
+
+# Concurrency: only the latest commit on a branch needs to be checked;
+# older queued runs are wasted compute on a docs-only repo.
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  markdownlint:
+    name: markdownlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v17
+        with:
+          globs: |
+            **/*.md
+            !LICENSE
+          config: .markdownlint.json
+
+  link-check:
+    name: link-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Markdown links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          # Sibling EN/ZH files reference each other relatively; need
+          # to allow the check to follow those without trying to resolve
+          # them against an upstream URL.
+          use-quiet-mode: "yes"
+          use-verbose-mode: "yes"
+          config-file: .markdown-link-check.json
+
+  bilingual-sync:
+    name: bilingual-sync (every <name>.md should have a <name>.zh.md)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify each English doc has a Chinese mirror
+        # Exempt: LICENSE (legal text, English-only), CODE_OF_CONDUCT.md
+        # (Contributor Covenant standard text), SECURITY.md (policy),
+        # files under .github/ (templates), and any *.zh.md (the mirror
+        # itself).
+        run: |
+          set -e
+          missing=""
+          while IFS= read -r f; do
+            case "$f" in
+              LICENSE|CODE_OF_CONDUCT.md|SECURITY.md) continue ;;
+              .github/*) continue ;;
+              *.zh.md) continue ;;
+            esac
+            zh="${f%.md}.zh.md"
+            if [ ! -f "$zh" ]; then
+              missing="${missing}  missing: ${zh}  (for ${f})\n"
+            fi
+          done < <(git ls-files '*.md')
+          if [ -n "$missing" ]; then
+            printf "Bilingual sync check failed. The following English docs lack a Chinese mirror:\n%b\n" "$missing"
+            printf "Per CONTRIBUTING.md, every <name>.md must have a sibling <name>.zh.md.\n"
+            exit 1
+          fi
+          echo "All English docs have a Chinese mirror."

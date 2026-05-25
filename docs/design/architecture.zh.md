@@ -225,6 +225,8 @@ auth / audit / maintenance / 软删除 / GC 的深入讨论会放在
 ## 接下来读什么
 
 - [Status & 发布计划](../status.zh.md) —— 已做、测试中、阻塞中的事
-- `navigation-first.zh.md` (进行中) —— NavIndex 为什么是这个样子
-- `security-model.zh.md` (进行中) —— auth、audit、软删除契约
-- `comparison.zh.md` (进行中) —— 与相关项目的明确对比
+- [`navigation-first.zh.md`](navigation-first.zh.md) —— NavIndex 为什么
+  是这个样子
+- [`security-model.zh.md`](security-model.zh.md) —— auth、audit、软删除
+  契约
+- [`comparison.zh.md`](comparison.zh.md) —— 与相关项目的明确对比

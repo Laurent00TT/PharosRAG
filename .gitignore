@@ -1,15 +1,15 @@
-# OS
+# ── OS ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Editor / IDE
+# ── Editor / IDE ────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *~
 
-# Build / packaging artifacts (placeholder — no code yet, but future-proof)
+# ── Python / packaging ──────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
@@ -20,6 +20,40 @@ dist/
 build/
 *.egg-info/
 
-# Local-only docs scratchpad
+# ── Pre-code-drop hygiene (Stage 2 ingest target — block now to
+#    prevent accidental commits when the implementation lands) ──────
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Local SQLite + Qdrant data
+*.db
+*.db-wal
+*.db-shm
+qdrant_data*/
+storage/
+images/
+nav_index.db
+
+# Logs + audit fallback
+logs/
+*.log
+audit_fallback*.jsonl
+
+# Eval / benchmark scratch
+datasets/
+test_doc/
+test_docs/
+eval_*.json
+eval_results/
+golden/
+
+# Backup outputs
+backups/
+backup-*/
+
+# Local-only scratchpad
 /scratch/
 /.notes/

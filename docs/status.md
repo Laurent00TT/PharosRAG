@@ -96,8 +96,11 @@ The fastest way to follow real progress:
   release will both be announced here
 - **🐛 Open an issue** with the `design-feedback` label — every issue
   is read, even though we won't accept code PRs until Stage 2
-- **📋 Read the design docs** as they land — `navigation-first.md`,
-  `security-model.md`, and `comparison.md` are next
+- **📋 Read the design docs** —
+  [architecture](design/architecture.md),
+  [navigation-first](design/navigation-first.md),
+  [security-model](design/security-model.md), and
+  [comparison](design/comparison.md) are all live
 
 ## What we will publish before Stage 2
 

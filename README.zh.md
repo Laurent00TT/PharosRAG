@@ -51,8 +51,9 @@ operator、强偏好本地运行、不依赖 SaaS。
 
 NaviKB 在两件事上都选了相反的立场:**小体积、深度尊重结构、MCP-native**。
 
-形状的细节见 [docs/design/architecture.zh.md](docs/design/architecture.zh.md),
-设计 rationale 见 `docs/design/navigation-first.zh.md`(下一份)。
+形状的细节见 [docs/design/architecture.zh.md](docs/design/architecture.zh.md);
+"为什么把导航做成主访问模式"的设计 rationale 见
+[docs/design/navigation-first.zh.md](docs/design/navigation-first.zh.md)。
 
 ## 差异化对比
 
@@ -65,7 +66,8 @@ NaviKB 在两件事上都选了相反的立场:**小体积、深度尊重结构�
 | 运维表面(auth/audit/backup/GC) | ✅ 端到端 | ❌ "自己搭" | ⚠ 仅企业栈 | ❌ |
 | 状态 | 设计公开,代码私有 | 成熟 | 成熟 | 研究原型 |
 
-更完整的对比 + 论证将放在 `docs/design/comparison.zh.md`。
+每一格的详细论证 —— 加一节诚实的"NaviKB 比谁弱"—— 在
+[docs/design/comparison.zh.md](docs/design/comparison.zh.md)。
 
 ## 文档地图
 
@@ -83,8 +85,9 @@ NaviKB 在两件事上都选了相反的立场:**小体积、深度尊重结构�
 
 - 📋 [状态 & 发布计划](docs/status.zh.md)
 - 🏛 [架构](docs/design/architecture.zh.md)
-- 💬 [讨论: 开 issue](../../issues) —— 欢迎设计反馈
+- 💬 [讨论: 开 issue](../../issues/new/choose) —— 设计反馈、对比纠正、文档清晰度
 - 🤝 [贡献指南](CONTRIBUTING.zh.md)
+- 🔒 [Security policy](SECURITY.md)
 - 📜 [License: Apache-2.0](LICENSE)
 
 ## 命名由来

@@ -67,7 +67,7 @@ for structure, agent-native via MCP.
 
 See [docs/design/architecture.md](docs/design/architecture.md) for the
 shape in detail, and [docs/design/navigation-first.md](docs/design/navigation-first.md)
-(coming next) for the design rationale.
+for the design rationale behind making navigation the primary access pattern.
 
 ## Differentiation
 
@@ -80,7 +80,8 @@ shape in detail, and [docs/design/navigation-first.md](docs/design/navigation-fi
 | Operator surface (auth, audit, backup, GC) | ✅ end-to-end | ❌ "build it yourself" | ⚠ enterprise stacks only | ❌ |
 | Status | design-public, code-private | mature | mature | research prototype |
 
-A fuller comparison with reasoning will land in `docs/design/comparison.md`.
+Detailed reasoning per cell — and an honest "where NaviKB is weaker"
+section — lives in [docs/design/comparison.md](docs/design/comparison.md).
 
 ## Documentation map
 
@@ -98,8 +99,9 @@ A fuller comparison with reasoning will land in `docs/design/comparison.md`.
 
 - 📋 [Status & release plan](docs/status.md)
 - 🏛 [Architecture](docs/design/architecture.md)
-- 💬 [Discussion: open an issue](../../issues) — design feedback welcome
+- 💬 [Discussion: open an issue](../../issues/new/choose) — design feedback, comparison corrections, docs clarity
 - 🤝 [Contributing](CONTRIBUTING.md)
+- 🔒 [Security policy](SECURITY.md)
 - 📜 [License: Apache-2.0](LICENSE)
 
 ## Naming

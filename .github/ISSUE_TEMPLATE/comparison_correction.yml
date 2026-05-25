@@ -1,0 +1,50 @@
+name: Comparison correction
+description: Report that comparison.md mischaracterizes another project
+title: "[comparison-correction] <project>: <one-line summary>"
+labels: ["comparison-correction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for catching this.
+
+        We try to keep [comparison.md](https://github.com/Laurent00TT/navikb/blob/main/docs/design/comparison.md)
+        accurate even when it doesn't favor NaviKB. Maintainers and
+        users of the projects we compare against are exactly the
+        right people to correct us.
+
+  - type: input
+    id: project
+    attributes:
+      label: Project being mischaracterized
+      placeholder: "LlamaIndex / LangChain / GraphRAG / NaviRAG / Verba / ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: claim
+    attributes:
+      label: What comparison.md currently says
+      description: Paste the exact text (or summarize and link the line)
+    validations:
+      required: true
+
+  - type: textarea
+    id: correction
+    attributes:
+      label: What's actually true
+      description: |
+        Plus a link to source (docs / repo / paper) so we can verify.
+        Bonus points for proposing the new wording.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: relationship
+    attributes:
+      label: Disclosure
+      description: For transparency. Optional.
+      options:
+        - label: I maintain the project being mischaracterized
+        - label: I'm a heavy user of that project
+        - label: I have no relationship — just spotted the inaccuracy

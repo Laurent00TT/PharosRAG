@@ -261,6 +261,9 @@ what won't.
 
 - [Status & release plan](../status.md) — what's done, what's in
   testing, what's blocked
-- `navigation-first.md` (in progress) — why NavIndex is the way it is
-- `security-model.md` (in progress) — auth, audit, soft-delete contract
-- `comparison.md` (in progress) — explicit comparison with related projects
+- [`navigation-first.md`](navigation-first.md) — why NavIndex is the
+  way it is
+- [`security-model.md`](security-model.md) — auth, audit, soft-delete
+  contract
+- [`comparison.md`](comparison.md) — explicit comparison with related
+  projects

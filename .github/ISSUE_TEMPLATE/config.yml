@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Code PRs are not yet accepted
+    url: https://github.com/Laurent00TT/navikb/blob/main/docs/status.md
+    about: NaviKB is in Stage 0 (design preview). Code PRs against the (non-existent) implementation will be closed. Design feedback is welcome — pick the appropriate template above.
+  - name: Security report
+    url: https://github.com/Laurent00TT/navikb/blob/main/SECURITY.md
+    about: For security-related concerns, follow SECURITY.md instead of opening a public issue.
