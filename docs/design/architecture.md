@@ -74,10 +74,12 @@ The ingest pipeline produces, per document:
 1. **Text chunks** with parent-chunk references (chunk size and overlap
    are tuned by the chunker; see `docs/design/navigation-first.md` for
    the rationale behind chunk shape)
-2. **Page-level dense embeddings** from BGE-M3 (and the same model's
-   sparse vector head, so a single forward pass covers both channels)
-3. **Page-level visual embeddings** from ColQwen2 (multi-vector
-   MAX-SIM, not a single pooled vector)
+2. **Page-level dense + learned-sparse vectors** — dense from
+   Qwen3-VL-Embedding (dim 4096), learned sparse from MILCO
+   (doc-side pruning; a separate model from the dense embedder)
+3. **Page-level visual embeddings** from Qwen3-VL — a single dense
+   vector per page, in the same 4096-dim space as the text channel
+   (not a multi-vector MAX-SIM model)
 4. **Page-level LLM descriptions** from a vision LLM (only when the
    page contains visual content; pure-text pages skip this channel)
 5. **Metadata rows** in SQLite: doc_id, owner, status, version,
@@ -92,7 +94,7 @@ data:
 
 | Store | Backing | Holds | Why this choice |
 |---|---|---|---|
-| **Vector index** | Qdrant (local file mode by default, server mode optional) | text chunks, vision pages, descriptions — three versioned collections | Best small-team vector DB: zero-config local mode, drop-in scale-up to server, native multi-vector (needed for ColQwen2), good Python ergonomics |
+| **Vector index** | Qdrant (local file mode by default, server mode optional) | text chunks, vision pages, descriptions — three versioned collections | Best small-team vector DB: zero-config local mode, drop-in scale-up to server, named vectors per channel, good Python ergonomics |
 | **Relational state** | SQLite (one file, multiple tables) | documents, users, audit_log, maintenance_state, cache_epoch, usage_feedback, ingestion_jobs | Two processes (server + worker) need shared state; SQLite is the only zero-deploy option that gives true cross-process consistency. WAL mode + careful BEGIN IMMEDIATE on the worker's claim path |
 | **Image store** | Local filesystem under `image_storage_path/<doc_id>/page_N.png` | rendered page images for vision retrieval + agent fetch | Simple, debuggable, cheap; soft-delete leaves files in place until GC purges them |
 
@@ -114,10 +116,10 @@ query
   ├─► (optional) HyDE expansion + Multi-Query (query rewrite adapter)
   │
   ├─► 4-channel parallel retrieval
-  │     • text dense (BGE-M3 dense)
-  │     • text sparse (BGE-M3 sparse / SPLADE-like)
-  │     • vision (ColQwen2 multi-vector MAX-SIM)
-  │     • description (BGE-M3 dense on LLM descriptions)
+  │     • text dense (Qwen3-VL-Embedding)
+  │     • text sparse (MILCO learned sparse)
+  │     • vision (Qwen3-VL single-vector dense)
+  │     • description (Qwen3-VL-Embedding on LLM descriptions)
   │
   ├─► RRF fusion (rank-based, not score-based — different channels'
   │   score scales are not commensurable)

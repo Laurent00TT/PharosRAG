@@ -1,0 +1,90 @@
+[project]
+name = "navikb"
+version = "0.1.0"
+description = "Navigable Knowledge Base — a navigation-first, local-first multimodal RAG engine (research / example)."
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "qdrant-client>=1.9.0",
+    "FlagEmbedding>=1.2.11",
+    "openai>=1.40.0",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.20.0",
+    "httpx>=0.27.0",
+    "Pillow>=10.0.0",
+    "pydantic-settings>=2.3.0",
+    "tenacity>=8.5.0",
+    "cachetools>=5.4.0",
+    # MinerU 3.x 要求 transformers<5.0.0,>=4.57.3 (Qwen2VLConfig 兼容)。
+    # transformers 5.x 重构了 config 类,丢失 max_position_embeddings 属性。
+    "transformers>=4.57.3,<5.0.0",
+    # torch upper-bounded at <2.9.0. CPU build is forced via
+    # [tool.uv.sources] / [[tool.uv.index]] below — the default PyPI wheel
+    # was previously resolving to a CUDA build (cu128) that registered GPU
+    # NMS ops, which then failed at import time on this CPU-only venv
+    # (RuntimeError: operator torchvision::nms does not exist).
+    # The <2.9.0 ceiling was originally mandated by the now-removed
+    # colpali-engine (legacy colqwen stack); kept for venv/torchvision
+    # compatibility — revisit the exact ceiling in a dedicated dependency pass.
+    "torch>=2.7.0,<2.9.0",
+    # torchvision is not used directly by kb (`grep -r torchvision src/kb`
+    # returns nothing) but transformers / FlagEmbedding probe for it via
+    # importlib.util.find_spec and import it when present. Pinning to a
+    # torch-matched range (0.23.x ↔ torch 2.8) prevents uv from picking
+    # a newer torchvision that demands torch ≥2.9 (which colpali blocks).
+    # Also routed through the PyTorch CPU index — see sources below.
+    "torchvision>=0.22.0,<0.24.0",
+    "einops>=0.8.2",
+    "pypdfium2>=4.0.0",
+]
+
+[project.optional-dependencies]
+# MinerU 3.x 包名已从 magic-pdf 改为 mineru。
+# 实际可用入口经 scripts/probe_mineru.py 验证 (2026-05-09):
+#   - mineru.backend.hybrid.hybrid_analyze.doc_analyze
+#   - mineru.backend.vlm.vlm_analyze.doc_analyze
+#   - mineru.backend.pipeline.pipeline_analyze.doc_analyze_streaming
+# Hybrid backend 需要 pipeline + vlm 两个 extras (pipeline 缺 albumentations/shapely/onnxruntime;
+# vlm 缺 accelerate)。仅装 vlm 跑不通 hybrid。
+mineru = ["mineru[pipeline,vlm]>=3.1.0"]
+server  = ["fastapi>=0.111.0", "uvicorn>=0.30.0", "python-multipart>=0.0.9", "mcp>=1.27.1"]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.14.0",
+    "fpdf2>=2.7.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/Laurent00TT/navikb"
+Repository = "https://github.com/Laurent00TT/navikb"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.uv.sources]
+# Route torch + torchvision through the PyTorch CPU wheel index instead of
+# PyPI's default (which picks the cu128 build on Windows). This is the
+# fix for: "RuntimeError: operator torchvision::nms does not exist" —
+# the cu128 torchvision tries to register GPU kernels that the CPU
+# torch can't satisfy, exploding at import time on lifespan startup.
+torch       = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+# explicit=true means: ONLY packages that opt into this index via
+# [tool.uv.sources] use it. Other packages keep resolving from PyPI.
+# Without this, uv would speculatively pull every dep from the CPU
+# index — most packages don't exist there and resolution would fail.
+explicit = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kb"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

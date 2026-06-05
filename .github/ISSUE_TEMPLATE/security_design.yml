@@ -11,10 +11,10 @@ body:
         soft-delete invariants, etc. as described in
         [docs/design/security-model.md](https://github.com/Laurent00TT/navikb/blob/main/docs/design/security-model.md).
 
-        **Not** for code-level vulnerability reports. NaviKB is in
-        Stage 0 (design preview); there is no code to find a CVE in.
-        See [SECURITY.md](https://github.com/Laurent00TT/navikb/blob/main/SECURITY.md)
-        for the full policy and the Stage 2 plan for code-vuln reporting.
+        This template is for **design-layer** security feedback. For a
+        **code-level vulnerability**, do not open a public issue — follow
+        [SECURITY.md](https://github.com/Laurent00TT/navikb/blob/main/SECURITY.md)
+        (private reporting).
 
         Sensitive issues that should NOT be world-readable: email the
         maintainer instead (address on the GitHub profile). This form
@@ -80,7 +80,7 @@ body:
       label: Scope acknowledgement
       description: Confirm you're in the right place
       options:
-        - label: This is about the design as documented, not a code-level vulnerability (NaviKB has no public code yet)
+        - label: This is about the design as documented; for a code-level vulnerability I will follow SECURITY.md (private reporting) instead
           required: true
         - label: I understand this creates a public issue; sensitive reports should go to the maintainer via email instead
           required: true

@@ -1,0 +1,53 @@
+# docker/Dockerfile.milco
+#
+# MILCO sparse_server CPU runtime image.
+# Built for: PoC v1.1
+#
+# Pairs with scripts/sparse_server.py.
+# Model omai-research/milco-650m is NOT baked in by default — downloaded
+# on first /embed_doc or /embed_query call. To bake the model into the
+# image (faster cold start, larger image ~2.4GB extra), uncomment the
+# huggingface-cli download line at the bottom.
+FROM python:3.12-slim
+
+# Minimal apt deps (transformers might need git for some model fetches)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# CPU-only torch (saves ~2GB vs CUDA build) — MILCO 650m runs comfortably on CPU
+# Per MILCO paper: ~0.44ms/query with mass-based pruning, no GPU needed.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        "torch>=2.4,<2.9"
+
+# Server runtime deps (transformers >=4.57 to match Qwen3-VL stack)
+RUN pip install --no-cache-dir \
+        "transformers>=4.57" \
+        "fastapi>=0.111" \
+        "uvicorn>=0.30" \
+        "pydantic>=2.0" \
+        "huggingface_hub[cli]>=0.24"
+
+# Copy only the server script — minimal image surface
+COPY scripts/sparse_server.py /app/scripts/sparse_server.py
+
+# OPTIONAL: pre-bake the MILCO model into the image (uncomment + adjust)
+# This adds ~2.4GB to the image but eliminates first-request cold start.
+# Use HF_ENDPOINT for China users.
+# RUN HF_ENDPOINT=https://hf-mirror.com \
+#     huggingface-cli download omai-research/milco-650m
+
+# Env defaults (override in compose `.env`)
+ENV SPARSE_MODEL=omai-research/milco-650m \
+    SPARSE_MODEL_REVISION=main \
+    SPARSE_DOC_PRUNE_RATIO=0.3 \
+    SPARSE_QUERY_PRUNE_RATIO=0.0 \
+    SPARSE_USE_SOURCE_VIEW=true
+
+EXPOSE 8004
+
+CMD ["python", "scripts/sparse_server.py", "--host", "0.0.0.0", "--port", "8004"]

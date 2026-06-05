@@ -1,6 +1,7 @@
 {
   "ignorePatterns": [
     { "pattern": "^https://github.com/Laurent00TT/navikb/issues" },
+    { "pattern": "^https://github.com/Laurent00TT/navikb-workbench" },
     { "pattern": "^\\.\\./\\.\\./" }
   ],
   "replacementPatterns": [

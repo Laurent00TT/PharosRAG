@@ -1,0 +1,42 @@
+# docker/Dockerfile.main
+#
+# KB main process: FastAPI tool_server + Qdrant client + admin tools.
+#
+# IMAGE SIZE NOTE:
+#   FlagEmbedding is still a declared dependency but is no longer imported by
+#   src/kb/* (text / vision / rerank go through HTTP clients), so it can be
+#   dropped in a future dependency cleanup to shrink this image further.
+FROM python:3.12-slim
+
+# Native-build deps required by FlagEmbedding / sentence-transformers wheels
+# (will be removed in cleanup after pyproject is slimmed down)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy project metadata first for better layer caching
+COPY pyproject.toml /app/
+
+# Install with server + dev extras
+# CPU-only torch (no GPU in main process); subagent vllm services
+# carry their own torch+CUDA in separate images.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -e ".[server,dev]"
+
+# Source files (volumes will overlay this in compose for dev; baked here
+# so the image can run standalone too)
+COPY src /app/src
+COPY scripts /app/scripts
+
+# Project layout expects PYTHONPATH=src
+ENV PYTHONPATH=/app/src
+
+# Expose tool_server default port; override via .env if needed
+EXPOSE 8000
+
+# Default: tool_server (REST + MCP). Override with `command:` in compose
+# to run worker.py / ingest.py / manage_users.py from the same image.
+CMD ["python", "scripts/serve.py"]

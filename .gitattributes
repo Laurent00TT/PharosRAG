@@ -1,0 +1,11 @@
+# Normalize all text files to LF in the repository (avoids mixed CRLF/LF).
+* text=auto
+
+# Windows scripts keep CRLF on checkout.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets (none currently tracked, but be explicit).
+*.png binary
+*.jpg binary
+*.pdf binary

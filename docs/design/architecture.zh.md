@@ -64,8 +64,10 @@ ingest pipeline 每份文档产出:
 
 1. **文本 chunk** + parent-chunk 引用(chunk size 和 overlap 由 chunker 调,
    形状的论证见 `docs/design/navigation-first.zh.md`)
-2. **页面级 dense embedding**(BGE-M3,同一次 forward 同时取 sparse 向量头)
-3. **页面级视觉 embedding**(ColQwen2 多向量 MAX-SIM,不是单一池化向量)
+2. **页面级 dense + 学习式 sparse 向量** —— dense 用 Qwen3-VL-Embedding(dim 4096),
+   sparse 用 MILCO(doc 侧剪枝;与 dense 不同的另一个模型)
+3. **页面级视觉 embedding**(Qwen3-VL,每页一个单向量 dense,与文本通道同 4096 维空间,
+   不是多向量 MAX-SIM 模型)
 4. **页面级 LLM 描述**(vision LLM,仅当页面包含视觉内容;纯文本页跳过)
 5. **Metadata 行**(SQLite): doc_id、owner、status、version、effective_date、
    expiry_date、supersedes、deleted_at
@@ -78,7 +80,7 @@ ingest pipeline 每份文档产出:
 
 | Store | 后端 | 存什么 | 为什么这样选 |
 |---|---|---|---|
-| **向量索引** | Qdrant(默认本地文件模式,可切到 server 模式) | 文本 chunk、vision 页、description —— 三个版本化 collection | 小团队最好的向量 DB:零配置本地模式,无痛切到 server,原生多向量(ColQwen2 必需),Python 工程体感好 |
+| **向量索引** | Qdrant(默认本地文件模式,可切到 server 模式) | 文本 chunk、vision 页、description —— 三个版本化 collection | 小团队最好的向量 DB:零配置本地模式,无痛切到 server,每通道命名向量(named vectors),Python 工程体感好 |
 | **关系状态** | SQLite(一个文件多张表) | documents、users、audit_log、maintenance_state、cache_epoch、usage_feedback、ingestion_jobs | 两个进程(server + worker)需要共享状态;SQLite 是唯一零部署的真跨进程一致性方案。WAL 模式 + worker claim 路径上的 BEGIN IMMEDIATE |
 | **图片 store** | 本地文件 `image_storage_path/<doc_id>/page_N.png` | vision 检索 + Agent fetch 时的页面渲染图 | 简单、可调试、便宜;软删除阶段文件就地留存,直到 GC 清掉 |
 
@@ -98,10 +100,10 @@ query
   ├─► (可选) HyDE 扩展 + Multi-Query (query rewrite adapter)
   │
   ├─► 4 通道并行检索
-  │     • text dense (BGE-M3 dense)
-  │     • text sparse (BGE-M3 sparse / SPLADE-like)
-  │     • vision (ColQwen2 多向量 MAX-SIM)
-  │     • description (BGE-M3 dense on LLM 描述)
+  │     • text dense (Qwen3-VL-Embedding)
+  │     • text sparse (MILCO 学习式稀疏)
+  │     • vision (Qwen3-VL 单向量 dense)
+  │     • description (Qwen3-VL-Embedding on LLM 描述)
   │
   ├─► RRF 融合(基于排名,不是分数 —— 不同通道的分数不可比)
   │
