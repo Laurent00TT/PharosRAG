@@ -51,6 +51,32 @@ function Get-Worker {
 function Bar($pct,$w=24){ $f=[math]::Max(0,[math]::Min($w,[int][math]::Round($pct/100*$w))); ('#'*$f)+('-'*($w-$f)) }
 function Col($pct,$hi,$mid){ if($pct -ge $hi){'Red'}elseif($pct -ge $mid){'Yellow'}else{'Green'} }
 
+# Per-model VRAM: WDDM hides live per-process VRAM, so we show each vLLM model's
+# RESERVED footprint = (--gpu-memory-utilization parsed from its start script) x
+# total VRAM. vLLM holds exactly this once loaded, so the 3 sum ~= live total.
+$gpuTotalMiB = 49140
+$g0 = Get-Gpu; if($g0){ $gpuTotalMiB = $g0.total }
+function ScriptUtil($f){
+  try { $m = Select-String -Path (Join-Path $here $f) -Pattern 'gpu-memory-utilization\s+([0-9.]+)' -ErrorAction Stop | Select-Object -First 1
+        if($m){ return [double]$m.Matches[0].Groups[1].Value } } catch {}
+  return 0
+}
+$reserved = @{
+  embed  = [int]((ScriptUtil '_start_embed.sh')  * $gpuTotalMiB)
+  rerank = [int]((ScriptUtil '_start_rerank.sh') * $gpuTotalMiB)
+  gen    = [int]((ScriptUtil '_start_gen.sh')    * $gpuTotalMiB)
+}
+function VramNote($name){
+  switch($name){
+    'embed'  { if($reserved.embed) { "~{0:N1}G {1,2}%" -f ($reserved.embed/1024.0), [int]($reserved.embed*100/$gpuTotalMiB) } else {''} }
+    'rerank' { if($reserved.rerank){ "~{0:N1}G {1,2}%" -f ($reserved.rerank/1024.0),[int]($reserved.rerank*100/$gpuTotalMiB) } else {''} }
+    'gen'    { if($reserved.gen)   { "~{0:N1}G {1,2}%" -f ($reserved.gen/1024.0),   [int]($reserved.gen*100/$gpuTotalMiB) } else {''} }
+    'sparse' { 'CPU (0G)' }
+    'mineru' { 'lazy ~6G@ingest' }
+    default  { '' }
+  }
+}
+
 function Show-Dash($withWorker){
   $g = Get-Gpu
   Write-Host ""
@@ -60,18 +86,28 @@ function Show-Dash($withWorker){
     Write-Host ("  Load [{0}] {1,3}%" -f (Bar $g.util),$g.util) -ForegroundColor (Col $g.util 90 60)
     Write-Host ("  VRAM [{0}] {1,3}%   {2} / {3} MiB" -f (Bar $mp),$mp,$g.used,$g.total) -ForegroundColor (Col $mp 92 80)
   } else { Write-Host "  GPU: nvidia-smi unavailable" -ForegroundColor Red }
+  Write-Host ("  {0,-8} {1,-6} {2,-5} {3}" -f 'service','port','stat','vram(reserved)') -ForegroundColor DarkGray
   Write-Host ("  " + ('-'*54)) -ForegroundColor DarkGray
   $upN = 0
   foreach($s in $services){
-    if(Test-Svc $s.port $s.path){ $upN++; Write-Host ("   {0,-8} :{1}    " -f $s.n,$s.port) -NoNewline; Write-Host "UP" -ForegroundColor Green }
-    else { Write-Host ("   {0,-8} :{1}    " -f $s.n,$s.port) -NoNewline; Write-Host "DOWN" -ForegroundColor Red }
+    $vn = VramNote $s.n
+    Write-Host ("   {0,-8} :{1,-5} " -f $s.n,$s.port) -NoNewline
+    if(Test-Svc $s.port $s.path){
+      $upN++
+      Write-Host "UP   " -ForegroundColor Green -NoNewline
+      Write-Host $vn -ForegroundColor DarkCyan
+    } else {
+      Write-Host "DOWN " -ForegroundColor Red -NoNewline
+      Write-Host $vn -ForegroundColor DarkGray
+    }
   }
   if($withWorker){
-    if(Get-Worker){ Write-Host ("   {0,-8} {1}   " -f 'worker','(queue)') -NoNewline; Write-Host "UP" -ForegroundColor Green }
-    else { Write-Host ("   {0,-8} {1}   " -f 'worker','(queue)') -NoNewline; Write-Host "DOWN" -ForegroundColor Red }
+    Write-Host ("   {0,-8} {1,-5} " -f 'worker','(q)') -NoNewline
+    if(Get-Worker){ Write-Host "UP" -ForegroundColor Green } else { Write-Host "DOWN" -ForegroundColor Red }
   }
   Write-Host ("  " + ('-'*54)) -ForegroundColor DarkGray
-  Write-Host ("  {0}/{1} model services up" -f $upN,$services.Count) -ForegroundColor White
+  $rsum = ($reserved.embed + $reserved.rerank + $reserved.gen)/1024.0
+  Write-Host ("  {0}/{1} up   |   3x vLLM 模型预留显存合计 ~{2:N1}G / {3:N1}G" -f $upN,$services.Count,$rsum,($gpuTotalMiB/1024.0)) -ForegroundColor White
 }
 function Monitor {
   while($true){
