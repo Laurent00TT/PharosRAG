@@ -56,7 +56,7 @@ def _to_call_tool_result(payload: dict) -> CallToolResult:
 def nav_hits_payload(hits) -> dict:
     return {
         "content": "\n".join(
-            f"- {hit.label}: {hit.doc_name} pages {hit.page_start}-{hit.page_end} -> {hit.resource_uris[0]}"
+            f"- {hit.label}: {hit.doc_name} pages {hit.page_start}-{hit.page_end} -> {hit.resource_uris[0] if hit.resource_uris else ''}"
             for hit in hits
         ) or "No navigation entries found.",
         "structuredContent": {
@@ -149,14 +149,16 @@ def register_nav_tools(mcp: Any, state: Any) -> None:
                     "content": "Navigation index is not initialized.",
                     "structuredContent": {"neighbors": [], "entry_id": entry_id},
                 }
-            all_entries = await state.nav_store.list_entries()
-            target = next((e for e in all_entries if e.entry_id == entry_id), None)
+            # Resolve the target by primary key, then scope to its document only.
+            # parent / children / siblings are all within the same doc, so loading
+            # just that doc's entries avoids an O(whole-KB) scan per expand call.
+            target = await state.nav_store.get_entry(entry_id)
             if target is None:
                 return {
                     "content": f"Nav entry not found: {entry_id}",
                     "structuredContent": {"neighbors": [], "entry_id": entry_id},
                 }
-            same_doc = [e for e in all_entries if e.doc_id == target.doc_id]
+            same_doc = await state.nav_store.list_entries(target.doc_id)
             children = [e for e in same_doc if e.parent_entry_id == target.entry_id]
             siblings = [
                 e for e in same_doc
@@ -166,7 +168,7 @@ def register_nav_tools(mcp: Any, state: Any) -> None:
             parent = None
             if target.parent_entry_id:
                 parent = next(
-                    (e for e in all_entries if e.entry_id == target.parent_entry_id),
+                    (e for e in same_doc if e.entry_id == target.parent_entry_id),
                     None,
                 )
             neighbors: list[dict] = []

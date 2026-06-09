@@ -204,3 +204,40 @@ async def test_nav_search_works_with_stub_store_without_hidden_method():
     hits = await NavSearchEngine(_StubStore()).search("approval")
     assert len(hits) == 1
     assert hits[0].label == "Approval"
+
+
+async def test_nav_search_matches_section_not_page_after_builder_roundtrip(tmp_path):
+    # End-to-end guard the field-level builder tests cannot give: build from pages
+    # with headings → store → NavSearchEngine. A heading term must match the
+    # SECTION entry, never the "Page N" page anchors nesting under it (the builder's
+    # page.label de-duplication), and the hit must carry a real range URI.
+    from kb.models import ParsedPage
+    from kb.nav.builder import NavIndexBuilder
+
+    def page(n, heading):
+        return ParsedPage(
+            doc_id="doc", doc_name="manual.pdf", page_num=n,
+            structured_text="t", heading_path=heading,
+            page_image=b"", image_blocks=[], tables=[], metadata={},
+        )
+
+    store = NavIndexStore(str(tmp_path / "nav.db"))
+    await store.init()
+    try:
+        result = NavIndexBuilder().build_from_pages([
+            page(0, ["5 Security"]),
+            page(1, ["5 Security", "5.3 Escalation"]),
+            page(2, ["5 Security", "5.3 Escalation"]),
+        ])
+        await store.replace_for_doc("doc", result.entries, result.edges)
+
+        hits = await NavSearchEngine(store).search("escalation")
+        labels = [h.label for h in hits]
+        assert "5.3 Escalation" in labels
+        # no page anchor ("Page N") leaks into a heading-term search
+        assert all(not label.startswith("Page ") for label in labels)
+        esc = next(h for h in hits if h.label == "5.3 Escalation")
+        assert esc.resource_uris and esc.resource_uris[0].startswith("kb://")
+        assert (esc.page_start, esc.page_end) == (1, 2)
+    finally:
+        await store.close()

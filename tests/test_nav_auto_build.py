@@ -105,16 +105,27 @@ async def test_auto_build_populates_store_with_entries_and_edges(tmp_path):
             pages=pages,
             enabled=True,
         )
-        # Builder emits 1 document entry + 2 page entries.
-        assert count == 3
+        # Builder emits 1 document + 2 section + 2 page entries: each heading
+        # now materializes a section the page nests under, and ["Intro"]/["Body"]
+        # are two distinct top-level sections.
+        assert count == 5
         entries = await store.list_entries("d")
-        assert len(entries) == 3
-        # Builder emits parent_child edges (doc → each page) + next/prev
-        # between consecutive pages (2 edges for a 2-page doc).
+        assert len(entries) == 5
+        # Builder emits a multi-level tree: doc → section → page. For this
+        # 2-page / 2-section doc that is 4 parent_child edges (doc→Intro, Intro→p1,
+        # doc→Body, Body→p2) + next/previous between the 2 pages = 6 edges total.
+        # The EXACT count guards against a regression back to the flat doc→page tree
+        # (which `>= 3` would have silently allowed).
         edges = await store.list_edges()
-        assert len(edges) >= 3
-        assert any(e.edge_type == "parent_child" for e in edges)
+        assert len(edges) == 6
+        assert len([e for e in edges if e.edge_type == "parent_child"]) == 4
         assert any(e.edge_type == "next" for e in edges)
+        # no page hangs directly off the doc root anymore — each nests under its section
+        doc_entry = next(e for e in entries if e.entry_type == "document")
+        assert all(
+            p.parent_entry_id != doc_entry.entry_id
+            for p in entries if p.entry_type == "page"
+        )
     finally:
         await store.close()
 
