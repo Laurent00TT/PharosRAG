@@ -9,10 +9,11 @@
 **Navigable Knowledge Base** — a navigation-first, local-first knowledge base
 for individuals and small teams.
 
-> ⚠ **Status: design-stage, public preview.** This repository currently
-> contains design documentation only. Implementation is in private
-> development. See [docs/status.md](docs/status.md) for the release plan
-> and acceptance criteria.
+> 🔬 **Status: research / example — early alpha.** The code is here and runs,
+> but this is a *reference implementation*, not a turnkey product. Expect rough
+> edges: a clean-machine install has not yet been independently reproduced, and
+> the evaluation story is still maturing. See [docs/status.md](docs/status.md)
+> for an honest account of what works, what doesn't, and where the risks are.
 
 ---
 
@@ -69,6 +70,82 @@ See [docs/design/architecture.md](docs/design/architecture.md) for the
 shape in detail, and [docs/design/navigation-first.md](docs/design/navigation-first.md)
 for the design rationale behind making navigation the primary access pattern.
 
+## Models and deployment are a reference, not a requirement
+
+NaviKB decouples every model behind a configurable endpoint
+(`*_SERVER_URL` / `*_MODEL_ID` in `.env`). The stack we happened to
+validate — Qwen3-VL for text + vision embeddings and reranking, MILCO for
+learned sparse retrieval, Qwen3.6-VL for page descriptions, MinerU for
+layout parsing — is **one reference configuration**, not a hard dependency.
+
+Point the endpoints at whatever you have: a local llama.cpp / LM Studio, a
+remote GPU host reached over an SSH tunnel, or a hosted OpenAI-compatible
+API. The engine, the four-channel retrieval, the navigation layer, and the
+operator surface (auth, audit, soft-delete, backup, GC) are the contribution
+here — the specific models are swappable, and the deployment topology is an
+example, not a mandate.
+
+## Quickstart
+
+> This is a research/example stack. Treat the commands below as a starting
+> point, not a hardened install path — see the
+> [status notes](docs/status.md) on reproducibility.
+
+```powershell
+# 1. Install (Python 3.11+)
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[server,dev]"
+.\.venv\Scripts\python.exe -m pip install -e ".[mineru]"   # PDF layout parsing (optional)
+
+# 2. Configure — copy the template, then point the *_SERVER_URL / *_MODEL_ID
+#    entries at your own model endpoints (see "Models ... a reference" above).
+Copy-Item .env.example .env
+
+# 3. Run the local control plane
+python scripts/serve.py --port 8000     # FastAPI tool server (REST + MCP)
+python scripts/worker.py                 # background ingestion worker
+
+# Or bring up main + Qdrant + worker together via docker compose:
+# docker compose -f docker/docker-compose.local.yml --env-file .env up -d --build
+```
+
+The server binds `127.0.0.1` by default. Create an admin account, then
+ingest a PDF — NaviKB parses PDF layout, so it ingests `.pdf` files. No
+third-party PDFs ship with this repo; bring your own, or build sample PDFs
+from the bundled **synthetic** sources
+(`datasets/pdf_corpus_v1/synthetic_sources/`, see `scripts/pdf_corpus_*.py`):
+
+```powershell
+python scripts/manage_users.py create <username> --role admin
+python scripts/ingest.py --path .\path\to\document.pdf
+```
+
+All API requests carry an `Authorization: Bearer <user_token>` header.
+Search, or ask a question the agent answers from retrieved evidence:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/search_docs `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer $env:KB_USER_TOKEN" `
+  -d "{\"query\":\"approval threshold\",\"top_k\":5}"
+
+curl -X POST http://127.0.0.1:8000/ask `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer $env:KB_USER_TOKEN" `
+  -d "{\"question\":\"What is the approval threshold?\"}"
+```
+
+Health check the local stack with `python scripts/doctor.py`. The MCP tool
+surface is mounted at `/mcp`.
+
+## The optional workbench
+
+A web workbench (React + Vite) lives in a separate repository,
+**[navikb-workbench](https://github.com/Laurent00TT/navikb-workbench)**. It is
+a thin HTTP client of the core's `/ui/api` surface — there is no shared code.
+Run this core first, then run the workbench against it (its dev server proxies
+`/ui/api` back to `127.0.0.1:8000`). The core runs fully headless without it.
+
 ## Differentiation
 
 | Concern | NaviKB | Typical RAG (LangChain / LlamaIndex) | GraphRAG | NaviRAG (research) |
@@ -78,27 +155,28 @@ for the design rationale behind making navigation the primary access pattern.
 | MCP-native | ✅ first-class tool surface | ⚠ via adapters | ❌ | ❌ |
 | Citation discipline | ✅ evidence/hint partition enforced | ❌ caller decides | ❌ | ❌ |
 | Operator surface (auth, audit, backup, GC) | ✅ end-to-end | ❌ "build it yourself" | ⚠ enterprise stacks only | ❌ |
-| Status | design-public, code-private | mature | mature | research prototype |
+| Status | research / example, early alpha | mature | mature | research prototype |
 
 Detailed reasoning per cell — and an honest "where NaviKB is weaker"
 section — lives in [docs/design/comparison.md](docs/design/comparison.md).
 
 ## Documentation map
 
-| Document | Status | Purpose |
-|---|---|---|
-| [README](README.md) (you are here) | ✅ public | 30-second overview |
-| [docs/status.md](docs/status.md) | ✅ public | Where the code is, when it ships, what blocks release |
-| [docs/design/architecture.md](docs/design/architecture.md) | ✅ public | Four-layer architecture: ingest → storage → retrieve → serve |
-| [docs/design/navigation-first.md](docs/design/navigation-first.md) | ✅ public | Why NavIndex; pointer-only design; trade-offs vs chunking |
-| [docs/design/security-model.md](docs/design/security-model.md) | ✅ public | Hard-cutover auth, two-phase audit, soft delete, maintenance flag, GC retention |
-| [docs/design/comparison.md](docs/design/comparison.md) | ✅ public | Deep comparison with LangChain / LlamaIndex / GraphRAG / NaviRAG |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | ✅ public | What feedback is welcome right now (and what isn't) |
+| Document | Purpose |
+|---|---|
+| [README](README.md) (you are here) | 30-second overview + quickstart |
+| [docs/status.md](docs/status.md) | Honest maturity: what works, what doesn't, the open risks |
+| [docs/design/architecture.md](docs/design/architecture.md) | Four-layer architecture: ingest → storage → retrieve → serve |
+| [docs/design/navigation-first.md](docs/design/navigation-first.md) | Why NavIndex; pointer-only design; trade-offs vs chunking |
+| [docs/design/security-model.md](docs/design/security-model.md) | Hard-cutover auth, two-phase audit, soft delete, maintenance flag, GC retention |
+| [docs/design/comparison.md](docs/design/comparison.md) | Deep comparison with LangChain / LlamaIndex / GraphRAG / NaviRAG |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | What feedback and contributions are welcome |
 
 ## Quick links
 
-- 📋 [Status & release plan](docs/status.md)
+- 📋 [Status & honest maturity](docs/status.md)
 - 🏛 [Architecture](docs/design/architecture.md)
+- 🖥 [Workbench (separate repo)](https://github.com/Laurent00TT/navikb-workbench)
 - 💬 [Discussion: open an issue](../../issues/new/choose) — design feedback, comparison corrections, docs clarity
 - 🤝 [Contributing](CONTRIBUTING.md)
 - 🔒 [Security policy](SECURITY.md)

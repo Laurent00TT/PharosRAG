@@ -8,13 +8,14 @@ body:
       value: |
         Thanks for engaging with the design.
 
-        NaviKB is in [Stage 0: design preview](https://github.com/Laurent00TT/navikb/blob/main/docs/status.md).
-        At this stage the design documents are the actual deliverable;
-        pushing back on assumptions is the most valuable contribution.
+        NaviKB is early-alpha (research / example) — see
+        [status](https://github.com/Laurent00TT/navikb/blob/main/docs/status.md).
+        The design is a real part of the contribution here; pushing back
+        on assumptions is valuable.
 
         Please fill out the fields below so the discussion stays
         concrete. Field templates mirror the format in
-        [CONTRIBUTING.md](https://github.com/Laurent00TT/navikb/blob/main/CONTRIBUTING.md#how-to-open-a-good-design-feedback-issue).
+        [CONTRIBUTING.md](https://github.com/Laurent00TT/navikb/blob/main/CONTRIBUTING.md).
 
   - type: dropdown
     id: document

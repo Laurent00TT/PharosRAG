@@ -1,0 +1,10 @@
+{"id":"nav_approval_topic","query":"审批流程","intent":"navigation","expected_mode":"navigation","expected_sources":[{"doc_id":"doc","page_num":3},{"doc_id":"doc","page_num":4},{"doc_id":"doc","page_num":5}]}
+{"id":"nav_table","query":"金额分级表","intent":"table_lookup","expected_mode":"navigation","expected_sources":[{"doc_id":"doc","page_num":6}]}
+{"id":"nav_concept_lookup","query":"BERT","intent":"concept_lookup","expected_mode":"navigation","expected_sources":[{"doc_id":"doc","page_num":1},{"doc_id":"doc","page_num":2},{"doc_id":"doc","page_num":3}]}
+{"id":"hybrid_cross_topic","query":"对比审批和报销流程","intent":"comparison","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":3},{"doc_id":"doc","page_num":4},{"doc_id":"doc","page_num":5},{"doc_id":"doc","page_num":12},{"doc_id":"doc","page_num":13}]}
+{"id":"hybrid_evidence_plus_nav","query":"训练能耗","intent":"fact_with_context","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":2},{"doc_id":"doc","page_num":3},{"doc_id":"doc","page_num":5},{"doc_id":"doc","page_num":6}]}
+{"id":"evidence_specific_fact","query":"第 5 页讲什么","intent":"page_lookup","expected_mode":"evidence","expected_sources":[{"doc_id":"doc","page_num":5}]}
+{"id":"evidence_table_value","query":"BERT 训练时长","intent":"fact_lookup","expected_mode":"evidence","expected_sources":[{"doc_id":"doc","page_num":5},{"doc_id":"doc","page_num":6}]}
+{"id":"nav_visual_flow","query":"流程图","intent":"visual_lookup","expected_mode":"navigation","expected_sources":[{"doc_id":"doc","page_num":7},{"doc_id":"doc","page_num":8}]}
+{"id":"nav_appendix","query":"附录索引","intent":"navigation","expected_mode":"navigation","expected_sources":[{"doc_id":"doc","page_num":20},{"doc_id":"doc","page_num":21},{"doc_id":"doc","page_num":22}]}
+{"id":"nav_partial_match","query":"工资条款","intent":"navigation","expected_mode":"navigation","expected_sources":[{"doc_id":"doc","page_num":15},{"doc_id":"doc","page_num":16}]}

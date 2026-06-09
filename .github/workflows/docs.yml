@@ -58,8 +58,9 @@ jobs:
       - name: Verify each English doc has a Chinese mirror
         # Exempt: LICENSE (legal text, English-only), CODE_OF_CONDUCT.md
         # (Contributor Covenant standard text), SECURITY.md (policy),
-        # files under .github/ (templates), and any *.zh.md (the mirror
-        # itself).
+        # files under .github/ (templates), the synthetic eval corpus under
+        # datasets/ and the skill files under skills/ (English-only by
+        # design), and any *.zh.md (the mirror itself).
         run: |
           set -e
           missing=""
@@ -67,6 +68,7 @@ jobs:
             case "$f" in
               LICENSE|CODE_OF_CONDUCT.md|SECURITY.md) continue ;;
               .github/*) continue ;;
+              datasets/*|skills/*) continue ;;
               *.zh.md) continue ;;
             esac
             zh="${f%.md}.zh.md"

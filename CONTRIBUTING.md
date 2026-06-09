@@ -6,128 +6,80 @@
 
 # Contributing to NaviKB
 
-NaviKB is in [Stage 0: design preview](docs/status.md). This means
-contributions look different from a typical open-source project right
-now. This document describes what's welcome, what isn't, and why.
+NaviKB is an early-alpha **research / example** project (see
+[status](docs/status.md)). The code is public and runs, but it is not a turnkey
+product — so the most useful contributions reflect that stage.
 
-## What we welcome right now
+## What's most useful right now
 
-### ✅ Design feedback
+### 🐛 Reproducibility reports and bug fixes
 
-The design documents in `docs/design/` are the actual deliverable at
-this stage. Reading them carefully and pushing back on assumptions is
-the most valuable contribution you can make.
+The single most useful thing you can do is **set it up on a clean machine and
+tell us what broke.** A clean-machine install has not been widely reproduced,
+so an install report (what worked, what didn't, your OS / Python version) — or a
+PR that fixes a break you hit — is hugely valuable. Open an issue, or send a
+focused PR with a note on how you reproduced the problem.
 
-**How:** open an issue with the `design-feedback` label. Reference the
-specific document and section (`docs/design/architecture.md §4 Serve`),
-state the assumption you're questioning, and what you think the
-alternative looks like.
+### 🧪 Tests and documentation
 
-**Examples of good feedback:**
+PRs that add test coverage, fix a flaky or environment-dependent test, or
+clarify the docs are welcome. For docs, suggest matching changes in both
+language versions if you can (see Bilingual maintenance below).
 
-- "The four-channel retrieval description says you use RRF over four
-  ranks. Have you considered Sparse-Dense Fusion ([reference paper]),
-  which would let you train a single late-fusion weight per channel?"
-- "The cross-process cache-epoch counter assumes both processes can
-  write to the same SQLite file. In a Docker Compose deployment with
-  the worker on a separate container but a shared volume, this works.
-  In a Kubernetes deployment with persistent volumes, the lock semantics
-  are untested. Worth a note in the architecture doc."
-- "The status doc claims 'navigation-first' is differentiating. But
-  haystack and llamaindex both have document-tree retrievers. Worth
-  comparing against those directly in `comparison.md`."
+### 💬 Design, comparison, and positioning feedback
 
-### ✅ Comparison + positioning input
+The design is a real part of the contribution here. If you think a design
+decision is wrong, or that `comparison.md` mischaracterizes a related project
+(LlamaIndex, LangChain, GraphRAG, NaviRAG, Verba, …), open an issue with the
+`design-feedback` label. We want the comparison accurate, not flattering to
+NaviKB.
 
-If you maintain or use a related project (LlamaIndex, LangChain RAG,
-GraphRAG, NaviRAG, Verba, etc.) and you think our `comparison.md`
-mischaracterizes it, open an issue. We want the comparison to be
-accurate, not flattering to NaviKB.
-
-### ✅ Documentation typos / clarity issues
-
-Open a PR. These will be merged. Suggest matching changes for both
-language versions if you can; if you only write one, mention it in the
-PR and we'll mirror.
-
-## What we don't accept yet
-
-### ❌ Code PRs against (non-existent) implementation
-
-The code isn't in this repository (see [docs/status.md](docs/status.md)
-for why). PRs adding `src/`, `tests/`, `scripts/` etc. will be closed
-with a pointer to this document. This isn't a judgment on the PR; it's
-that merging code now would let us announce things we haven't actually
-tested second-person, which is exactly the bar we set.
-
-### ❌ Feature requests that imply changing the project's scope
-
-We have explicit out-of-scope items (multi-host deployment, LLM-driven
-ontology induction, hosted SaaS — see [architecture.md §What's
-deliberately out of scope](docs/design/architecture.md#whats-deliberately-out-of-scope)).
-Issues asking for those will be closed, politely, with a pointer to
-that list.
-
-If you think one of the out-of-scope items should actually be in scope,
-that's a design discussion — open a `design-feedback` issue, not a
-feature request.
-
-### ❌ "When will this ship?"
-
-The release plan is in [docs/status.md](docs/status.md). It is
-trigger-based, not date-based. Asking for a calendar date won't get
-one, because every calendar date we've internally promised has slipped.
-
-## How to open a good design-feedback issue
+**A good design-feedback issue:**
 
 ```text
-Title: [design-feedback] §<section>: <one-line summary>
-
-Document: docs/design/architecture.md (or whichever)
-Section: §3 Retrieve
-Specific paragraph: "RRF over score-fusion..."
-
-The assumption I'm questioning:
-  <your understanding of what the doc claims>
-
-Why I think it's worth revisiting:
-  <evidence, reference, alternative approach>
-
-What would convince me either way:
-  <what data / argument would resolve this>
+Title: [design-feedback] <section>: <one-line summary>
+Document: docs/design/architecture.md (or whichever) + section
+The assumption I'm questioning: <what the doc claims>
+Why it's worth revisiting: <evidence, reference, alternative>
+What would convince me either way: <data / argument that resolves it>
 ```
 
-We commit to reading every issue. We don't commit to changing the
-design just because feedback was given — the design has to actually
-improve, not just compromise.
+## Before a larger code change, open an issue first
+
+For anything beyond a focused fix — a new feature, a refactor, a dependency
+change — please open an issue to discuss it first. Two reasons:
+
+- This is early-alpha; internals still move, and a big PR against a moving
+  target is painful for everyone.
+- Some things are **deliberately out of scope** (multi-host deployment,
+  LLM-driven ontology induction, hosted SaaS — see the
+  [architecture doc](docs/design/architecture.md)). Issues or PRs for those
+  will be closed politely with a pointer. If you think an out-of-scope item
+  should be in scope, that's a `design-feedback` discussion, not a feature
+  request.
+
+## "When will it be stable?"
+
+The honest maturity and roadmap are in [docs/status.md](docs/status.md). It's
+trigger-based, not date-based — every internal date we've promised has slipped.
 
 ## Bilingual maintenance
 
-Every doc has an English (`<name>.md`) and Chinese (`<name>.zh.md`)
-version. They are expected to be content-equivalent, not
-word-for-word translations.
-
-When you change one, change the other in the same PR. If you can only
-write in one language, write only the English version and note in the
-PR description that the Chinese mirror needs updating — a maintainer
-will do the Chinese pass before merge.
-
-A PR that updates only one language without acknowledging the other
-will be asked to either complete the mirror or downgrade the PR's
-scope.
+Every doc has an English (`<name>.md`) and Chinese (`<name>.zh.md`) version.
+They are content-equivalent, not word-for-word translations. When you change
+one, change the other in the same PR — or note that the mirror needs updating
+and a maintainer will do the pass before merge.
 
 ## Code of Conduct
 
-Participation in any NaviKB space (issues, discussions, future PRs)
-is governed by the [Contributor Covenant](CODE_OF_CONDUCT.md). The
-short version: assume good faith, give technical specifics rather than
-personal characterizations, and don't drag fights from other forums
-into here.
+Participation in any NaviKB space (issues, discussions, PRs) is governed by the
+[Contributor Covenant](CODE_OF_CONDUCT.md). The short version: assume good
+faith, give technical specifics rather than personal characterizations, and
+don't drag fights from other forums in here.
 
 ## Maintainer response time
 
-This is currently a one-maintainer project. Issue response is best-
-effort, typically within a week. If something is genuinely urgent
-(security concern about the design as documented — yes, even though
-the code isn't out yet) email is faster than an issue. Email address
-will appear on the maintainer's GitHub profile.
+This is currently a one-maintainer project. Issue response is best-effort,
+typically within a week. For a security concern you don't want public, email
+(address on the maintainer's GitHub profile) is faster than an issue — see
+[SECURITY.md](SECURITY.md).

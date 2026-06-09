@@ -41,7 +41,7 @@ retrievers, query engines, and agents in Python code.
 | MCP-native | Adapter available via third-party packages | Built-in `/mcp` sub-app, first-class tool surface |
 | Citation discipline | Caller's responsibility | Enforced at API surface (evidence_fields vs hint_fields) |
 | Auth / audit / backup / GC | "Build it yourself" | Designed in, end-to-end |
-| Maturity | Mature, large community, many integrations | Pre-1.0 (Stage 0 design preview) |
+| Maturity | Mature, large community, many integrations | Pre-1.0 (research / example, early alpha) |
 
 **Pick LlamaIndex when** you want maximum flexibility, you're building
 a custom RAG pipeline that doesn't fit a system's mold, you need
@@ -177,14 +177,15 @@ NaviKB if we were being asked by someone evaluating us.
 
 ### Where NaviKB is weaker than the alternatives
 
-- **Code is not public yet.** LlamaIndex, LangChain, Haystack, Verba,
-  GraphRAG all have working installable packages. NaviKB has docs.
-  The gap is real and only closes when we hit Stage 2 (see
+- **Younger and less battle-tested.** LlamaIndex, LangChain, Haystack,
+  Verba, GraphRAG have large user bases and years of hardening. NaviKB
+  is an early-alpha reference implementation — the code is public, but a
+  clean-machine install and broad real-world use are still unproven (see
   [docs/status.md](../status.md)).
 - **Smaller ecosystem.** No connectors for 50 document formats, no
   100 vector DB integrations, no example notebooks for every LLM
-  provider. NaviKB picks a small set (MinerU for parse, BGE-M3 for
-  text embed, ColQwen2 for vision, Qdrant for vectors) and supports
+  provider. NaviKB picks a small set (MinerU for parse, Qwen3-VL for
+  text + vision embed, MILCO for sparse, Qdrant for vectors) and supports
   them well; adding a new combination requires writing code, not
   swapping a config.
 - **No UI.** This is deliberate — the UI is the agent — but if you

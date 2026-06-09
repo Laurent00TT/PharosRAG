@@ -1,0 +1,7 @@
+# These scripts run inside WSL bash — they MUST stay LF or bash chokes on \r.
+*.sh   text eol=lf
+*.py   text eol=lf
+env.local-48g text eol=lf
+*.md   text eol=lf
+# PowerShell helpers run on Windows — CRLF is fine.
+*.ps1  text eol=crlf

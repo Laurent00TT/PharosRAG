@@ -1,0 +1,122 @@
+# docker/docker-compose.local.yml
+# Local control-plane for NaviKB PoC v1.1: main process + Qdrant + ingestion worker.
+#
+# Cloud / GPU services (multimodal_embedding 8003, reranker 8005, sparse 8004,
+# mineru 8101-8103, description VLM 8006) are NOT here — they run on the GPU host
+# (e.g. a remote GPU host) and are reached via SSH reverse tunnel
+# (host.docker.internal:<port>). See the project README (authoritative).
+#
+# Required env vars — put them in the repo-root .env (copy from .env.example).
+# docker compose reads ../.env relative to this docker/ dir:
+#   KB_REPO_PATH    Absolute path to THIS repo checkout, forward-slashes
+#                   (e.g. /path/to/navikb).
+#                   Used as build context AND volume-mounted at /app.
+#   KB_DATA_PATH    Absolute path to a local data dir, forward-slashes
+#                   (e.g. /path/to/data). Mounted at /data; holds qdrant storage.
+#
+# Usage:
+#   1. cp .env.example .env  &&  set KB_REPO_PATH / KB_DATA_PATH / KB_USER_TOKEN
+#   2. cd docker
+#   3. docker compose --env-file ../.env -f docker-compose.local.yml up -d --build
+#   4. logs:  docker compose -f docker-compose.local.yml logs -f kb_main
+#
+# Requires (see the project README):
+#   - SSH tunnel running (forwards 8003/8004/8005/8006/8101-8103)
+#   - Cloud model services up (the model startup script on the GPU host)
+#   - repo-root .env filled in (incl. KB_REPO_PATH, KB_DATA_PATH)
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    container_name: kb-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ${KB_DATA_PATH:?KB_DATA_PATH must be set in .env}/qdrant:/qdrant/storage
+    restart: unless-stopped
+
+  # sparse runs on the GPU host (cloud) via SSH tunnel forward 8004.
+  # Model services are started by your bring-up script on the GPU host.
+
+  kb_main:
+    build:
+      context: ${KB_REPO_PATH:?KB_REPO_PATH must be set in .env}
+      dockerfile: docker/Dockerfile.main
+    container_name: kb-main
+    # Override CMD: serve.py defaults to 127.0.0.1 (inside container only).
+    # We need 0.0.0.0 so docker port forward 8000:8000 actually reaches uvicorn.
+    command: ["python", "scripts/serve.py", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${KB_REPO_PATH}:/app
+      - ${KB_DATA_PATH}:/data
+    env_file:
+      - ../.env
+    environment:
+      # *_SERVER_URL must point to host.docker.internal:<port>, because the
+      # SSH tunnel terminates on the Windows/Mac host (not in the container).
+      # We override here rather than relying on .env so the container value
+      # stays correct even if a script edits .env to use localhost for
+      # host-side smokes.
+      - SPARSE_SERVER_URL=http://host.docker.internal:8004
+      - QDRANT_URL=http://qdrant:6333
+      - MULTIMODAL_EMBEDDING_SERVER_URL=http://host.docker.internal:8003
+      - RERANKER_SERVER_URL=http://host.docker.internal:8005
+      - MINERU_SERVER_URL=http://host.docker.internal:8101
+      # Round-robin mineru cluster (3 instances). Add or remove URLs below
+      # to scale ingest throughput.
+      - MINERU_SERVER_URLS=http://host.docker.internal:8101,http://host.docker.internal:8102,http://host.docker.internal:8103
+      # Channel 4 (description) → Qwen3.6-27B VLM on cloud:8006 (via tunnel).
+      # Enabled 2026-05-28 after the VLM came up; generates per-page semantic
+      # descriptions. Only consumed at ingest time.
+      - DESCRIPTION_ENABLED=true
+      - DESCRIPTION_URL=http://host.docker.internal:8006/v1
+      - DESCRIPTION_MODEL=qwen3.6-vl
+      - DESCRIPTION_API_KEY=EMPTY
+      - PYTHONPATH=/app/src
+    extra_hosts:
+      # Required so host.docker.internal resolves on Linux containers
+      # (Docker Desktop on Windows already provides this, but explicit is safer)
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+  kb_worker:
+    build:
+      context: ${KB_REPO_PATH}
+      dockerfile: docker/Dockerfile.main
+    # NOTE: no container_name set — allows docker compose --scale kb_worker=N
+    # for horizontal scaling. Each worker process atomically claims items
+    # from SQLite (kb.jobs.runner.IngestionJobRunner.run_once → store.
+    # claim_next_item), so N replicas safely consume the shared queue.
+    # Long-running job-queue consumer — ingest jobs land here
+    command: ["python", "scripts/worker.py"]
+    volumes:
+      - ${KB_REPO_PATH}:/app
+      - ${KB_DATA_PATH}:/data
+    env_file:
+      - ../.env
+    environment:
+      - SPARSE_SERVER_URL=http://host.docker.internal:8004
+      - QDRANT_URL=http://qdrant:6333
+      - MULTIMODAL_EMBEDDING_SERVER_URL=http://host.docker.internal:8003
+      - RERANKER_SERVER_URL=http://host.docker.internal:8005
+      - MINERU_SERVER_URL=http://host.docker.internal:8101
+      # Round-robin mineru cluster (3 instances). Add or remove URLs below
+      # to scale ingest throughput.
+      - MINERU_SERVER_URLS=http://host.docker.internal:8101,http://host.docker.internal:8102,http://host.docker.internal:8103
+      # Channel 4 → Qwen3.6-27B VLM (cloud:8006). Worker runs the actual
+      # description generation during ingest.
+      - DESCRIPTION_ENABLED=true
+      - DESCRIPTION_URL=http://host.docker.internal:8006/v1
+      - DESCRIPTION_MODEL=qwen3.6-vl
+      - DESCRIPTION_API_KEY=EMPTY
+      - PYTHONPATH=/app/src
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - kb_main
+    restart: unless-stopped

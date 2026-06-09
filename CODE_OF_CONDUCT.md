@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the maintainer via the email address listed on the maintainer's GitHub profile. (GitHub does not offer "private issues" on public repositories; use email for any report you do not want to be world-readable. For security-related concerns about the design or future implementation, see [SECURITY.md](SECURITY.md).) All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the maintainer via the email address listed on the maintainer's GitHub profile. (GitHub does not offer "private issues" on public repositories; use email for any report you do not want to be world-readable. For security-related concerns about the design or implementation, see [SECURITY.md](SECURITY.md).) All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

@@ -1,0 +1,26 @@
+# transient logs / command outputs (regenerated on every run)
+*.log
+*.out
+*.txt
+
+# downloaded model files & archives — never commit weights
+milco-650m-dl/
+splade-v3-dl/
+*.tar.gz
+*.gz
+*.safetensors
+*.bin
+
+# one-off diagnostics kept locally, not part of the deliverable
+_netcheck.sh
+_proxytest.sh
+_proxydiag.ps1
+_milco_search.sh
+_hftest.sh
+_investigate.sh
+_lineend.sh
+_paths.sh
+_mscheck.sh
+# dead-end download attempts (superseded by download_milco_curl.ps1 / download_hf_repo.ps1)
+download_milco.ps1
+download_milco_windows.py

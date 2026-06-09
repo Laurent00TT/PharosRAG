@@ -25,7 +25,7 @@ build/
 .env
 .env.*
 !.env.example
-.venv/
+.venv*/
 venv/
 
 # Local SQLite + Qdrant data
@@ -33,22 +33,45 @@ venv/
 *.db-wal
 *.db-shm
 qdrant_data*/
-storage/
-images/
+# root-anchored so these never shadow source packages like src/kb/storage/
+/storage/
+/images/
 nav_index.db
 
 # Logs + audit fallback
-logs/
+/logs/
 *.log
 audit_fallback*.jsonl
 
 # Eval / benchmark scratch
-datasets/
 test_doc/
 test_docs/
 eval_*.json
 eval_results/
 golden/
+
+# ── Bench datasets — raw/large PDFs kept local; allowlist the curated
+#    pdf_corpus_v1 text corpus (synthetic sources + manifests) that ships. ──
+datasets/*
+!datasets/pdf_corpus_v1/
+!datasets/pdf_corpus_v1/*.jsonl
+!datasets/pdf_corpus_v1/*.md
+!datasets/pdf_corpus_v1/raw/
+!datasets/pdf_corpus_v1/raw/**/
+datasets/pdf_corpus_v1/raw/**/*
+!datasets/pdf_corpus_v1/raw/**/
+!datasets/pdf_corpus_v1/raw/**/.gitkeep
+!datasets/pdf_corpus_v1/synthetic_sources/
+!datasets/pdf_corpus_v1/synthetic_sources/**/
+datasets/pdf_corpus_v1/synthetic_sources/**/*
+!datasets/pdf_corpus_v1/synthetic_sources/**/
+!datasets/pdf_corpus_v1/synthetic_sources/**/.gitkeep
+!datasets/pdf_corpus_v1/synthetic_sources/**/*.md
+!datasets/pdf_corpus_v1/derived/
+!datasets/pdf_corpus_v1/derived/**/
+datasets/pdf_corpus_v1/derived/**/*
+!datasets/pdf_corpus_v1/derived/**/
+!datasets/pdf_corpus_v1/derived/**/.gitkeep
 
 # Backup outputs
 backups/

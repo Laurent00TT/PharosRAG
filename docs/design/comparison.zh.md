@@ -39,7 +39,7 @@ agent。
 | MCP-native | 通过第三方包有 adapter | 内置 `/mcp` sub-app,一等 tool surface |
 | 引用纪律 | 调用者负责 | API 表面强制(evidence_fields vs hint_fields) |
 | Auth / audit / backup / GC | "自己搭" | 端到端设计在内 |
-| 成熟度 | 成熟,大社区,很多 integration | Pre-1.0(Stage 0 设计预览) |
+| 成熟度 | 成熟,大社区,很多 integration | Pre-1.0(研究 / 示例, 早期 alpha) |
 
 **选 LlamaIndex 当** 你要最大灵活性、你在搭一个不合任何系统模子的自定义
 RAG pipeline、你需要跟很多具体 vector DB / LLM provider 的 integration、
@@ -153,12 +153,12 @@ Continue、Cline 等)且你在意"谁能做什么"超出单用户,选 NaviKB。
 
 ### NaviKB 比替代品弱的地方
 
-- **代码还没公开。** LlamaIndex、LangChain、Haystack、Verba、GraphRAG 都有
-  能装的包。NaviKB 有文档。差距是真的,只有我们达到 Stage 2 才会关闭
-  (见 [docs/status.zh.md](../status.zh.md))。
+- **更年轻、经受的实战更少。** LlamaIndex、LangChain、Haystack、Verba、GraphRAG
+  有庞大用户群和多年打磨。NaviKB 是早期 alpha 参考实现 —— 代码已公开,但干净机器
+  安装与广泛真实使用仍未被证明(见 [docs/status.zh.md](../status.zh.md))。
 - **生态更小。** 没有 50 种文档格式的 connector、没有 100 个向量库的
   integration、没有给每个 LLM provider 的示例 notebook。NaviKB 挑了一小套
-  (parse 用 MinerU、文本 embed 用 BGE-M3、视觉用 ColQwen2、向量用 Qdrant)
+  (parse 用 MinerU、文本+视觉 embed 用 Qwen3-VL、稀疏用 MILCO、向量用 Qdrant)
   把它们支撑好;加新组合要写代码,不是改 config。
 - **没 UI。** 这是刻意的 —— UI 就是 Agent —— 但如果你想给非 Agent 用户
   一个"跟文档聊天"体验,NaviKB 是错的工具。

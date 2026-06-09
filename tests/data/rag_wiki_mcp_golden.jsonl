@@ -1,0 +1,10 @@
+{"id":"fact_page_001","query":"第 12 页的关键金额是多少","intent":"fact_lookup","expected_mode":"evidence","expected_sources":[{"doc_id":"doc","page_num":12}]}
+{"id":"table_001","query":"表格里审批角色分别是什么","intent":"table_lookup","expected_mode":"evidence","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"visual_flow_001","query":"这张流程图从提交到批准怎么走","intent":"visual_explanation","expected_mode":"evidence","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"concept_001","query":"解释一下这个文档里的审批流程概念","intent":"concept_learning","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"compare_001","query":"对比一下旧版和新版要求有什么差异","intent":"comparison","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"source_coverage_001","query":"这个章节有哪些来源页面支撑","intent":"source_coverage","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"hybrid_compare_001","query":"对比一下审批和报销两个流程","intent":"hybrid_comparison","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"hybrid_fallback_001","query":"解释这个流程并给出原文依据","intent":"hybrid_with_evidence","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"routing_trace_001","query":"新旧版本改了什么","intent":"routing_trace_compare","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":1}]}
+{"id":"visual_hybrid_001","query":"这张流程图表达的业务规则是什么","intent":"visual_hybrid","expected_mode":"hybrid","expected_sources":[{"doc_id":"doc","page_num":1}]}

@@ -1,0 +1,7 @@
+# src/kb/search/constants.py
+CHANNEL_TEXT_DENSE  = "dense"
+CHANNEL_TEXT_SPARSE = "sparse"
+CHANNEL_VISION      = "vision"
+CHANNEL_DESC        = "desc"
+
+ALL_CHANNELS = [CHANNEL_TEXT_DENSE, CHANNEL_TEXT_SPARSE, CHANNEL_VISION, CHANNEL_DESC]

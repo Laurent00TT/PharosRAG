@@ -1,0 +1,56 @@
+# .dockerignore — shrinks docker build context and image size
+#
+# Without this, every `docker build` ships ~2GB of .venv + __pycache__
+# into the build context, slowing each iteration to a crawl.
+
+# Python virtual envs
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Runtime data — must NEVER be baked into the image
+qdrant_data/
+qdrant_data_*/
+storage/
+logs/
+models/
+*.db
+*.db-journal
+
+# Test corpora (kept locally, large)
+test_doc/
+datasets/
+
+# Eval snapshots
+eval_*.json
+
+# Build artifacts
+build/
+dist/
+*.egg
