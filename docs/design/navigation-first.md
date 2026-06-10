@@ -9,7 +9,7 @@
 > The single most important design decision in NaviKB. Everything else
 > in the architecture is downstream of this.
 
-## The position in one paragraph
+## The core idea
 
 A document is not a flat sequence of chunks; it is a navigable
 structure. The reader (human or agent) cares about *getting to the
@@ -40,7 +40,7 @@ modes it hides matter:
 
 - **Loss of locality.** Chunk N and Chunk N+1 may be physically
   adjacent in the manual but score very differently against the query.
-  The reader sees a Frankenstein context that mixes chapter 7 with
+  The reader sees a disjointed context that mixes chapter 7 with
   chapter 12.
 - **Loss of section-level intent.** A heading like "5.3 Escalation"
   is a strong signal — stronger than any individual sentence under it.
@@ -55,7 +55,7 @@ modes it hides matter:
 These aren't bugs in any specific implementation. They're consequences
 of the data model.
 
-## The position-first alternative
+## The navigation-first alternative
 
 NaviKB indexes the structure of each document separately from its
 content. The structural index — `NavIndex` — stores one row per
@@ -110,7 +110,7 @@ from retrieval:
 | `kb_search(query)` | Evidence hits + their text + cite IDs | Direct evidence retrieval — when you already know roughly what text you want |
 | `kb_hybrid_search(query)` | Evidence hits + suggested NavEntry fetches | The common path — retrieve evidence AND surface navigation hints in the same call |
 
-The MCP `kb_answer_from_originals` prompt explicitly trains the agent
+The MCP `kb_answer_from_originals` prompt explicitly instructs the agent
 to use `kb_hybrid_search` first, then *fetch the original resource via
 URI* before quoting. The pointer-first design makes this workflow
 natural: the agent always has both "where" and "what" available.
@@ -200,15 +200,14 @@ To keep the design honest, here's what NavIndex is *not* trying to be:
 | Higher cost per document during ingest (must run a structural parser) | Lower cost per query during serving (small index, no LLM in the navigate path) |
 | Operator must occasionally curate aliases for high-traffic queries | Curation IS the long-term quality lever — eval results improve over time without retraining |
 
-## Comparison with adjacent ideas
+## Comparison with related approaches
 
-This is summarized here for context; full comparison lives in
+This section summarizes the comparison for context; the full treatment lives in
 [`comparison.md`](comparison.md).
 
 - **vs hierarchical retrievers in LlamaIndex / Haystack:** those
   retrieve through the hierarchy but still embed each chunk. NaviKB
-  keeps the hierarchy pointer-only and lets retrieval be a separate
-  composable.
+  keeps the hierarchy pointer-only and lets retrieval be a separate, composable layer.
 - **vs GraphRAG:** GraphRAG builds a graph of LLM-extracted entities
   and relations. NaviKB uses the document's own structural graph.
   Different problems, different trust models.

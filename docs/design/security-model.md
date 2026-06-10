@@ -13,7 +13,7 @@
 A knowledge base is not just a search engine; it holds documents that
 real people care about. Who can read what, who deleted what when, how
 to take a consistent backup, how to recover from a botched ingest —
-these are *operational* concerns, not "nice to haves." This document
+these are *operational* concerns, not "nice-to-haves." This document
 describes how NaviKB handles them.
 
 The audience is operators evaluating whether to trust NaviKB with
@@ -37,9 +37,9 @@ matters more than claiming broad security.
   reassign, force-purge, include_deprecated search) are gated and
   refuse cleanly with HTTP 403.
 - **Cross-process consistency.** Worker process and server process can
-  both write to shared SQLite + Qdrant; the coordination is designed
-  to prevent silent stale reads (cache-epoch counter) and silent
-  half-completed writes (two-phase audit, BEGIN IMMEDIATE on claim).
+  both write to shared SQLite + Qdrant; coordination prevents silent
+  stale reads (cache-epoch counter) and silent half-completed writes
+  (two-phase audit, BEGIN IMMEDIATE on claim).
 - **Audit non-repudiation for destructive actions.** Delete and
   reassign produce two-phase audit rows (.attempted + .completed) so
   even a crash mid-operation leaves a recoverable trail.
@@ -101,8 +101,7 @@ The first-time setup flow is therefore:
 ```
 
 This is documented in the quickstart (not yet public) and is the most
-common source of "I just installed it, why doesn't it work" once code
-ships.
+common new-install failure mode once code ships.
 
 ### Token hash storage
 
@@ -149,7 +148,7 @@ Action types: `user.create`, `user.disable`, `user.role_change`,
 `user.key_reset`.
 
 These are user-management operations where the audit row is part of
-the operation's correctness, not a side observation. They use the
+the operation's correctness, not an incidental side-effect. They use the
 `make_record()` factory + the caller's own transactional session, so
 the user table change and the audit row commit (or roll back) together.
 If audit cannot be written, the user operation also fails — there is
@@ -186,7 +185,7 @@ This means:
   before even the best-effort attempt)
 
 The JSONL fallback survives a SQLite DB crash, and the fsync after
-each line means even a power loss preserves at-least one terminal
+each line means even a power loss preserves at least one terminal
 state on disk.
 
 ### What two-phase explicitly does NOT do
@@ -355,7 +354,7 @@ Operator-driven backup uses `scripts/backup_kb.py`. The protocol:
   only way to get a consistent online snapshot without checkpointing.
 - The qdrant_path directory contains both our SQLite databases AND
   Qdrant's own state. `shutil.copytree(ignore=...)` excludes the
-  former so they don't get double-backed-up corrupted.
+  former so they are not inadvertently copied twice and corrupted.
 - The backup contains a SQLite snapshot taken WHILE maintenance was
   on. If we didn't reset the flag in the copy, the restored backup
   would come up locked. Step 5 is non-obvious but necessary.
@@ -392,10 +391,9 @@ failure is visible.
 
 ## Doctor: the operational ground truth
 
-`scripts/doctor.py` is the surface NaviKB exposes for operators to ask
-"is my system actually consistent?" It runs without writes (it
-explicitly opens the job store in `readonly=True` mode to avoid taking
-the BEGIN IMMEDIATE write lock):
+`scripts/doctor.py` is how operators ask "is my system actually
+consistent?" It runs without writes (it explicitly opens the job store
+in `readonly=True` mode to avoid taking the BEGIN IMMEDIATE write lock):
 
 - **Single-host check** (default): config validity, storage paths,
   Qdrant collection presence, HTTP service reachability

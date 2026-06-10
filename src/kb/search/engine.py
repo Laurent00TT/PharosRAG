@@ -189,7 +189,10 @@ class SearchEngine:
         # Retrieve all query variants in parallel — each retrieve hits 4 channels
         # internally; running 3 variants sequentially was the biggest source of search latency.
         retrieve_results = await asyncio.gather(*[
-            self._retriever.retrieve(q, top_k * candidate_multiplier, doc_filter, include_deprecated)
+            self._retriever.retrieve(
+                q, top_k * candidate_multiplier, doc_filter, include_deprecated,
+                enabled_channels=plan.enabled_channels if plan else None,
+            )
             for q in queries
         ])
         all_dense  = [r[0] for r in retrieve_results]

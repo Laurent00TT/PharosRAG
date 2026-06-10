@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-TOKEN="kb_admin_dCKnAsswHGzxdnvcv0qrkE-fLtFdBDEBXaeYtb0DMcM"
+TOKEN="${KB_ADMIN_TOKEN:?Set KB_ADMIN_TOKEN to your kb_admin_... token (the previously hardcoded one was removed from source — rotate it).}"
 Q="${1:-what is the main contribution of this paper}"
 echo "=== search_docs: $Q ==="
 curl -m 150 -s http://127.0.0.1:8000/search_docs \

@@ -19,8 +19,7 @@
 | "I'm researching navigable RAG algorithms for a paper" | **NaviRAG**, **CORPUS2SKILL**, **Don't Retrieve, Navigate** |
 | "I want to operate a small-team KB with auth, audit, soft-delete, backup, MCP, all local" | **NaviKB** ← you're here |
 
-The framing decision: NaviKB is a *system you operate*, not a library
-you compose. If you want primitives to build with, the library
+NaviKB is a *system you operate*, not a library you compose. If you want primitives to build with, the library
 alternatives below will give you more flexibility and a faster start.
 If you want something to *run* with operational defaults a small team
 can trust, NaviKB is aimed at that gap.
@@ -29,7 +28,7 @@ can trust, NaviKB is aimed at that gap.
 
 ### vs LlamaIndex
 
-[LlamaIndex](https://www.llamaindex.ai/) is the maturest open-source
+[LlamaIndex](https://www.llamaindex.ai/) is the most mature open-source
 RAG / agent framework. It is a *library* — you compose nodes,
 retrievers, query engines, and agents in Python code.
 
@@ -55,9 +54,9 @@ backup, multi-process maintenance) without writing that layer yourself.
 ### vs LangChain
 
 [LangChain](https://www.langchain.com/) is the other dominant
-framework. Same library-vs-system distinction applies to NaviKB.
+framework. The same library-vs-system distinction applies.
 
-The specific thing LangChain optimizes for is *chain composition* —
+LangChain's core strength is *chain composition* —
 ordering tools, retrievers, LLMs in a DAG. NaviKB takes the opposite
 position: the access pattern (navigation-first + 4-channel retrieval
 fused with RRF + cross-encoder rerank + evidence/hint partition) is
@@ -103,7 +102,7 @@ This is a powerful and very different design philosophy from NaviKB:
 GraphRAG and NaviKB are not really competing — they're answering
 different questions. If your question is "what does my corpus say
 about Topic X synthesizing across documents," GraphRAG is the better
-shape. If your question is "where in this manual is the procedure
+fit. If your question is "where in this manual is the procedure
 for Y," NaviKB is.
 
 ### vs NaviRAG and "Don't Retrieve, Navigate"
@@ -135,7 +134,7 @@ problems at different layers.
 If you're a researcher comparing retrieval algorithms, read the papers
 and ignore NaviKB. If you're an operator who wants to run a navigable
 KB on real documents this quarter, NaviKB is the production-stack
-answer underneath that class of design.
+answer for that class of design.
 
 ### vs Verba
 

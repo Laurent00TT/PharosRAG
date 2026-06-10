@@ -29,7 +29,7 @@ NaviKB 为一个**刻意限制的威胁模型**设计。明确说清楚它防御
   legacy fallback。
 - **member-vs-admin 权限边界。** Member 只能改自己拥有的文档。Admin-only
   操作(maintenance toggle、reassign、force-purge、include_deprecated
-  搜索)被门禁住,以 HTTP 403 干净拒绝。
+  搜索)受访问控制保护,以 HTTP 403 明确拒绝。
 - **跨进程一致性。** Worker 进程和 server 进程都能写共享 SQLite + Qdrant;
   协调设计上防止静默过期读(cache-epoch 计数器)和静默半完成写
   (两阶段 audit、claim 上的 BEGIN IMMEDIATE)。
@@ -47,7 +47,7 @@ NaviKB 为一个**刻意限制的威胁模型**设计。明确说清楚它防御
   请求整形、自己没 WAF。把它暴露超出 `127.0.0.1` 的 operator 应该放在
   真 reverse proxy 后面(Caddy / nginx / Cloudflare Tunnel),带 TLS +
   (可选)mTLS 或更高层的 auth gate。
-- **被入侵的维护者机器。** 如果跑 NaviKB 的主机被入侵了,一切都无所谓:
+- **被入侵的维护者机器。** 如果跑 NaviKB 的主机被入侵了,所有防护措施均告失效:
   攻击者拿到带每个用户 token hash 的 SQLite 文件、每条 audit 行、每份
   文档的向量表示。我们不假装防御这个。
 - **LLM 的侧信道攻击。** 来自用户提交文档内容的 prompt injection 是任何
@@ -58,7 +58,7 @@ NaviKB 为一个**刻意限制的威胁模型**设计。明确说清楚它防御
   SQLite 命名空间、per-tenant Qdrant collection、per-tenant audit。小团队
   形状是"可信 operator,一个组织单元"。SaaS 多租户部署需要不同设计。
 
-## Auth: 硬切换到 user token
+## Auth: 强制 user token 认证
 
 进入系统有两条路径: REST 端点和 MCP sub-app(挂在 `/mcp`)。两者都走同一个
 `authenticate_token` 函数。没有第三条路径;没有匿名 fallback。
@@ -71,7 +71,7 @@ Token 由 `manage_users.py create <username> --role {admin|member}` 创建,
 
 Server 在 users 表为空时**拒绝启动**(带 FATAL 日志行)。理由: 没有至少一个
 admin user,没人能认证,但每个端点还会 401 —— 看起来像通用 auth bug。在
-启动时大声失败让 misconfiguration 显而易见。
+启动时直接报错让 misconfiguration 显而易见。
 
 所以第一次 setup 流程是:
 
@@ -120,7 +120,7 @@ Action 类型: `auth.failed`、`auth.brute_force`、`authz.denied`、
 Action 类型: `user.create`、`user.disable`、`user.role_change`、
 `user.key_reset`。
 
-这些是用户管理操作,audit 行是操作正确性的一部分,不是旁观。它们用
+这些是用户管理操作,audit 行是操作正确性的一部分,而不只是事后记录。它们用
 `make_record()` factory + 调用者自己的事务 session,user 表变更和 audit
 行一起 commit(或一起 rollback)。Audit 写不了,user 操作也失败 —— 不存在
 "user 创建了但没 audit 行"的可能。
@@ -161,7 +161,7 @@ JSONL fallback 在 SQLite DB 崩溃时存活,每行后 fsync 意味着即使断�
 "尝试过但状态未知"。契约是诚实的: audit log 会告诉你"我们在时间 T 试图删
 D-42" —— admin 然后通过看 D-42 的实际状态来 reconcile。
 
-这是小团队栈的正确 trade。真正原子的实现需要要么 SQLite + Qdrant 两阶段
+这是小团队栈合理的权衡。真正原子的实现需要要么 SQLite + Qdrant 两阶段
 提交(SQLite 没有支持的干净方式),要么意图操作的 write-ahead log(JSONL
 fallback 近似就是这个)。
 
@@ -354,7 +354,7 @@ IMMEDIATE 写锁):
   我们没有行级 redaction 或字段级加密。别把国家安全文档放进 NaviKB。
 - **内部威胁的 audit 篡改检测。** Audit log 在 SQLite 里;有 shell 访问的
   admin 能 `UPDATE audit_log SET ...`,我们不会检测到。Append-only 区块链式
-  audit 在小团队栈的 scope 之外。
+  audit 属于小团队栈的设计范围之外。
 - **合规认证。** 没有 SOC 2、HIPAA、ISO 27001。Audit trail 的设计支持你想
   朝那个方向 build,但我们不做任何声明。
 

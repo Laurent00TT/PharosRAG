@@ -42,7 +42,7 @@ Model Context Protocol (MCP)。
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-箭头方向是 ingestion 时的数据流。读路径方向相反: serve → retrieve →
+箭头方向是 ingestion 时的数据流。读取路径方向相反: serve → retrieve →
 storage。Layer 1 (ingest) **永远不读** Layer 4 (serve);两者之间唯一的
 通信就是 SQLite job state + 跨进程 cache-epoch 计数器。
 
@@ -50,10 +50,10 @@ storage。Layer 1 (ingest) **永远不读** Layer 4 (serve);两者之间唯一�
 
 职责: 接收 PDF 路径(或其他支持的格式),产出检索层需要的所有 artifact。
 
-pipeline 是确定性的(相同输入得相同输出,modulo 时间戳);它**不是**
+pipeline 是确定性的(相同输入得相同输出,时间戳字段除外);它**不是**
 流式处理器。每份文档在后台 worker 进程里独立处理一次。worker 是与
 FastAPI server **独立的 OS 进程**,不是线程,不是 asyncio task —— 这是
-全系统最重要的运维决策。一个决定换来三件事:
+全系统最重要的运维决策。这一个决定带来三个好处:
 
 - **优雅崩溃恢复**: worker 挂掉不会拖垮 serving 层
 - **独立资源预算**: worker 可以占 GPU 显存做 vision encoding,不影响 query 延迟
@@ -92,7 +92,7 @@ serve、walk、expand,不需要 load 任何重的内容通道。
 
 ### Layer 3: Retrieve
 
-检索特意做成正交阶段的小型组合:
+检索特意设计为各正交阶段的小型组合:
 
 ```text
 query
@@ -135,7 +135,7 @@ Agent final) 在首次使用时构造,不在 startup 加载;这让 server 冷启
 
 ### Layer 4: Serve
 
-serve 层把 retrieval engine 包成三张脸:
+serve 层把 retrieval engine 以三种形式对外暴露:
 
 1. **FastAPI REST 端点** —— 给脚本和 ingestion 提交用的程序化访问
    (`POST /ingestion/jobs`、`DELETE /documents/{id}`、
@@ -149,8 +149,8 @@ serve 层把 retrieval engine 包成三张脸:
 
 跨切面关注点散布在 serve 层:
 
-- **Auth**: 硬切到用户 token。任何请求(REST 或 MCP)都必须带
-  `manage_users.py create` 发的有效 API key。users 表为空时 server 拒绝
+- **Auth**: 强制绑定到用户 token。任何请求(REST 或 MCP)都必须携带
+  `manage_users.py create` 签发的有效 API key。users 表为空时 server 拒绝
   启动(bootstrap-refuse-start 不变量)
 - **Audit**: 三种语义类 —— *单阶段强制* (用户管理操作)、*两阶段* (delete
   和 reassign)、*best-effort* (其他)。两阶段保证: 要么动作和它的
@@ -161,7 +161,7 @@ serve 层把 retrieval engine 包成三张脸:
 - **软删除 + GC**: DELETE 永远不动 Qdrant 或图片;只翻状态 + 写
   `deleted_at`。Restore 是再翻回去。GC 在带外运行,清掉超过 retention
   的软删除文档
-- **缓存失效**: SQLite cache-epoch 计数器解跨进程过期问题。worker 在
+- **缓存失效**: SQLite cache-epoch 计数器解决跨进程缓存过期问题。worker 在
   ingest / deprecate 之后 bump;server 把 epoch 折进自己的搜索 cache key
 
 auth / audit / maintenance / 软删除 / GC 的深入讨论会放在
@@ -195,9 +195,9 @@ auth / audit / maintenance / 软删除 / GC 的深入讨论会放在
               └───────────────────────────────────┘
 ```
 
-两个进程**永远不直接通信**。所有协调都通过 SQLite。这在 2026 年是不流行的
-—— 默认反应是去抓一个 message broker —— 但在小团队规模上是正确答案,
-因为它消除了一类失败模式(broker 挂了、broker 慢、broker 路错),代价是
+两个进程**永远不直接通信**。所有协调都通过 SQLite。这在 2026 年并不流行
+—— 通常的第一反应是引入一个 message broker —— 但在小团队规模上是正确答案,
+因为它消除了一类失败模式(broker 挂了、broker 慢、broker 路由出错),代价是
 "worker 不能跟 server 跑在不同机器上"。对单机或局域网部署,这个代价是零。
 
 ## 设计预想到的失败模式
@@ -216,7 +216,7 @@ auth / audit / maintenance / 软删除 / GC 的深入讨论会放在
 
 ## 故意不做的事
 
-- **多机部署。** SQLite 作为跨进程协调把我们卡死在单机。要走多机就得
+- **多机部署。** SQLite 作为跨进程协调把系统绑定在单机上。要走多机就得
   换协调层;我们没这个计划。
 - **LLM 驱动的 schema/ontology 归纳。** NaviKB 里的"图"就是文档自己的
   标题层级,不是模型对实体边的猜测。

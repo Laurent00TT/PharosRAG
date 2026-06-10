@@ -4,92 +4,195 @@
 
 </div>
 
-# NaviKB
+<div align="center">
 
-**Navigable Knowledge Base** — a navigation-first, local-first knowledge base
-for individuals and small teams.
+# 🧭 NaviKB
 
-> 🔬 **Status: research / example — early alpha.** The code is here and runs,
-> but this is a *reference implementation*, not a turnkey product. Expect rough
-> edges: a clean-machine install has not yet been independently reproduced, and
-> the evaluation story is still maturing. See [docs/status.md](docs/status.md)
-> for an honest account of what works, what doesn't, and where the risks are.
+**Navigate your documents like a reader — not a search box.**
+
+A navigation-first, local-first knowledge base for individuals and small teams.
+Agent-native via MCP. No SaaS, no Kubernetes, no entity graph — just your
+documents' own structure, made walkable.
+
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![Status](https://img.shields.io/badge/status-early--alpha-orange)](docs/status.md)
+[![MCP](https://img.shields.io/badge/MCP-native-8A2BE2)](#how-a-question-gets-answered)
+[![Local-first](https://img.shields.io/badge/local--first-%E2%9C%93-2ea44f)](#)
+[![Stars](https://img.shields.io/github/stars/Laurent00TT/navikb?style=social)](https://github.com/Laurent00TT/navikb)
+
+</div>
 
 ---
 
-## What it is
+## The one idea
 
-NaviKB is a knowledge base built around two ideas the mainstream RAG stack
-gets wrong:
+Most RAG systems shred a document into a flat pool of chunks and hope dense
+similarity finds the right one. **NaviKB keeps the document whole.** It indexes
+the *structure* — headings, tables, figures, page ranges — into a pointer-only
+**NavIndex**, lets an agent *navigate* to the right place, and only then runs
+retrieval, scoped to that location.
 
-1. **Navigation, not retrieval, is the primary access pattern.** Most RAG
-   systems treat documents as a flat bag of chunks and rely on dense
-   similarity to find the right text. NaviKB indexes the *structure* of
-   each document (headings, tables, figures, page ranges) into a
-   pointer-only **NavIndex**, and lets the agent walk that structure the
-   same way a human reader would.
-2. **Generated content is not evidence.** An LLM's description of a page
-   is a recall hint. Citing it as if it were source text is a hallucination
-   amplifier. NaviKB partitions every response into `evidence_fields`
-   (parsed text, image URLs, captions) and `hint_fields` (LLM-generated
-   descriptions), and tells the agent which it is allowed to cite.
+```mermaid
+flowchart LR
+    Q["❓ what is the approval threshold?"]
+    subgraph TYP["Typical RAG"]
+        direction TB
+        FC["everything chunked<br/>+ embedded"] --> SIM["dense similarity<br/>top-k guess"]
+    end
+    subgraph NAVI["NaviKB · navigation-first"]
+        direction TB
+        NAV["NavIndex<br/>document structure:<br/>headings · tables · figures"]
+        NAV --> LOC["locate the section"]
+        LOC --> R4["4-channel retrieval<br/>within scope"]
+    end
+    Q --> TYP
+    Q --> NAVI
+    SIM -.-> X["🤷 a maybe-right chunk,<br/>structure lost"]
+    R4 -.-> OK["📍 cited evidence,<br/>in context"]
+```
 
-NaviKB is built for the realistic shape of personal and small-team work:
-a few hundred to a few thousand PDFs, a handful of operators, and a
-strong preference for running locally without SaaS dependencies.
+It runs entirely on your machine or LAN, and exposes every capability as a
+first-class **MCP tool surface** so coding agents and assistants can drive it
+directly.
 
-## What it is not
+---
 
-- **Not a hosted service.** Everything runs on your machine or LAN.
-- **Not a vector-search wrapper.** Retrieval is one of four channels
-  (text dense, text sparse, vision, description), fused with RRF
-  and reranked — but always anchored to navigable structure.
-- **Not a knowledge graph.** No entity extraction, no ontology induction,
-  no LLM-built relationship edges. The graph is the document's own
-  table of contents.
-- **Not an enterprise platform.** No multi-tenant orchestration, no
-  Kubernetes operators, no Celery / Redis / Kafka. SQLite + Qdrant + a
-  worker process is the entire stack.
+## Two bets the mainstream stack gets wrong
 
-## Why this shape
+**1 · Navigation is the primary access pattern — retrieval is the second step.**
+NaviKB builds a multi-level section tree straight from the parser's heading
+hierarchy. An agent walks it the way a human flips to *Chapter 5 → 5.3*, and
+retrieval runs *within* that scope instead of guessing across the whole corpus.
 
-The design is a response to two trends in 2026 RAG that we think are
-diverging in the wrong direction:
+**2 · Generated content is not evidence.** An LLM's description of a page is a
+retrieval *hint*, not a citation. NaviKB partitions every response into
+`evidence_fields` (parsed text, image URLs, captions) and `hint_fields`
+(LLM-generated descriptions), and tells the agent exactly which it is allowed
+to cite — hallucination discipline enforced at the data layer, not left to the
+caller.
 
-- **Toward heavier infrastructure** — managed vector DBs, graph
-  databases, agent platforms, observability stacks. Great for enterprise
-  with a dedicated ops team. Hostile to individuals and 2-5 person teams.
-- **Away from document structure** — chunk everything, embed everything,
-  hope similarity finds it. Loses the affordances that make a real
-  document navigable (sections, figures, tables, "see chapter 3").
+---
 
-NaviKB picks the opposite stance on both: small footprint, deep respect
-for structure, agent-native via MCP.
+## Architecture at a glance
 
-See [docs/design/architecture.md](docs/design/architecture.md) for the
-shape in detail, and [docs/design/navigation-first.md](docs/design/navigation-first.md)
-for the design rationale behind making navigation the primary access pattern.
+Four loosely-coupled layers. SQLite + Qdrant + a worker process are the *entire*
+stack — no Redis, no Celery, no Kafka, no graph database.
 
-## Models and deployment are a reference, not a requirement
+```mermaid
+flowchart TB
+    subgraph S1["1 · Ingest"]
+        direction LR
+        PDF["PDF"] --> P["MinerU parse<br/>layout + headings"] --> CH["chunk +<br/>4 channels"] --> NB["build NavIndex"]
+    end
+    subgraph S2["2 · Storage"]
+        direction LR
+        QD[("Qdrant<br/>3 vector collections")]
+        SL[("SQLite<br/>nav · meta · jobs · audit")]
+    end
+    subgraph S3["3 · Retrieve"]
+        HY["nav locate → 4-channel recall<br/>→ RRF fuse → cross-encoder rerank"]
+    end
+    subgraph S4["4 · Serve"]
+        MCP["MCP + REST tool surface<br/>auth · audit · citation discipline"]
+    end
+    S1 ==> S2 ==> S3 ==> S4
+```
 
-NaviKB decouples every model behind a configurable endpoint
-(`*_SERVER_URL` / `*_MODEL_ID` in `.env`). The stack we happened to
-validate — Qwen3-VL for text + vision embeddings and reranking, MILCO for
-learned sparse retrieval, Qwen3.6-VL for page descriptions, MinerU for
-layout parsing — is **one reference configuration**, not a hard dependency.
+→ Full walkthrough in [docs/design/architecture.md](docs/design/architecture.md).
 
-Point the endpoints at whatever you have: a local llama.cpp / LM Studio, a
-remote GPU host reached over an SSH tunnel, or a hosted OpenAI-compatible
-API. The engine, the four-channel retrieval, the navigation layer, and the
-operator surface (auth, audit, soft-delete, backup, GC) are the contribution
-here — the specific models are swappable, and the deployment topology is an
-example, not a mandate.
+---
+
+## How ingestion works
+
+One PDF in → parsed layout, four retrieval channels, and a navigable section
+tree out. The heavy lifting runs in a background **worker** so the API stays
+responsive; everything is re-runnable and idempotent per document.
+
+```mermaid
+flowchart LR
+    PDF["📄 PDF"] --> CLS["classify<br/>native / scanned"]
+    CLS --> MIN["MinerU<br/>layout parse"]
+    MIN --> PG["pages +<br/>heading_path"]
+    PG --> CHK["chunker<br/>parent + leaf"]
+    PG --> NAV["NavIndexBuilder<br/>multi-level section tree"]
+    CHK --> T["text dense"]
+    CHK --> SP["learned sparse<br/>MILCO"]
+    PG --> VI["vision embed"]
+    PG --> DE["page description<br/>vision LLM"]
+    T --> Q[("Qdrant")]
+    SP --> Q
+    VI --> Q
+    DE --> Q
+    NAV --> N[("SQLite NavIndex")]
+```
+
+---
+
+## How a question gets answered
+
+Retrieval is **one of four channels** (text-dense, text-sparse, vision,
+description), fused with Reciprocal Rank Fusion and reranked by a cross-encoder
+— but always anchored to navigable structure, gated by auth, and recorded by a
+two-phase audit log.
+
+```mermaid
+flowchart LR
+    A["ask / search_docs"] --> AU["auth"]
+    AU --> NV["NavIndex locate"]
+    NV --> RC["4-channel recall<br/>dense · sparse · vision · desc"]
+    RC --> RF["RRF fuse"]
+    RF --> RR["cross-encoder rerank"]
+    RR --> PT["evidence / hint<br/>partition"]
+    PT --> CI["answer + citations"]
+    CI --> AD["audit log"]
+```
+
+---
+
+## The NavIndex: pointers, not chunks
+
+The thing that makes navigation cheap: a **`NavEntry` is a pure pointer.** It
+carries an id, a type, a page range, its parent, and a `kb://` resource URI —
+but **no text and no embedding**. Titles and structure live in the index;
+the actual content lives where it always did. Re-deriving the whole nav tree is
+deterministic and free of model calls.
+
+```mermaid
+flowchart LR
+    subgraph NAVIDX["NavIndex · pointers only"]
+        direction TB
+        NE["NavEntry<br/>entry_id · type · page range<br/>parent_entry_id · resource_uri<br/>—<br/>no text · no embedding"]
+    end
+    subgraph CONTENT["Actual content"]
+        direction TB
+        CHUNK["Chunk<br/>text + dense + sparse vectors"]
+        PAGE["Page image / source PDF"]
+    end
+    NE -. "kb:// resource_uri" .-> CHUNK
+    NE -. "kb:// resource_uri" .-> PAGE
+```
+
+→ The rationale, and the trade-offs vs. chunking, are in
+[docs/design/navigation-first.md](docs/design/navigation-first.md).
+
+---
+
+## What's inside
+
+| | |
+|---|---|
+| 🧭 **Navigation-first** | Multi-level section tree from real document structure; agent walks it via MCP `kb_get_toc` / `kb_expand_nav_entry`. |
+| 🔀 **4-channel retrieval** | Text-dense + learned-sparse + vision + page-description, RRF-fused and cross-encoder reranked. |
+| 🧱 **Citation discipline** | Evidence vs. hint partition enforced at the data layer — the agent is told what it may cite. |
+| 🔌 **MCP-native** | Every capability is a first-class MCP tool; mount at `/mcp` and point any agent at it. |
+| 🛠 **Operator surface** | Hard-cutover auth, two-phase audit, soft-delete + GC retention, backup, maintenance mode, `doctor` health check. |
+| 🔁 **Swappable models** | Every model is placed behind a configurable endpoint — local llama.cpp, a remote GPU, or a hosted OpenAI-compatible API. |
+| 🪶 **Small footprint** | SQLite + Qdrant + one worker. No graph DB, no message queue, no orchestrator. |
+
+---
 
 ## Quickstart
-
-> This is a research/example stack. Treat the commands below as a starting
-> point, not a hardened install path — see the
-> [status notes](docs/status.md) on reproducibility.
 
 ```powershell
 # 1. Install (Python 3.11+)
@@ -98,30 +201,28 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[mineru]"   # PDF layout parsing (optional)
 
 # 2. Configure — copy the template, then point the *_SERVER_URL / *_MODEL_ID
-#    entries at your own model endpoints (see "Models ... a reference" above).
+#    entries at your own model endpoints (see "Models are swappable" below).
 Copy-Item .env.example .env
 
 # 3. Run the local control plane
 python scripts/serve.py --port 8000     # FastAPI tool server (REST + MCP)
 python scripts/worker.py                 # background ingestion worker
 
-# Or bring up main + Qdrant + worker together via docker compose:
+# Or bring up main + Qdrant + worker together:
 # docker compose -f docker/docker-compose.local.yml --env-file .env up -d --build
 ```
 
-The server binds `127.0.0.1` by default. Create an admin account, then
-ingest a PDF — NaviKB parses PDF layout, so it ingests `.pdf` files. No
-third-party PDFs ship with this repo; bring your own, or build sample PDFs
-from the bundled **synthetic** sources
-(`datasets/pdf_corpus_v1/synthetic_sources/`, see `scripts/pdf_corpus_*.py`):
+The server binds `127.0.0.1` by default. Create an admin, ingest a PDF (bring
+your own, or build samples from the bundled **synthetic** sources in
+`datasets/pdf_corpus_v1/synthetic_sources/`):
 
 ```powershell
 python scripts/manage_users.py create <username> --role admin
 python scripts/ingest.py --path .\path\to\document.pdf
 ```
 
-All API requests carry an `Authorization: Bearer <user_token>` header.
-Search, or ask a question the agent answers from retrieved evidence:
+Every request carries an `Authorization: Bearer <user_token>` header. Search,
+or ask a question the agent answers from retrieved evidence:
 
 ```powershell
 curl -X POST http://127.0.0.1:8000/search_docs `
@@ -135,62 +236,93 @@ curl -X POST http://127.0.0.1:8000/ask `
   -d "{\"question\":\"What is the approval threshold?\"}"
 ```
 
-Health check the local stack with `python scripts/doctor.py`. The MCP tool
-surface is mounted at `/mcp`.
+Health-check the stack with `python scripts/doctor.py`. The MCP tool surface is
+mounted at `/mcp`.
+
+---
+
+## Models are swappable (the reference config is just an example)
+
+NaviKB places every model behind a configurable endpoint
+(`*_SERVER_URL` / `*_MODEL_ID` in `.env`). The stack we validated — **Qwen3-VL**
+for text + vision embeddings and reranking, **MILCO** for learned sparse,
+**Qwen3-VL** for page descriptions, **MinerU** for layout parsing — is *one
+reference configuration*, not a hard dependency.
+
+Point the endpoints at whatever you have: a local llama.cpp / LM Studio, a
+remote GPU over an SSH tunnel, or a hosted OpenAI-compatible API. The engine,
+the four-channel retrieval, the navigation layer, and the operator surface are
+the contribution here — the specific models are yours to choose.
+
+A single-GPU **RTX 4090-48G** reference deployment (3× vLLM + MILCO + MinerU +
+Qdrant, all resident at once) ships in [`deploy/local-48g/`](deploy/local-48g/).
+
+---
+
+## How it compares
+
+| Concern | **NaviKB** | Typical RAG (LangChain / LlamaIndex) | GraphRAG | NaviRAG (research) |
+|---|---|---|---|---|
+| Primary access pattern | **Pointer navigation + 4-channel retrieval** | Dense retrieval over flat chunks | Graph walk over LLM-extracted entities | Hierarchical LLM-driven exploration |
+| Local-first | ✅ default | ⚠️ possible but uncommon | ❌ usually needs Neo4j-class infra | ❌ research-stage |
+| MCP-native | ✅ first-class | ⚠️ via adapters | ❌ | ❌ |
+| Citation discipline | ✅ evidence/hint partition enforced | ❌ caller decides | ❌ | ❌ |
+| Operator surface | ✅ auth · audit · backup · GC | ❌ build-it-yourself | ⚠️ enterprise only | ❌ |
+
+Per-cell reasoning — and an honest "where NaviKB is weaker" — lives in
+[docs/design/comparison.md](docs/design/comparison.md).
+
+---
+
+## Status & maturity
+
+NaviKB is **early-alpha**: the code is here, runs, and is covered by a large
+test suite, but it is a *reference implementation*, not a turnkey product.
+
+| Area | State |
+|---|---|
+| Core engine (ingest → retrieve → serve) | ✅ implemented & tested |
+| Navigation layer (multi-level NavIndex) | ✅ implemented & tested |
+| 4-channel retrieval + RRF + rerank | ✅ implemented |
+| Operator surface (auth, audit, GC, backup) | ✅ implemented |
+| MCP tool surface | ✅ implemented |
+| Clean-machine reproducible install | 🚧 not yet independently reproduced |
+| Evaluation / quality benchmarks | 🚧 maturing |
+
+[**docs/status.md**](docs/status.md) is the honest, detailed account — what
+works, what doesn't, and where the risks are.
+
+---
 
 ## The optional workbench
 
-A web workbench (React + Vite) lives in a separate repository,
-**[navikb-workbench](https://github.com/Laurent00TT/navikb-workbench)**. It is
-a thin HTTP client of the core's `/ui/api` surface — there is no shared code.
-Run this core first, then run the workbench against it (its dev server proxies
-`/ui/api` back to `127.0.0.1:8000`). The core runs fully headless without it.
+A web workbench (React + Vite) lives in a separate repo,
+**[navikb-workbench](https://github.com/Laurent00TT/navikb-workbench)** — a thin
+HTTP client of the core's `/ui/api` surface (no shared code). Run this core
+first, then point the workbench at it. The core runs fully headless without it.
 
-## Differentiation
+---
 
-| Concern | NaviKB | Typical RAG (LangChain / LlamaIndex) | GraphRAG | NaviRAG (research) |
-|---|---|---|---|---|
-| Primary access pattern | Pointer navigation + 4-channel retrieval | Dense retrieval over flat chunks | Graph walk over LLM-extracted entities | Hierarchical LLM-driven exploration |
-| Local-first | ✅ default | ⚠ possible but uncommon | ❌ usually needs Neo4j-class infra | ❌ research-stage |
-| MCP-native | ✅ first-class tool surface | ⚠ via adapters | ❌ | ❌ |
-| Citation discipline | ✅ evidence/hint partition enforced | ❌ caller decides | ❌ | ❌ |
-| Operator surface (auth, audit, backup, GC) | ✅ end-to-end | ❌ "build it yourself" | ⚠ enterprise stacks only | ❌ |
-| Status | research / example, early alpha | mature | mature | research prototype |
-
-Detailed reasoning per cell — and an honest "where NaviKB is weaker"
-section — lives in [docs/design/comparison.md](docs/design/comparison.md).
-
-## Documentation map
+## Documentation
 
 | Document | Purpose |
 |---|---|
-| [README](README.md) (you are here) | 30-second overview + quickstart |
 | [docs/status.md](docs/status.md) | Honest maturity: what works, what doesn't, the open risks |
-| [docs/design/architecture.md](docs/design/architecture.md) | Four-layer architecture: ingest → storage → retrieve → serve |
-| [docs/design/navigation-first.md](docs/design/navigation-first.md) | Why NavIndex; pointer-only design; trade-offs vs chunking |
-| [docs/design/security-model.md](docs/design/security-model.md) | Hard-cutover auth, two-phase audit, soft delete, maintenance flag, GC retention |
-| [docs/design/comparison.md](docs/design/comparison.md) | Deep comparison with LangChain / LlamaIndex / GraphRAG / NaviRAG |
+| [docs/design/architecture.md](docs/design/architecture.md) | Four-layer architecture in detail |
+| [docs/design/navigation-first.md](docs/design/navigation-first.md) | Why NavIndex; pointer-only design; trade-offs vs. chunking |
+| [docs/design/security-model.md](docs/design/security-model.md) | Auth, two-phase audit, soft delete, maintenance flag, GC retention |
+| [docs/design/comparison.md](docs/design/comparison.md) | Deep comparison vs. LangChain / LlamaIndex / GraphRAG / NaviRAG |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | What feedback and contributions are welcome |
 
-## Quick links
+**Quick links:** 📋 [Status](docs/status.md) · 🏛 [Architecture](docs/design/architecture.md) · 🖥 [Workbench](https://github.com/Laurent00TT/navikb-workbench) · 💬 [Open an issue](../../issues/new/choose) · 🤝 [Contributing](CONTRIBUTING.md) · 🔒 [Security](SECURITY.md) · 📜 [Apache-2.0](LICENSE)
 
-- 📋 [Status & honest maturity](docs/status.md)
-- 🏛 [Architecture](docs/design/architecture.md)
-- 🖥 [Workbench (separate repo)](https://github.com/Laurent00TT/navikb-workbench)
-- 💬 [Discussion: open an issue](../../issues/new/choose) — design feedback, comparison corrections, docs clarity
-- 🤝 [Contributing](CONTRIBUTING.md)
-- 🔒 [Security policy](SECURITY.md)
-- 📜 [License: Apache-2.0](LICENSE)
+---
 
 ## Naming
 
-**NaviKB** = **Navi**gable + **K**nowledge **B**ase.
-
-Pronounced "nah-vee-K-B" (three syllables) or "navy-K-B" (the lazy
-two-syllable form). Positions the project in the 2026 *navigable
-knowledge base* research direction (see
-[NaviRAG](https://arxiv.org/abs/2604.12766),
-["Don't Retrieve, Navigate"](https://arxiv.org/abs/2604.14572)) while
-focusing on a different layer: those are retrieval-algorithm research
-prototypes; NaviKB is the production-operations stack underneath that
-class of design.
+**NaviKB** = **Navi**gable + **K**nowledge **B**ase. Pronounced "nah-vee-K-B."
+It sits in the 2026 *navigable knowledge base* research direction
+([NaviRAG](https://arxiv.org/abs/2604.12766),
+["Don't Retrieve, Navigate"](https://arxiv.org/abs/2604.14572)) but at a
+different layer: those are retrieval-algorithm prototypes; NaviKB is the
+production-operations stack underneath that class of design.

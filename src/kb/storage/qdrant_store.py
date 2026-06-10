@@ -85,7 +85,11 @@ class QdrantStore:
         owner_id: str | None = None,
     ) -> None:
         point = PointStruct(
-            id=str(uuid.uuid4()),
+            # Deterministic id keyed on (doc_id, chunk_index): chunk_index is a
+            # per-document monotonic counter (unique across parent + leaf chunks), so a
+            # re-ingest / backfill OVERWRITES rather than duplicating.
+            # (A random uuid4 here let repeated ingests accrete duplicate vectors.)
+            id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"text:{chunk.doc_id}:{chunk.chunk_index}")),
             vector={
                 "dense": dense,
                 "sparse": SparseVector(indices=sparse_indices, values=sparse_values),

@@ -15,11 +15,11 @@
 
 ## What works today
 
-- The design has been iterated through six internal review stages, each with
+- The design has gone through six internal review stages, each with
   per-PR design specs and code reviews.
 - The implementation passes its own test suite (800+ tests) covering
   retrieval, auth, audit, soft-delete, the maintenance flag, backup, GC, and
-  the MCP tool surface.
+  the MCP tool layer.
 - Core invariants — cross-process maintenance gate, two-phase audit,
   evidence/hint partition, navigation-first retrieval — are in place and tested.
 - It runs end-to-end on the maintainer's machine with the reference model
@@ -31,11 +31,10 @@
 - **Reproducibility is only lightly verified.** A from-source install
   (`pip install -e ".[server,dev]"`) plus `import kb` succeeds on a clean
   Python 3.12 virtualenv. It has **not** been reproduced by a second person or
-  on a second OS — that, plus the heavier optional `[mineru]` extra and the
-  live model services, is the open gap.
+  on a second OS — those gaps, along with the heavier optional `[mineru]` extra and the
+  live model services, remain unverified.
 - **The evaluation story is still maturing.** The golden set is mostly
-  synthetic; broad real-document evaluation is the single largest open quality
-  risk.
+  synthetic; broad real-document evaluation is the biggest remaining quality risk.
 - **No released package.** There is no PyPI release or container image yet;
   installation is from source.
 - **The model / deployment matrix is a reference, not a tested grid.** Only the
@@ -62,7 +61,7 @@ breaks, that is exactly the feedback that closes the reproducibility gap.
 ## How you can help
 
 - **🐛 Open an issue** if the install breaks, a doc is unclear, or a comparison
-  is wrong. A second-person install report is the single most useful thing
+  is wrong. A fresh install report from someone outside the project is the single most useful thing
   right now.
 - **📋 Read the design docs** —
   [architecture](design/architecture.md),
@@ -76,7 +75,7 @@ breaks, that is exactly the feedback that closes the reproducibility gap.
 Roughly in priority order, the things most likely to change:
 
 1. A reproducible clean-machine install — a dependency pass plus a
-   second-person install report.
+   fresh install report from someone outside the project.
 2. A real-document evaluation report (Recall@k, NDCG, MRR) on at least one
    non-synthetic corpus, with the golden set published.
 3. A documented threat model, and an auth/audit review by someone other than

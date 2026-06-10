@@ -6,8 +6,7 @@
 
 # 对比
 
-> 如果你在搜 "yet another RAG library",这页是 NaviKB 是不是你想要的东西
-> 的简短答案。
+> 如果你在搜 "yet another RAG library",这页给出 NaviKB 是否适合你的简短答案。
 
 ## TL;DR
 
@@ -19,9 +18,7 @@
 | "我在研究 navigable RAG 算法,要写 paper" | **NaviRAG**、**CORPUS2SKILL**、**Don't Retrieve, Navigate** |
 | "我想运营一个小团队 KB,带 auth、audit、软删除、备份、MCP,全本地" | **NaviKB** ← 你在这 |
 
-定位决策: NaviKB 是**你运营的系统**,不是**你组合的库**。如果你想要搭积木
-的原料,下面列的库替代品会给你更多灵活性和更快的起点。如果你想要一个能
-**跑**的东西、带小团队能信任的运维默认值,NaviKB 瞄准那个缺口。
+定位决策: NaviKB 是**你运营的系统**,不是**你组合的库**。如果你需要的是用于自由组合的基础库,下面列出的库替代品能给你更多灵活性和更快的起步。如果你想要一个能直接**跑起来**、让小团队可以放心依赖其运维默认值的系统,NaviKB 正是为这个缺口而生。
 
 ## 详细对比
 
@@ -41,38 +38,29 @@ agent。
 | Auth / audit / backup / GC | "自己搭" | 端到端设计在内 |
 | 成熟度 | 成熟,大社区,很多 integration | Pre-1.0(研究 / 示例, 早期 alpha) |
 
-**选 LlamaIndex 当** 你要最大灵活性、你在搭一个不合任何系统模子的自定义
-RAG pipeline、你需要跟很多具体 vector DB / LLM provider 的 integration、
-或者你在 prototyping 想换组件。
+**选 LlamaIndex** 如果你需要最大灵活性、正在搭建不适合任何固定系统模板的自定义 RAG pipeline、需要与大量 vector DB / LLM provider 对接、或者处于 prototyping 阶段需要频繁替换组件。
 
-**选 NaviKB 当** 你想要一个能立起来、配置好、信任它在运维压力下表现
-(delete、restore、backup、多进程 maintenance)的系统,不需要自己写那一层。
+**选 NaviKB** 如果你想要一个能直接搭起来、配置好就能用、在运维压力下(delete、restore、backup、多进程 maintenance)也能放心信赖的系统,而不想自己从头搭那一层。
 
 ### vs LangChain
 
 [LangChain](https://www.langchain.com/) 是另一个主导框架。同样的"库 vs 系统"
 区别适用于 NaviKB。
 
-LangChain 具体优化的是 **chain 组合** —— 在 DAG 里排 tool、retriever、LLM
-的顺序。NaviKB 选反过来的立场: 访问模式(navigation-first + 4 通道检索 +
-RRF 融合 + cross-encoder rerank + evidence/hint 分区)**焊死**。operator
-拿到这个模式;他们不能重建它。
+LangChain 具体优化的是 **chain 组合** —— 在 DAG 里编排 tool、retriever、LLM 的调用顺序。NaviKB 选择了相反的立场:访问模式(navigation-first + 4 通道检索 + RRF 融合 + cross-encoder rerank + evidence/hint 分区)**固定内置**。operator 直接使用这套模式,无法也无需自行重组。
 
-这在你想要 opinionated 模式时是好的。在你的问题不合这个模式时是坏的(例如
-你在搭需要自定义 plan-execute-observe loop 的多模态 agent)。LangChain 更
-灵活。NaviKB 更 opinionated。
+这在你需要有主见的固定模式时是优点。当你的问题不适合这套模式时,就是局限(例如你在搭需要自定义 plan-execute-observe loop 的多模态 agent)。LangChain 更灵活,NaviKB 更有主见。
 
 ### vs Haystack
 
 [Haystack](https://haystack.deepset.ai/) 介于 LlamaIndex 和完整系统项目之间。
-它有 pipeline 抽象和合理的默认值,但希望你自己部署运维。
+它有 pipeline 抽象和合理的默认值,但部署运维仍需自行负责。
 
 跟 NaviKB 最大的区别是**默认访问模式**: Haystack 围绕检索 pipeline 中心化
 (Retriever → Reader → Generator)。NaviKB 围绕导航图;检索是几个组件
 之一,不是脊柱。
 
-对已有 Haystack 和能 work 的 retriever 的项目,正确的做法可能是继续用它。
-NaviKB 不是 drop-in 替代品。
+对于已经在用 Haystack 且 retriever 运转良好的项目,继续沿用很可能才是正确选择。NaviKB 不是 drop-in 替代品。
 
 ### vs GraphRAG
 
@@ -90,13 +78,11 @@ NaviKB 不是 drop-in 替代品。
 | 最适合 | 跨文档围绕发现的概念合成 | 帮读者导航他们手头真有的文档 |
 | 部署 | 为企业栈设计(Neo4j 级基础设施) | 为单机 + SQLite 设计 |
 
-GraphRAG 和 NaviKB 其实**不在竞争** —— 它们在回答不同问题。如果你的问题是
-"我的语料对话题 X 跨文档合成怎么说",GraphRAG 是更好的形状。如果你的问题
-是 "这份手册的 Y 流程在哪",NaviKB 是。
+GraphRAG 和 NaviKB 其实**并不竞争** —— 它们回答的是不同问题。如果你的问题是"我的语料在话题 X 上跨文档综合起来说了什么",GraphRAG 更合适。如果你的问题是"这份手册里 Y 流程在哪里",NaviKB 才是合适的选择。
 
 ### vs NaviRAG 和 "Don't Retrieve, Navigate"
 
-这些是 2026 研究论文,探索 NaviKB 选的同一方向(导航作为主访问模式):
+这些是 2026 年的研究论文,探索的方向与 NaviKB 相同(以导航作为主访问模式):
 
 - [NaviRAG (arXiv:2604.12766)](https://arxiv.org/abs/2604.12766):
   "locate first, then forage"。LLM agent 导航一个 distilled 层次表示,
@@ -112,12 +98,9 @@ GraphRAG 和 NaviKB 其实**不在竞争** —— 它们在回答不同问题。
 | 运维表面 | 无(研究 demo) | Auth、audit、backup、GC、MCP server |
 | 引用纪律 | 没显式处理 | 强制 |
 
-NaviKB **不是** NaviRAG 的实现。它在那篇论文之前就存在,用不同机制
-(parser 标题,不是 LLM distill)。命名重叠是有意的 —— NaviKB 在 "navigable
-KB" 研究方向给自己定位 —— 但项目在不同层解决不同问题。
+NaviKB **不是** NaviRAG 的实现。它早于那篇论文存在,采用不同机制(parser 解析标题,而非 LLM distill)。命名上的重叠是有意为之 —— NaviKB 将自己定位在 "navigable KB" 这一研究方向上 —— 但两者在不同层面解决不同问题。
 
-如果你是研究者比较检索算法,读论文,忽略 NaviKB。如果你是 operator 想在这
-季度对真实文档跑一个 navigable KB,NaviKB 是那一类设计底下的生产栈答案。
+如果你是研究者在比较检索算法,读论文就够了,NaviKB 与此无关。如果你是 operator,想在这个季度针对真实文档跑起一个 navigable KB,NaviKB 是这类设计理念在生产栈层面的答案。
 
 ### vs Verba
 
@@ -132,8 +115,7 @@ KB" 研究方向给自己定位 —— 但项目在不同层解决不同问题�
 | 引用纪律 | 标准 RAG(chunk + cite) | Evidence vs hint 分区 |
 | Auth | 单用户(默认部署) | 第一天就多用户(manage_users.py) |
 
-终端用户想要浏览器里的聊天界面,选 Verba。目标消费者是 Agent(Claude Code、
-Continue、Cline 等)且你在意"谁能做什么"超出单用户,选 NaviKB。
+终端用户想要浏览器里的聊天界面,选 Verba。如果目标消费者是 Agent(Claude Code、Continue、Cline 等),且你对"谁能做什么"的管控需求超出单用户范围,选 NaviKB。
 
 ### vs 托管服务(NotebookLM、Perplexity Spaces 等)
 
@@ -144,51 +126,32 @@ Continue、Cline 等)且你在意"谁能做什么"超出单用户,选 NaviKB。
 - 不给你想要的 regulated 文档审计
 - 在聊天体验上很好 —— NaviKB 明确不提供这个
 
-如果你的语料是你可以发给 Google 或 Perplexity 的东西,托管服务是阻力最小
-路径。如果它需要留在你的机器或 LAN 上,NaviKB 坐在它们去不到的地方。
+如果你的语料可以放心发给 Google 或 Perplexity 处理,托管服务是阻力最小的路径。如果数据必须留在本机或局域网内,NaviKB 正好填补托管服务覆盖不到的位置。
 
 ## 诚实的弱点
 
-这一节列上面对比里如果有人在评估我们、会向 NaviKB 倾斜不利的地方。
+这一节列出上面对比中,若有人在评估 NaviKB、会对其不利的地方。
 
 ### NaviKB 比替代品弱的地方
 
-- **更年轻、经受的实战更少。** LlamaIndex、LangChain、Haystack、Verba、GraphRAG
-  有庞大用户群和多年打磨。NaviKB 是早期 alpha 参考实现 —— 代码已公开,但干净机器
-  安装与广泛真实使用仍未被证明(见 [docs/status.zh.md](../status.zh.md))。
-- **生态更小。** 没有 50 种文档格式的 connector、没有 100 个向量库的
-  integration、没有给每个 LLM provider 的示例 notebook。NaviKB 挑了一小套
-  (parse 用 MinerU、文本+视觉 embed 用 Qwen3-VL、稀疏用 MILCO、向量用 Qdrant)
-  把它们支撑好;加新组合要写代码,不是改 config。
-- **没 UI。** 这是刻意的 —— UI 就是 Agent —— 但如果你想给非 Agent 用户
-  一个"跟文档聊天"体验,NaviKB 是错的工具。
-- **没托管服务选项。** NaviKB 是本地优先,打算一直这样。要 SaaS 经济模式
-  的 operator 应该看 LlamaCloud、Weaviate Cloud 等。
-- **真实文档的 evaluation 还没公开。** 800+ 测试数衡量合成 / 单元 scope
-  输入上的正确性。真实文档 Recall/NDCG/MRR benchmark 是公开发布阻塞清单的
-  一部分。它落地之前,任何在检索质量上做对比的人都是在对比设计声明,不是
-  测量数。
+- **更年轻、经受的实战更少。** LlamaIndex、LangChain、Haystack、Verba、GraphRAG 拥有庞大用户群和多年打磨。NaviKB 是早期 alpha 参考实现 —— 代码已公开,但全新机器上的安装体验与广泛真实使用均尚未得到验证(见 [docs/status.zh.md](../status.zh.md))。
+- **生态更小。** 没有支持 50 种文档格式的 connector、没有对接 100 个向量库的 integration、也没有针对每个 LLM provider 的示例 notebook。NaviKB 挑选了一小套组件(parse 用 MinerU、文本+视觉 embed 用 Qwen3-VL、稀疏用 MILCO、向量用 Qdrant)并将其良好支撑;添加新的组合需要写代码,而不是改 config。
+- **没有 UI。** 这是刻意的 —— UI 就是 Agent —— 但如果你想给非 Agent 用户提供"跟文档聊天"的体验,NaviKB 是错误的工具。
+- **没有托管服务选项。** NaviKB 是本地优先的项目,并打算一直如此。需要 SaaS 经济模式的 operator 应该考虑 LlamaCloud、Weaviate Cloud 等。
+- **真实文档的 evaluation 尚未公开。** 800+ 条测试衡量的是合成/单元范围输入上的正确性。真实文档的 Recall/NDCG/MRR benchmark 是公开发布阻塞清单的一部分。在它落地之前,任何在检索质量上做横向对比的人比较的都是设计声明,而非实测数据。
 
 ### 替代品比 NaviKB 弱的地方
 
-- **运维深度。** 多数 RAG 框架把 auth、audit、软删除、maintenance flag、
-  备份、GC 当作"自己搭"。NaviKB 把它们设计在内。
-- **引用纪律。** 多数栈把 retriever 返回的所有东西给 LLM,信任它负责任地
-  引用。NaviKB 在 API 表面分区 evidence vs hint。
-- **跨进程正确性。** 多数项目不把 ingestion worker 跟 serving 进程分开;
-  分开的(例如 Celery 配上一个 web app)依赖 message broker。NaviKB 用
-  SQLite 作跨进程协调器,付小部署的代价(一台机器)跳过 broker 复杂度。
-- **Navigation-first 作为设计承诺。** 很多框架有层次检索作为选项。NaviKB
-  把它当作默认,并把 pointer-only 契约在 API 里显式化。
+- **运维深度。** 多数 RAG 框架将 auth、audit、软删除、maintenance flag、备份、GC 留给用户"自行搭建"。NaviKB 将这些全部纳入设计。
+- **引用纪律。** 多数栈把 retriever 返回的全部内容直接交给 LLM,靠它自觉引用。NaviKB 在 API 表面明确分区 evidence vs hint。
+- **跨进程正确性。** 多数项目不将 ingestion worker 与 serving 进程分离;分离的方案(例如 Celery 搭配 web app)依赖 message broker。NaviKB 用 SQLite 作为跨进程协调器,以局限于单机的代价换掉了 broker 的复杂度。
+- **Navigation-first 作为设计承诺。** 许多框架将层次检索作为可选项提供。NaviKB 将它设为默认,并在 API 中显式化 pointer-only 契约。
 
 ## 怎么保持这个文档诚实
 
-这份文档会把具体的事写错。对比文档总是这样 —— 项目在变、我们对它们的理解
-在变、我们作为 NaviKB 作者有自己的偏见。
+这份文档难免会在具体细节上有所偏差。对比文档都有这个问题 —— 项目在变、我们对它们的理解在变、我们作为 NaviKB 作者也有自己的立场。
 
-修法机制: 如果你维护或使用上面任何项目并认为本页对它描述错了,
-[开 issue](../../../issues) 带 `comparison-correction` 标签。我们会读每一个。
-我们可能不同意每一个,但我们会在技术 merit 上对话。
+纠错机制: 如果你维护或使用上面任何项目,且认为本页对其描述有误,欢迎[开 issue](../../../issues) 并附上 `comparison-correction` 标签。我们会逐一阅读。未必每条都同意,但会就技术 merit 认真讨论。
 
 ## 接下来读什么
 

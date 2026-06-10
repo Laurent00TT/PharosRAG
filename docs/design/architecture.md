@@ -55,12 +55,12 @@ the cross-process cache-epoch counter.
 Responsibility: take a path to a PDF (or other supported format) and
 produce all the artifacts the retrieval layer needs.
 
-The pipeline is deterministic in the sense that re-running on the same
-input produces the same output (modulo timestamps); it is *not* a stream
-processor. Each document is processed in isolation, in a background worker
-process. The worker is a separate OS process from the FastAPI server,
-not a thread or asyncio task — this is the single most important
-operational decision in the system. It enables three things at once:
+The pipeline is deterministic: re-running on the same input produces the
+same output (modulo timestamps); it is *not* a stream processor. Each
+document is processed in isolation, in a background worker process. The
+worker is a separate OS process from the FastAPI server, not a thread or
+asyncio task — this is the most consequential operational decision in the
+system. It enables three things at once:
 
 - Graceful crash recovery (a worker crash does not bring down the
   serving layer)
@@ -94,8 +94,8 @@ data:
 
 | Store | Backing | Holds | Why this choice |
 |---|---|---|---|
-| **Vector index** | Qdrant (local file mode by default, server mode optional) | text chunks, vision pages, descriptions — three versioned collections | Best small-team vector DB: zero-config local mode, drop-in scale-up to server, named vectors per channel, good Python ergonomics |
-| **Relational state** | SQLite (one file, multiple tables) | documents, users, audit_log, maintenance_state, cache_epoch, usage_feedback, ingestion_jobs | Two processes (server + worker) need shared state; SQLite is the only zero-deploy option that gives true cross-process consistency. WAL mode + careful BEGIN IMMEDIATE on the worker's claim path |
+| **Vector index** | Qdrant (local file mode by default, server mode optional) | text chunks, vision pages, descriptions — three versioned collections | Best fit for small teams: zero-config local mode, drop-in scale-up to server mode, named vectors per channel, good Python ergonomics |
+| **Relational state** | SQLite (one file, multiple tables) | documents, users, audit_log, maintenance_state, cache_epoch, usage_feedback, ingestion_jobs | Two processes (server + worker) share state; SQLite is the only zero-deploy option that provides true cross-process consistency. WAL mode + careful BEGIN IMMEDIATE on the worker's claim path |
 | **Image store** | Local filesystem under `image_storage_path/<doc_id>/page_N.png` | rendered page images for vision retrieval + agent fetch | Simple, debuggable, cheap; soft-delete leaves files in place until GC purges them |
 
 The NavIndex deserves its own bullet: it is a separate SQLite database
@@ -140,7 +140,7 @@ Two non-obvious choices worth flagging:
   score of 12.4, a multi-vector MAX-SIM of 3.1, and a description-dense
   of 0.65 have no common scale. Rank-based RRF is the cheapest correct
   answer; trained late-fusion would be better but adds a training
-  dependency the small-team stage explicitly avoids.
+  dependency a small-team deployment explicitly avoids.
 
 - **Cross-encoder reranks text only.** Earlier versions of NaviKB fed
   LLM-generated descriptions to the cross-encoder along with parsed
@@ -157,7 +157,7 @@ doesn't use.
 
 ### Layer 4: Serve
 
-The serve layer wraps the retrieval engine in three faces:
+The serve layer wraps the retrieval engine in three interfaces:
 
 1. **FastAPI REST endpoints** — programmatic access for scripts and
    ingestion submission (`POST /ingestion/jobs`, `DELETE /documents/{id}`,
@@ -173,7 +173,7 @@ The serve layer wraps the retrieval engine in three faces:
 
 Cross-cutting concerns live across the serve layer:
 
-- **Auth**: hard cutover to user tokens. Every request — REST or MCP —
+- **Auth**: strict token-based auth. Every request — REST or MCP —
   must present a valid API key issued by `manage_users.py create`.
   The server refuses to start if the users table is empty
   (bootstrap-refuse-start invariant)
@@ -186,11 +186,11 @@ Cross-cutting concerns live across the serve layer:
   observe it before mutating; the admin endpoint waits for active
   worker claims to drain before reporting `drained:true`
 - **Soft delete + GC**: DELETE never touches Qdrant or images; it
-  flips status + writes `deleted_at`. Restore is a flag flip back.
+  flips status and writes `deleted_at`. Restore is a flag flip back.
   GC runs out-of-band and purges expired soft-deleted docs
 - **Cache invalidation**: SQLite cache-epoch counter solves the
-  cross-process staleness problem. Worker bumps after ingest /
-  deprecate; server folds the epoch into its search cache key
+  cross-process staleness problem. Worker bumps the epoch after ingest
+  or deprecate; server folds the epoch into its search cache key
 
 The detailed treatment of auth, audit, maintenance, soft delete, and
 GC will live in `docs/design/security-model.md`.
@@ -224,12 +224,12 @@ GC will live in `docs/design/security-model.md`.
 ```
 
 The two processes never communicate directly. All coordination flows
-through SQLite. This is unfashionable in 2026 — the default reach is
-for a message broker — but it is the right answer at small-team
-scale because it eliminates a class of failure modes (broker is down,
-broker is slow, broker mis-routes) at the price of "you cannot run
-the worker on a different machine from the server." For a single-
-host or LAN deployment, that price is zero.
+through SQLite. This is unfashionable in 2026 — the instinct is to reach for a message
+broker — but it is the right answer at small-team scale because it
+eliminates a class of failure modes (broker is down, broker is slow,
+broker mis-routes) at the price of "you cannot run the worker on a
+different machine from the server." For a single-host or LAN
+deployment, that price is zero.
 
 ## Failure modes the design anticipates
 

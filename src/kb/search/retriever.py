@@ -46,6 +46,7 @@ class Retriever:
         limit: int,
         doc_filter: dict,
         include_deprecated: bool = False,
+        enabled_channels: list[str] | None = None,
     ) -> tuple[
         list[tuple[str, int, float]],
         list[tuple[str, int, float]],
@@ -53,7 +54,15 @@ class Retriever:
         list[tuple[str, int, float]],
     ]:
         """Returns (dense_hits, sparse_hits, vision_hits, desc_hits).
-        Each hit is (doc_id, page_num, score)."""
+        Each hit is (doc_id, page_num, score).
+
+        enabled_channels gates which of the four channels actually run; None
+        (the default) runs all four, preserving the pre-P8 behaviour."""
+        want = set(enabled_channels) if enabled_channels is not None else None
+
+        def _on(ch: str) -> bool:
+            return want is None or ch in want
+
         if include_deprecated:
             doc_ids = None
         else:
@@ -80,12 +89,21 @@ class Retriever:
         # PoC v1.1: text channel returns (dense, [], []) — sparse comes
         # from the dedicated SparseChannel (MILCO HTTP service).
         t_embed = time.monotonic()
+        # text dense embed feeds BOTH the dense and desc channels (shared vector);
+        # sparse embed is cheap; the vision query embed is a separate model call, so
+        # skip it when the planner did not enable the vision channel.
         text_embed_task = asyncio.to_thread(self._text.embed_query, query)
         sparse_embed_task = self._sparse.embed_query_async(query)
-        vision_embed_task = self._vision_q.embed_query_async(query)
-        (dense, _, _), sparse_emb, vision_emb = await asyncio.gather(
-            text_embed_task, sparse_embed_task, vision_embed_task,
-        )
+        if _on(CHANNEL_VISION):
+            vision_embed_task = self._vision_q.embed_query_async(query)
+            (dense, _, _), sparse_emb, vision_emb = await asyncio.gather(
+                text_embed_task, sparse_embed_task, vision_embed_task,
+            )
+        else:
+            (dense, _, _), sparse_emb = await asyncio.gather(
+                text_embed_task, sparse_embed_task,
+            )
+            vision_emb = None
         # Sparse may be None (server down) — fall back to empty so the
         # sparse channel returns zero hits without breaking the rest.
         if sparse_emb is None:
@@ -98,28 +116,33 @@ class Retriever:
         # vision_query_ms is now folded into embed_ms (parallel); keep field for
         # back-compat in trace but mark it as combined.
         vision_query_ms = embed_ms
-        vision_query_ok = vision_emb is not None
+        vision_query_ok = _on(CHANNEL_VISION) and vision_emb is not None
 
-        dense_task  = asyncio.to_thread(self._qdrant.search_text_dense,
-                                        dense, limit, doc_ids, extra_must)
-        sparse_task = asyncio.to_thread(self._qdrant.search_text_sparse,
-                                        s_idx, s_val, limit, doc_ids, extra_must)
-        desc_task   = asyncio.to_thread(self._qdrant.search_desc,
-                                        dense, limit, doc_ids, extra_must)
+        # Only query the channels the planner enabled; a disabled channel yields [].
+        async def _maybe(task):
+            return await task if task is not None else []
+
+        dense_task = (
+            asyncio.to_thread(self._qdrant.search_text_dense, dense, limit, doc_ids, extra_must)
+            if _on(CHANNEL_TEXT_DENSE) else None
+        )
+        sparse_task = (
+            asyncio.to_thread(self._qdrant.search_text_sparse, s_idx, s_val, limit, doc_ids, extra_must)
+            if _on(CHANNEL_TEXT_SPARSE) else None
+        )
+        desc_task = (
+            asyncio.to_thread(self._qdrant.search_desc, dense, limit, doc_ids, extra_must)
+            if _on(CHANNEL_DESC) else None
+        )
+        vision_task = (
+            asyncio.to_thread(self._qdrant.search_vision, vision_emb, limit, doc_ids, extra_must)
+            if (_on(CHANNEL_VISION) and vision_emb is not None) else None
+        )
 
         t_search = time.monotonic()
-        if vision_emb is not None:
-            vision_task = asyncio.to_thread(self._qdrant.search_vision,
-                                            vision_emb, limit, doc_ids,
-                                            extra_must)
-            dense_r, sparse_r, desc_r, vision_r = await asyncio.gather(
-                dense_task, sparse_task, desc_task, vision_task
-            )
-        else:
-            dense_r, sparse_r, desc_r = await asyncio.gather(
-                dense_task, sparse_task, desc_task
-            )
-            vision_r = []
+        dense_r, sparse_r, desc_r, vision_r = await asyncio.gather(
+            _maybe(dense_task), _maybe(sparse_task), _maybe(desc_task), _maybe(vision_task),
+        )
         search_ms = round((time.monotonic() - t_search) * 1000, 1)
 
         def to_hits(results: list[dict]) -> list[tuple[str, int, float]]:
