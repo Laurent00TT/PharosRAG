@@ -19,11 +19,13 @@
   开机即有;现在要手动起。
 - [x] ~~P1 /v1/ask 支持检索过滤~~ **已落地(2026-07-02)**:Generator.answer 可选 kwargs 按需透传,
   `pharos ask --kind table` 等;动机与实证见 COMPONENT_NOTES N3(Netflix 营收案例)。
-- **P2 跨语言数字题**(N3 实证暴露的残留缺口):中文问英文财报,`kind=table`+rerank 后正确的
-  汇总表仍排不进 top-k(sparse 全失配 + 跨语言表格 dense/rerank 双弱);且无 rerank 时模型可能把
-  分部表错引申成公司总数(实测 case:Netflix 分部营收 4,180,339 被当总营收)。候选方案:
-  查询期术语翻译辅助 / 表格块 embed 文本增强(表标题+列头拼进 embed)/ prompt 加"分部≠总额"约束。
-  先记录使用指引(数字题用文档语言关键词 + --kind table --rerank),实测频率高再做。
+- [x] ~~分部数字被错引申成总体~~ **已修(2026-07-03)**:SYSTEM 窄靶数值范围约束 + source 行并入
+  小节面包屑(根因=约束与范围证据双缺,详见 TESTING §3);同裁判 72 题回归零损失(忠实度 +0.028)。
+- **P2 表格块检索文本增强**(诊断已完成,根因实锤):表格块可检索信号只有 caption+footnote 一句
+  (body 只进 content_raw,不参与 embed/sparse;面包屑也不拼)——英文查询同样吃亏,跨语言只是放大器。
+  方案:chunker `_asset_chunk` 对 table 从 table_body 抽列头+首列行标签(封顶 ~100 token)拼进
+  retrieval text;chunk 边界/id 不变(gold 仍有效);需重建 ~/rag_real 与 eval 索引 + 检索指标回归
+  (retrieval_recall/MRR 应升不降)。做完后 Netflix 案例中文问法应能直接命中 p.16 汇总表。
 - **P2 观测**:请求日志落盘(query/耗时/status 计数),/healthz 加 model_loaded 与索引统计。
 - **P2 解析编排**:`pharos parse <pdf|docx|xlsx…>` 调 MinerU(在线 API tokens 已有)→ 直接
   ingest 新文档,不再依赖引擎仓预解析产物。

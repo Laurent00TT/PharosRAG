@@ -61,6 +61,23 @@ python -m pytest embedder/tests/test_store.py -q
 
 结论:数字/表格题推荐 `--kind table --rerank` + 文档语言关键词;跨语言增强列 TODO P2。
 
+**数值范围错答修复(2026-07-03,诊断→修复→验证全程)**:
+
+- **根因链**(两个都缺才错答):① prompt 无数值范围约束;② **范围证据不在 prompt 里**——分部信息只在
+  section_path 元数据,表格块正文无一字"Domestic Streaming"(实测:只加约束 B 依旧错答,证据补进才生效)。
+- **修复**(引擎 generator):SYSTEM 加窄靶数值范围约束(区别于 R3 被 revert 的全称句级收紧)+
+  context 的 source 行并入小节面包屑(`标题 § FORM 10-K > Domestic Streaming Segment`)。
+- **验证三关**:① B 复现:不再错答,明确标注"仅为部分业务数据"并拒引申;② C 复跑:总营收仍答对
+  ($6,779,511,p.16),无误伤;③ **同 DeepSeek 裁判前后对比**(72 题,检索/索引/裁判全同):
+  忠实度 0.972→**1.000**(+0.028),正确性 0.847→**0.847**(±0)。零回归。
+  (基线判分产物:eval/baseline_single_prescope*.json,gitignored)
+
+**表格召回弱的根因诊断(第 1 条,只诊断未动手)**:表格块可检索信号 = caption+footnote 一句话
+(chunker core.py `_asset_chunk`:table 的 body 只进 content_raw;embedder 只 embed 裸 chunk.text,
+面包屑也不拼)——列头/行标签/数值全部不可检索,英文查询同样吃亏,跨语言只是放大器。
+方案(v0.2):table 块从 table_body 抽列头+首列行标签(封顶 ~100 token)拼进检索文本;
+chunk 边界与 id 不变(gold 仍有效),需重建索引 + 检索指标回归。详见 TODO P2。
+
 ## 4. 对抗评审(P1,已完成)
 
 三视角(安全/正确性·并发/契约·文档)× 每发现 2 独立反驳者,39 agent。结果:
