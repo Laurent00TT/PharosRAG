@@ -21,11 +21,13 @@
   `pharos ask --kind table` 等;动机与实证见 COMPONENT_NOTES N3(Netflix 营收案例)。
 - [x] ~~分部数字被错引申成总体~~ **已修(2026-07-03)**:SYSTEM 窄靶数值范围约束 + source 行并入
   小节面包屑(根因=约束与范围证据双缺,详见 TESTING §3);同裁判 72 题回归零损失(忠实度 +0.028)。
-- **P2 表格块检索文本增强**(诊断已完成,根因实锤):表格块可检索信号只有 caption+footnote 一句
-  (body 只进 content_raw,不参与 embed/sparse;面包屑也不拼)——英文查询同样吃亏,跨语言只是放大器。
-  方案:chunker `_asset_chunk` 对 table 从 table_body 抽列头+首列行标签(封顶 ~100 token)拼进
-  retrieval text;chunk 边界/id 不变(gold 仍有效);需重建 ~/rag_real 与 eval 索引 + 检索指标回归
-  (retrieval_recall/MRR 应升不降)。做完后 Netflix 案例中文问法应能直接命中 p.16 汇总表。
+- [x] ~~P2 表格块检索文本增强~~ **已落地(2026-07-03,引擎 2bd97a5)**:面包屑+表头+行标签进
+  检索文本(存在性门控保 chunk id 稳定);两索引已重建;动机案例中文 kind=table 直接答对。
+  回归取舍与完整实录见 TESTING §3。
+- **P2 gold 集补表格题**(增强回归暴露的测量盲区):现 72 题 gold 采样自散文块,表格可答题型
+  近乎为零——表格相关改动在该 gold 上只会显示成本(冗余 gold 位移)不显示收益(动机案例类)。
+  做法:gen_gold 对 kind=table 且 content_raw 非空的块定向采样 10-15 题(问表内数值/对比),
+  与现 gold 合并;之后表格向改动才有对称的验收标尺。
 - **P2 观测**:请求日志落盘(query/耗时/status 计数),/healthz 加 model_loaded 与索引统计。
 - **P2 解析编排**:`pharos parse <pdf|docx|xlsx…>` 调 MinerU(在线 API tokens 已有)→ 直接
   ingest 新文档,不再依赖引擎仓预解析产物。
