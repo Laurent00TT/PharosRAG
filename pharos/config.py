@@ -6,10 +6,22 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 # 仓库根(pharos/pharos/config.py 的上上级)
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+_INLINE_COMMENT = re.compile(r"\s+#.*$")
+
+
+def _parse_env_value(v: str) -> str:
+    """评审修:.env 常见写法容错——成对引号剥掉(引号内原样保留,含 #);
+    未引号值剥行内注释(`8787  # 服务端口` -> `8787`,否则 int() 崩启动)。"""
+    v = v.strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        return v[1:-1]
+    return _INLINE_COMMENT.sub("", v).strip()
 
 
 def _load_env_file(path: str) -> None:
@@ -22,8 +34,20 @@ def _load_env_file(path: str) -> None:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, v = line.split("=", 1)
-            if v.strip():
-                os.environ.setdefault(k.strip(), v.strip())
+            v = _parse_env_value(v)
+            if v:
+                os.environ.setdefault(k.strip(), v)
+
+
+def _int_env(name: str, default: int) -> int:
+    """评审修:整数配置错值给出指名报错,不裸 ValueError 崩启动。"""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise SystemExit(f"环境变量 {name} 必须是整数(收到 {raw!r}),请检查 .env。")
 
 
 def _default_engine() -> str:
@@ -68,23 +92,26 @@ def from_env() -> PharosConfig:
     engine = load_env()
     index_dir = os.path.expanduser(os.environ.get("PHAROS_INDEX_DIR", "~/rag_real"))
     principals = [p.strip() for p in os.environ.get("PHAROS_PRINCIPALS", "").split(",") if p.strip()]
+    # 评审修:显式覆盖项同样 expanduser(否则写 ~/x 会在字面 "./~" 下开出空库)
+    qdrant = os.environ.get("PHAROS_QDRANT_PATH", "").strip()
+    sidecar = os.environ.get("PHAROS_SIDECAR_DIR", "").strip()
     return PharosConfig(
         engine=engine,
         tenant=os.environ.get("PHAROS_TENANT", "").strip(),
         principals=principals,
         index_dir=index_dir,
-        qdrant_path=os.environ.get("PHAROS_QDRANT_PATH") or os.path.join(index_dir, "qdrant"),
-        sidecar_dir=os.environ.get("PHAROS_SIDECAR_DIR") or os.path.join(index_dir, "sidecar"),
+        qdrant_path=os.path.expanduser(qdrant) if qdrant else os.path.join(index_dir, "qdrant"),
+        sidecar_dir=os.path.expanduser(sidecar) if sidecar else os.path.join(index_dir, "sidecar"),
         collection=os.environ.get("PHAROS_COLLECTION", "real"),
-        dense_dim=int(os.environ.get("PHAROS_DENSE_DIM", "1024")),
+        dense_dim=_int_env("PHAROS_DENSE_DIM", 1024),
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
-        port=int(os.environ.get("PHAROS_PORT", "8787")),
+        port=_int_env("PHAROS_PORT", 8787),
         api_key=os.environ.get("PHAROS_API_KEY", "").strip(),
-        max_context_tokens=int(os.environ.get("PHAROS_MAX_CONTEXT_TOKENS", "12000")),
+        max_context_tokens=_int_env("PHAROS_MAX_CONTEXT_TOKENS", 12000),
         llm_base_url=os.environ.get("PHAROS_LLM_BASE_URL", "https://api.deepseek.com"),
         llm_model=os.environ.get("PHAROS_LLM_MODEL", "deepseek-v4-flash"),
         llm_api_key_env=os.environ.get("PHAROS_LLM_API_KEY_ENV", "DEEPSEEK_API_KEY"),
-        llm_max_tokens=int(os.environ.get("PHAROS_LLM_MAX_TOKENS", "2000")),
+        llm_max_tokens=_int_env("PHAROS_LLM_MAX_TOKENS", 2000),
     )
 
 

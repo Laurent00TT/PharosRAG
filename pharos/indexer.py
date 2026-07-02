@@ -27,6 +27,13 @@ def detect_lang(elements) -> str:
 def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | None = None,
               collection: str | None = None, tenant: str | None = None, visibility: str = "public",
               allow: str = "", only: str | None = None, limit: int | None = None) -> int:
+    allow_list = [a.strip() for a in allow.split(",") if a.strip()]
+    # 评审修(C1):restricted + 空 allow = 任何身份都检索不到(fail-closed),但建库全程零告警,
+    # 只在检索期表现为"空结果",极难排障 —— 在建库入口显式拒绝,要求给出 principals。
+    if visibility == "restricted" and not allow_list:
+        raise SystemExit("--visibility restricted 需要 --allow 至少一个 principal:"
+                         "restricted+空 allow 的文档对任何身份都不可见(fail-closed),"
+                         "建库会\"成功\"但全部静默检索不到。")
     bootstrap(cfg.engine)
     from chunker import Chunker
     from chunker.adapters.mineru import from_mineru_dir
@@ -35,8 +42,7 @@ def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | N
     corpus = corpus or os.path.join(cfg.engine, "parsed")
     dest = os.path.expanduser(dest or cfg.index_dir)
     collection = collection or cfg.collection
-    acl = {"tenant": (tenant or cfg.tenant or "demo"),
-           "allow": [a.strip() for a in allow.split(",") if a.strip()],
+    acl = {"tenant": (tenant or cfg.tenant or "demo"), "allow": allow_list,
            "visibility": visibility, "unset": False}
     if not os.path.isdir(corpus):
         raise SystemExit(f"语料目录不存在:{corpus}")

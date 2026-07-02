@@ -27,6 +27,7 @@ HTTP 请求 ─► API key 中间件 ─► pydantic 请求模型(只定形,不�
   ─► toolcore._retrieve_impl(LockedRetriever, bound_user, …, returned_keys)
         · 校验(no_identity/empty_query/bad_arg)在锁外、检索在锁内
         · already_returned / omitted_budget / 预算含资产 —— 全部 toolcore 原语义
+  ─► _adapt():no_identity 的 hint 翻译成 PHAROS_TENANT 措辞(评审 C2:引擎 hint 指 RAG_TENANT 会死循环误导)
   ─► 结构化 dict 原样出(HTTP 200 + status 字段)
 ```
 
@@ -34,8 +35,10 @@ HTTP 请求 ─► API key 中间件 ─► pydantic 请求模型(只定形,不�
 
 ```
 校验(no_identity/empty_query)
-  ─► _get_generator():首调惰性建 Generator(LockedRetriever, OpenAICompatibleLLM, acl_check=acl_admits)
-        · ValueError(缺 key)→ status=llm_unconfigured
+  ─► _get_generator():**per-thread** 惰性建 Generator(LockedRetriever, OpenAICompatibleLLM, acl_check=acl_admits)
+        · threading.local:共享单例的 llm.last_finish_reason 在并发 ask 下会跨请求串味(评审修);
+          线程池有界 → 实例数有界,同线程内 answer→读 finish_reason 无并发窗口
+        · ValueError(缺 key)→ status=llm_unconfigured;其余构建异常 → ask_failed(不裸抛 500)
   ─► gen.answer(query, user, top_k, rerank)
         · 检索段:LockedRetriever 锁内;DeepSeek 网络调用:锁外(D8)
         · 零召回 → generator R3.E 确定性"信息不足"(不调 LLM)
@@ -45,15 +48,17 @@ HTTP 请求 ─► API key 中间件 ─► pydantic 请求模型(只定形,不�
 ```
 
 **MCP 适配器**:六工具 = 纯转发函数 + `_call()` 统一错误映射
-(RequestError→backend_unavailable+`pharos serve` hint;401→unauthorized;≥400→backend_unavailable;
-非 JSON→backend_unavailable)。instructions 与引擎同源(toolcore._INSTRUCTIONS)。
+(RequestError→backend_unavailable+`pharos serve` hint;401→unauthorized;3xx→backend_unavailable
+(httpx 不跟随重定向,否则误报"非 JSON");≥400→backend_unavailable;非 JSON→backend_unavailable)。
+路径参数 doc_id 一律 `quote(…, safe="")`(#、/ 不再截断/改路由),空 doc_id 本地即拒(bad_arg)。
+instructions 与引擎同源(toolcore._INSTRUCTIONS);六工具 docstring 与引擎逐字同文(回归测试钉住)。
 
 ## 3. 并发与锁
 
 - FastAPI sync 端点跑在线程池 → 可能并发进 retriever。
 - `LockedRetriever` 对 search_with_context / get_document / get_outline / expand / search_grouped /
   store.list_documents 全部加同一把 `threading.Lock`(嵌入式 Qdrant 与 GPU 前向都按串行对待)。
-- SessionRegistry 自带锁;generator 惰性构建有 gen_lock。
+- SessionRegistry 自带锁;generator 为 per-thread 实例(threading.local,无共享可变状态)。
 - toolcore 的 returned_keys set 操作发生在 impl 内(检索锁外)——单会话内的两次并发调用
   理论上可交错,个人场景(一个 agent 会话串行调工具)不构成实际问题,记入 TODO 观察项。
 
@@ -79,4 +84,5 @@ HTTP 请求 ─► API key 中间件 ─► pydantic 请求模型(只定形,不�
 3. service(FastAPI)+ mcp_adapter + indexer + cli;
 4. 25 项 CPU 测试(一把全绿)→ on_event→lifespan 清告警;
 5. GPU 冒烟(healthz/documents/retrieve/ask/去重/适配器/CLI 全过,见 TESTING.md);
-6. 对抗评审 + 修复(结果见 TESTING.md §4 与 COMPONENT_NOTES)。
+6. 对抗评审 P1(39 agent,三视角×双反驳)→ 15 项修复 + 11 项回归测试 + 3 项证伪留档
+   (清单见 COMPONENT_NOTES §对抗评审 P1);修复后全量回归 36+22+7 全绿。

@@ -36,14 +36,14 @@ agent 使用契约全文(与 MCP instructions 同源):`{status, instructions}`
 ### POST /v1/retrieve —— 混合检索(+ small-to-big 上下文)
 请求:`{query, top_k?, rerank?=false, doc_ids?, doc_type?, kind?, mode?="full"|"concise",
 strategy?="hybrid"|"dense"|"sparse", rerank_top_n?}`
-响应:`{status, retriable, hint, warning, meta{returned_n, deduped_n, rerank_degraded,
-already_returned_n, budget_truncated, context_tokens, mode, strategy, filters}, hits[]}`;
+响应:`{status, retriable, hint, warning, meta{requested_k, returned_n, deduped_n, rerank,
+rerank_degraded, already_returned_n, budget_truncated, context_tokens, mode, strategy, filters}, hits[]}`;
 每条 hit:`{n, doc_id, chunk_id, kind, title, section_path, page_start/end, anchor,
 resolved_section, n_tokens, score, score_kind(rrf|cosine|bm25|rerank), context_status, trust, text,
 content_raw?(table/chart), image_path?(image/chart,仅定位锚)}`
 
 ### GET /v1/documents
-`{status, hint, coverage:{doc_type:篇数}, documents:[{doc_id,title,…}]}`
+`{status, retriable, hint, coverage:{doc_type:篇数}, documents:[{doc_id,title,…}]}`
 
 ### GET /v1/documents/{doc_id}?max_tokens=6000
 通读整篇(逐元素 ACL 门控):`{status, doc_id, text, n_tokens, n_elements_visible, truncated, trust, warning}`

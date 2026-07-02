@@ -15,6 +15,7 @@ from . import __version__, config
 
 def _client(url: str | None):
     import httpx
+    config.load_env()                      # 评审修:带 --url 时也要加载 .env(PHAROS_API_KEY 在里面)
     base = url or config.adapter_base_url()
     headers = {}
     if os.environ.get("PHAROS_API_KEY"):
@@ -53,7 +54,10 @@ def cmd_ask(args) -> None:
                                         "rerank": args.rerank, "include_contexts": args.contexts})
         except Exception as e:
             raise SystemExit(f"连不上 Pharos 守护进程({c.base_url}):{type(e).__name__}。先跑 pharos serve。")
-        data = r.json()
+        try:
+            data = r.json()
+        except ValueError:                 # 评审修:5xx/非 JSON 不裸抛 traceback
+            raise SystemExit(f"守护进程返回异常(HTTP {r.status_code},非 JSON),详见服务端日志。")
     if args.json:
         print(json.dumps(data, ensure_ascii=False, indent=2))
         return

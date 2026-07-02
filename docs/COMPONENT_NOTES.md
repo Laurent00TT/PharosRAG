@@ -52,6 +52,30 @@ DeepSeek 偶发 5xx/超时会直接把 /v1/ask 打成 ask_failed(retriable=true,
 **不修的理由**:重试放客户端语义更清晰(答案不幂等,服务端自动重试会加倍延迟与费用);
 若实测故障率高再加有界重试,列 TODO(P3)。
 
+## 对抗评审 P1(2026-07-02)结果与处置
+
+三视角(安全/正确性·并发/契约·文档)× 每条 2 反驳者。39 个 agent;部分验证子任务撞会话额度,
+未验完的 13 条由主线逐条对照源码核实(全部属实)。**修复后全部钉了回归测试**(tests/test_review_fixes.py)。
+
+**Confirmed(评审确认)**
+- C1 indexer:`restricted`+空 `allow` 建库成功但任何身份检索不到、零告警 → 建库入口显式拒绝;
+- C2 no_identity hint 指示设 `RAG_TENANT` 而 Pharos 只读 `PHAROS_TENANT`(照做仍全空,死循环误导)
+  → service 绑定层把契约文本翻译成 PHAROS_* 配置名。
+
+**自核实属实并修**(验证 agent 未跑完的):适配器 doc_id 无 URL 编码(#// 截断/改路由)→ quote;
+空 doc_id 打到别的路由(307)→ 本地 bad_arg + _call 加 3xx 分支;/v1/ask 并发下共享 LLM 的
+last_finish_reason 跨请求串味 → Generator 改 per-thread(threading.local,同线程内无并发窗口);
+Generator 工厂只捕 ValueError(openai 缺包等裸抛 500)→ 兜底 ask_failed;.env 行内注释/引号不剥 +
+int() 无保护崩启动 → _parse_env_value/_int_env;PHAROS_QDRANT_PATH/SIDECAR_DIR 覆盖不 expanduser
+(字面 "./~" 开空库)→ expanduser;CLI 带 --url 跳过 .env 加载(API key 丢失恒 401)→ _client 恒 load_env;
+适配器与引擎 docstring 3 处不同文 → 逐字对齐 + 同文回归测试;引擎 server.py list_documents docstring
+漏 coverage → 补;引擎 mcp_server/README 未提 toolcore 分层与 Pharos/锁互斥 → 补(即 N5 声称落实);
+API.md meta 漏 requested_k/rerank、documents 漏 retriable → 补;.env.example 缺 4 个实读变量 → 补。
+
+**Refuted(证伪不修,留档)**:API key 非恒时比较(LAN 明文 HTTP 下时序测不出,能测者已在信任边界内);
+X-Pharos-Session 碰撞 griefing(单身份模型下同边界,有更强手段,无边际能力);/v1/ask citations 缺
+untrusted 标记(唯一消费者 CLI 只打印元数据,无下游 LLM 路径;引用原文默认不返回)。
+
 ## 观察(无动作)
 
 - FastAPI `on_event` 已废弃 → Pharos 直接用 lifespan(自家代码,不涉组件)。

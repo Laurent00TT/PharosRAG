@@ -3,7 +3,7 @@
 > 三层:CPU 单测(每改必跑)/ 引擎回归(接缝改动时跑)/ GPU 冒烟(投产前跑)。
 > 本文所有"实测"均为 2026-07-02 在 WSL `navikb`(4090)真实运行结果。
 
-## 1. CPU 单测(25 项,~1s,不碰 Qdrant/GPU/网络)
+## 1. CPU 单测(36 项,~2s,不碰 Qdrant/GPU/网络)
 
 ```bash
 conda activate navikb && cd pharos && python -m pytest tests -q
@@ -14,11 +14,12 @@ conda activate navikb && cd pharos && python -m pytest tests -q
 | test_sessions.py | 同会话同 set / 跨会话隔离 / LRU 逐出有界 / touch 刷新 |
 | test_service.py | healthz;六端点 wiring;**no_identity fail-closed**;bad_arg 走结构化不走 422;API key 门槛(healthz 豁免/错 key 拒);**per-session 去重隔离 + 无头不去重**;ask(引用映射/include_contexts/空 query/llm_unconfigured/ask_failed 不泄内部细节) |
 | test_adapter.py | 六工具转发参数映射;backend-down→结构化 backend_unavailable(hint 指向 pharos serve);401/5xx/非 JSON 映射;会话头存在;instructions 与引擎同源 |
+| test_review_fixes.py | 对抗评审 P1 修复回归:no_identity hint 指 PHAROS_TENANT;indexer 拒 restricted+空 allow;工厂异常降级 ask_failed;doc_id URL 编码/空参本地拒/3xx 结构化;.env 行内注释/引号/int 指名报错/覆盖路径 expanduser;**适配器与引擎六工具 docstring 逐字同文**(直接 exec 引擎 server.py 断言) |
 
 工具语义本体(already_returned/omitted_budget/预算含资产/无权不泄存在性…)**不在 Pharos 重测**——
 单一来源在引擎 toolcore,由引擎 test_tools.py(22 项)覆盖。
 
-**实测**:`25 passed, 1 warning in 0.90s`。
+**实测**:`36 passed, 1 warning in 1.79s`。
 
 ## 2. 引擎回归(toolcore 拆分后)
 
@@ -48,12 +49,12 @@ python -m pytest embedder/tests/test_store.py -q
 
 复现命令见 git 历史与 [IMPLEMENTATION.md](IMPLEMENTATION.md) §6。
 
-## 4. 对抗评审
+## 4. 对抗评审(P1,已完成)
 
-对新代码(service/adapter/sessions/engine + toolcore 拆分)做多 agent 对抗评审
-(安全/正确性/契约一致性三视角 + 逐条反驳验证),confirmed 项修复后在此记录:
-
-- 见 [COMPONENT_NOTES.md](COMPONENT_NOTES.md) 与 git 历史(评审轮次的修复各自成 commit)。
+三视角(安全/正确性·并发/契约·文档)× 每发现 2 独立反驳者,39 agent。结果:
+**2 条 confirmed + 13 条自核实属实(验证 agent 撞额度,主线逐条对照源码核实)→ 全部修复并钉回归测试**
+(test_review_fixes.py,11 项);3 条被证伪留档。完整清单与处置见
+[COMPONENT_NOTES.md §对抗评审 P1](COMPONENT_NOTES.md)。修复后全量回归:Pharos 36 + 引擎 22+7 全绿。
 
 ## 5. 未覆盖(诚实清单)
 
