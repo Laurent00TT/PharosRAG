@@ -1,0 +1,13 @@
+# 密钥与本地配置(绝不提交)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# 本地索引/临时产物
+*.local/

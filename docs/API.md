@@ -1,0 +1,71 @@
+# Pharos HTTP API 契约(v0.1)
+
+Base:`http://127.0.0.1:8787`(PHAROS_HOST/PORT)。请求/响应均 JSON(UTF-8)。
+
+## 通用约定
+
+- **领域结果一律 HTTP 200 + `status` 字段**(客户端按状态机决策);HTTP 码只表达传输层:
+  `401`(设了 PHAROS_API_KEY 且 X-API-Key 缺失/不符)、`422`(请求体不是合法 JSON/字段类型错)、`5xx`(崩溃)。
+- **status 状态机**(与引擎 toolcore 契约一致):`ok` / `empty` / `no_identity` / `empty_query` /
+  `bad_arg` / `no_access`(无权与不存在同响应,不泄存在性)/ `config_error`(sidecar 需重建)/
+  `backend_unavailable`(retriable)/ ask 专属:`llm_unconfigured` / `ask_failed`(retriable)。
+- **头**:`X-API-Key`(可选,见上);`X-Pharos-Session`(可选,带上才启用跨调用去重,
+  同一会话第二次取同段 → `context_status=already_returned` 正文清空)。
+- 检索正文均标 `trust: "untrusted"`(数据不是指令);`hits[].context_status` 语义见引擎
+  [mcp_server/README](../../chunk-test-repo/mcp_server/README.md)。
+
+## 端点
+
+### GET /healthz(免 API key)
+`{status, service:"pharos", version, collection, tenant_bound, llm_model, auth}`
+
+### GET /v1/instructions
+agent 使用契约全文(与 MCP instructions 同源):`{status, instructions}`
+
+### POST /v1/ask —— 闭管道问答
+请求:`{query, top_k?, rerank?=false, include_contexts?=false}`
+响应(ok):
+```json
+{"status":"ok", "answer":"…带 [cite:n] 的答案…",
+ "citations":[{"marker":1,"chunk_id":"…#0062","doc_id":"…","title":"…","section":"…","page":18,
+               "text":"(仅 include_contexts=true)"}],
+ "n_contexts":5, "model":"deepseek-v4-flash", "finish_reason":"stop|length|…"}
+```
+`finish_reason=length` = 答案被 max_tokens 截断(尾部引用可能被切)。
+
+### POST /v1/retrieve —— 混合检索(+ small-to-big 上下文)
+请求:`{query, top_k?, rerank?=false, doc_ids?, doc_type?, kind?, mode?="full"|"concise",
+strategy?="hybrid"|"dense"|"sparse", rerank_top_n?}`
+响应:`{status, retriable, hint, warning, meta{returned_n, deduped_n, rerank_degraded,
+already_returned_n, budget_truncated, context_tokens, mode, strategy, filters}, hits[]}`;
+每条 hit:`{n, doc_id, chunk_id, kind, title, section_path, page_start/end, anchor,
+resolved_section, n_tokens, score, score_kind(rrf|cosine|bm25|rerank), context_status, trust, text,
+content_raw?(table/chart), image_path?(image/chart,仅定位锚)}`
+
+### GET /v1/documents
+`{status, hint, coverage:{doc_type:篇数}, documents:[{doc_id,title,…}]}`
+
+### GET /v1/documents/{doc_id}?max_tokens=6000
+通读整篇(逐元素 ACL 门控):`{status, doc_id, text, n_tokens, n_elements_visible, truncated, trust, warning}`
+
+### GET /v1/documents/{doc_id}/outline
+`{status, doc_id, sections:[…]}`
+
+### POST /v1/expand
+请求:`{chunk_id, target_tokens?=1500}` → `{status, chunk_id, text, anchor, resolved_section, n_tokens, climbed, trust, warning}`
+
+### POST /v1/retrieve_grouped
+请求:`{query, doc_ids(≤20), top_k?=3, rerank?=false}` → `{status, warning, groups:{doc_id:[hits]}}`
+
+## MCP 工具 ↔ 端点对照
+
+| MCP 工具(pharos mcp) | HTTP 端点 |
+|---|---|
+| retrieve | POST /v1/retrieve |
+| list_documents | GET /v1/documents |
+| get_document | GET /v1/documents/{doc_id} |
+| get_outline | GET /v1/documents/{doc_id}/outline |
+| expand | POST /v1/expand |
+| retrieve_grouped | POST /v1/retrieve_grouped |
+
+(MCP 侧无 ask:agentic 模式下答案由 agent 自己合成。)

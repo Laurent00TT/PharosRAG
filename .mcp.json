@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rag": {
+      "command": "wsl",
+      "args": ["bash", "-lc",
+        "source /home/tiantian/miniconda3/etc/profile.d/conda.sh && conda activate navikb && cd /mnt/c/Users/11541/Desktop/projects/pharos && PHAROS_URL=http://127.0.0.1:8787 python -m pharos mcp"]
+    }
+  }
+}

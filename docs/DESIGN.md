@@ -1,0 +1,98 @@
+# Pharos 设计文档
+
+> 版本:v0.1(2026-07-02)。状态:已实现并冒烟(实测证据见 [TESTING.md](TESTING.md))。
+
+## 1. 目标与非目标
+
+**目标**:把 chunk-test-repo 的四个组件组装成一个**个人可日常使用**的完整 RAG 产品,
+提供两种消费方式且共用同一检索引擎、同一套契约:
+
+1. **闭管道问答**(HTTP `/v1/ask`):一问一答,检索→grounding prompt→DeepSeek→带引用答案。
+   系统评估(72 gold,异厂 Claude 裁判)已定论这是**默认最优消费方式**:忠实度 ≈1.0、正确性 0.847、最便宜。
+2. **agentic RAG**(MCP):agent 自己驱动检索工具(何时搜/怎么改写/要不要多跳)。
+   评估显示 agentic 在简单题上净负(Δ−0.097),但对交互式深挖/跨文档浏览是闭管道给不了的形态——两者是**互补**,不是竞争。
+
+**非目标**(v0.1 明确不做,理由见 [TODO.md](TODO.md)):多租户多身份并发、HTTPS/公网暴露、
+解析编排(MinerU 调用仍在引擎仓脚本)、前端 UI、常驻多副本。
+
+## 2. 核心架构决策
+
+### D1:守护进程独占资源,一切消费走 HTTP(本项目最重要的决策)
+
+**问题**:引擎的 stdio MCP 直连模式(mcp_server/server.py)有两个实测痛点:
+- 嵌入式 Qdrant **单客户端独占锁**——第二个进程打开同一索引直接报错(eval 为此专门 copytree 避锁);
+- dense 模型(Qwen3-VL 8B)**加载 1-2 分钟**——stdio 每会话一进程,每开一个 Claude Code 会话重付一次。
+
+**决策**:`pharos serve`(FastAPI)是系统里**唯一**碰 Qdrant 与 GPU 的进程;
+闭管道问答与 MCP 都从 HTTP 走。冒烟实测:适配器毫秒级连上,首查 19s(模型热缓存),后续查询秒级。
+
+**否决的备选**:
+- *每消费方各开索引*:被单客户端锁直接堵死;
+- *MCP 进程内嵌引擎(现状)*:保留在引擎仓作 fallback(不跑守护进程时可用),但每会话重付加载,不作为产品默认;
+- *Qdrant server 模式(docker)*:解锁多客户端,但引入常驻服务运维 + 数据迁移,个人场景收益不抵复杂度。规模上去后这是 v2 的自然升级路径(EmbedConfig 换 url 即可)。
+
+### D2:MCP = 零 GPU 依赖的薄适配器
+
+`pharos mcp` 只 import mcp + httpx + toolcore(纯 stdlib),六个工具原样转发 HTTP。
+守护进程未启动时返回结构化 `backend_unavailable`(hint 指向 `pharos serve`),不裸抛。
+工具名/入参/返回契约与引擎 stdio server **完全一致**——agent 侧无感切换。
+
+### D3:工具语义单一来源(引擎 toolcore)
+
+HTTP 端点与 MCP 适配器的校验/结构化结果/去重/预算/错误映射/_INSTRUCTIONS 全部来自
+`chunk-test-repo/mcp_server/toolcore.py`(为此做了引擎重构,commit `7fbf709`,留痕见
+[COMPONENT_NOTES.md](COMPONENT_NOTES.md))。**动机**:这层契约经 R1-R5 五轮对抗评审打磨
+(already_returned/omitted_budget/预算含资产/无权不泄存在性…),复制一份必然漂移。
+toolcore 按文件路径 importlib 加载(不占 sys.path 顶层名,防撞名)。
+
+### D4:引擎依赖 = path-dep(不发布、不 vendor)
+
+与引擎仓自身用法(server.py / eval)完全一致:sys.path 插入三个组件包的 src + toolcore 文件加载。
+单机个人部署,发布/版本管理是纯开销;vendor 复制则必然与引擎漂移。代价:pharos 与引擎仓必须
+同机同布局(默认同级目录,`PHAROS_ENGINE` 可改)——对个人系统可接受,已在 engine.bootstrap
+里给出清晰报错。
+
+### D5:身份模型 = 启动时绑定,部署即授权
+
+与引擎 stdio server 同一安全模型:`PHAROS_TENANT`/`PHAROS_PRINCIPALS` 启动时绑定成 User,
+HTTP 参数改不了;tenant 未设 → toolcore 层 fail-closed(`no_identity`,空结果)。
+**HTTP 化带来的新面**:能连上端口的人 = 该身份的全部可见内容。对策:默认绑 127.0.0.1;
+可选 `PHAROS_API_KEY`(所有 /v1/* 校验 X-API-Key,/healthz 豁免)。多身份 = 起多个实例
+(不同端口/不同 tenant),不在单实例里做用户系统(v0.1 非目标)。
+
+### D6:去重 opt-in,per-session 隔离
+
+引擎 server.py 的 `_RETURNED_KEYS` 是进程级的(stdio 下进程=会话,成立;其注释明确预告
+"换 HTTP 多会话前必须 per-session 隔离")。Pharos 兑现它:`X-Pharos-Session` 头 → SessionRegistry
+(有界 LRU 64 会话)取该会话的 returned_keys;**不带头 = 不去重**(curl 一次性调用不该有
+跨调用状态)。MCP 适配器每进程一个 uuid,自动获得会话语义。冒烟实测:同会话第二次全
+already_returned,新会话完全隔离。
+
+### D7:领域结果一律 HTTP 200 + status 字段
+
+`no_identity`/`empty_query`/`bad_arg`/`no_access`/`backend_unavailable`… 都是**领域结果**
+(agent/客户端要程序化决策的状态机),统一 200 + JSON status,与 toolcore 契约一致;
+HTTP 状态码只留给传输层语义(401 auth、422 请求体不是合法 JSON、5xx 崩溃)。
+mode/strategy 等枚举校验故意**不在 pydantic 层做**(否则变 422),留给 toolcore 出结构化 bad_arg。
+
+### D8:/v1/ask 的锁模型 —— 检索在锁内,LLM 在锁外
+
+嵌入式 Qdrant 与 GPU 前向非线程安全,FastAPI 线程池会并发跑 sync 端点 → 所有 retriever 调用
+经 `LockedRetriever` 串行化。Generator 依赖注入的正是这个加锁代理,所以 `/v1/ask` 的检索段
+持锁、随后数秒-数十秒的 DeepSeek 网络调用**不持锁**——不阻塞其他会话的检索。
+
+## 3. 命名
+
+**Pharos(法罗斯)**:亚历山大灯塔,古代世界七大奇迹,守在亚历山大图书馆旁。
+"图书馆 + 导航"正是本系统:私人藏书(77 篇多格式文档起步)+ 检索导航。CLI 顺口:
+`pharos serve / ask / mcp / index`。
+
+## 4. 风险与已知限制
+
+| 风险 | 现状 | 缓解 |
+|---|---|---|
+| 守护进程单点 | 个人场景可接受 | 适配器结构化降级 + hint 指向恢复动作 |
+| path-dep 引擎漂移 | toolcore 契约测试在引擎仓,pharos 测试同跑 | 两仓测试都绿才算过;COMPONENT_NOTES 记录接缝 |
+| index 与 serve 抢锁 | 单客户端锁 | indexer 捕获锁错误给明确提示;文档要求先停 serve |
+| 端口暴露即数据暴露 | 默认 127.0.0.1 | PHAROS_API_KEY;公网/HTTPS 明确非目标 |
+| LLM 上游故障 | /v1/ask 返回 ask_failed(retriable) | 细节只进服务端日志,不外泄 |

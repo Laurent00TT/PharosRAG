@@ -1,0 +1,18 @@
+[project]
+name = "pharos"
+version = "0.1.0"
+description = "Pharos(法罗斯):个人多格式 agentic RAG 系统 —— HTTP API 闭管道问答 + MCP agentic 双出口"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "mcp>=1.0",
+    "openai>=1.30",
+]
+
+[project.scripts]
+pharos = "pharos.cli:main"
+
+[tool.setuptools]
+packages = ["pharos"]
