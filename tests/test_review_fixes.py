@@ -117,3 +117,28 @@ def test_adapter_docstrings_match_engine():
         eng_doc = getattr(srv, name).__doc__ or ""
         adp_doc = getattr(A, name).__doc__ or ""
         assert adp_doc.strip() == eng_doc.strip(), f"{name} docstring 与引擎不同文"
+
+
+# ---------- N3:/v1/ask 检索过滤透传 ----------
+from pharos.engine import bootstrap as _bootstrap
+_bootstrap(make_cfg().engine)
+from generator import Generator, MockLLM  # noqa: E402
+from _fakes import make_res, make_hit     # noqa: E402
+
+
+def test_ask_forwards_filters_to_retriever():
+    ret = FakeRetriever(results_factory=lambda: [make_res(make_hit(), ctx_text="表数据 6,779,511")])
+    app = make_app(retriever=ret, generator_factory=lambda r, c: Generator(r, MockLLM()))
+    with TestClient(app) as c:
+        r = c.post("/v1/ask", json={"query": "营收?", "kind": "table",
+                                    "doc_ids": ["d1"], "strategy": "sparse"}).json()
+    assert r["status"] == "ok"
+    call = ret.calls[0]
+    assert call["kind"] == "table" and call["doc_ids"] == ["d1"] and call["strategy"] == "sparse"
+
+
+def test_ask_bad_strategy_structured():
+    app = make_app(generator_factory=lambda r, c: Generator(r, MockLLM()))
+    with TestClient(app) as c:
+        r = c.post("/v1/ask", json={"query": "q", "strategy": "weird"}).json()
+    assert r["status"] == "bad_arg" and "strategy" in r["hint"]

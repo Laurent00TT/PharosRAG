@@ -3,7 +3,7 @@
 > 三层:CPU 单测(每改必跑)/ 引擎回归(接缝改动时跑)/ GPU 冒烟(投产前跑)。
 > 本文所有"实测"均为 2026-07-02 在 WSL `navikb`(4090)真实运行结果。
 
-## 1. CPU 单测(36 项,~2s,不碰 Qdrant/GPU/网络)
+## 1. CPU 单测(38 项,~2s,不碰 Qdrant/GPU/网络)
 
 ```bash
 conda activate navikb && cd pharos && python -m pytest tests -q
@@ -19,7 +19,7 @@ conda activate navikb && cd pharos && python -m pytest tests -q
 工具语义本体(already_returned/omitted_budget/预算含资产/无权不泄存在性…)**不在 Pharos 重测**——
 单一来源在引擎 toolcore,由引擎 test_tools.py(22 项)覆盖。
 
-**实测**:`36 passed, 1 warning in 1.79s`。
+**实测**:`38 passed, 1 warning in 1.88s`(N3 检索过滤落地后 +2:ask 过滤透传 / bad strategy 结构化)。
 
 ## 2. 引擎回归(toolcore 拆分后)
 
@@ -48,6 +48,18 @@ python -m pytest embedder/tests/test_store.py -q
 | 9 | CLI:`python -m pharos ask "库里有哪些关于 DDoS 攻击防护的内容?"` | 中文 grounded 回答 + 来源(标题/页码/小节/chunk_id) |
 
 复现命令见 git 历史与 [IMPLEMENTATION.md](IMPLEMENTATION.md) §6。
+
+**N3(ask 检索过滤)落地后的追加实证**(2026-07-03,同真库;起因:用户实测"Netflix 2015 营收"闭管道拒答):
+
+| 问法 | 结果 |
+|---|---|
+| 中文,默认参数(用户原试) | 诚实拒答(散文压表格,数字在 p.16 表内、库内验证存在) |
+| 中文/英文 + top_k 12 + rerank(无 kind) | 仍拒答 |
+| 中文 + `--kind table` + top_k 15(无 rerank) | ⚠ **错答**:分部营收 4,180,339 被当总营收(留档,见 TODO P2) |
+| **英文 + `--kind table --rerank`** | ✅ **$6,779,511 千美元,引用 p.16 Selected Financial Data** |
+| 中文 + `--kind table --rerank` | 诚实拒答(明说只见分部数据)——跨语言表格排名残留缺口 |
+
+结论:数字/表格题推荐 `--kind table --rerank` + 文档语言关键词;跨语言增强列 TODO P2。
 
 ## 4. 对抗评审(P1,已完成)
 

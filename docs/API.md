@@ -23,7 +23,8 @@ Base:`http://127.0.0.1:8787`(PHAROS_HOST/PORT)。请求/响应均 JSON(UTF-8)。
 agent 使用契约全文(与 MCP instructions 同源):`{status, instructions}`
 
 ### POST /v1/ask —— 闭管道问答
-请求:`{query, top_k?, rerank?=false, include_contexts?=false}`
+请求:`{query, top_k?, rerank?=false, include_contexts?=false, doc_ids?, doc_type?, kind?, strategy?}`
+(后四个为检索过滤/选路,与 /v1/retrieve 同语义;数字/表格题用 `kind:"table"` 显著提升命中)
 响应(ok):
 ```json
 {"status":"ok", "answer":"…带 [cite:n] 的答案…",

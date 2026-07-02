@@ -17,8 +17,13 @@
 
 - **P1 systemd/自启**:WSL 里给 `pharos serve` 配 systemd unit(或 Windows 任务计划唤 WSL),
   开机即有;现在要手动起。
-- **P1 /v1/ask 支持检索过滤**(doc_ids/doc_type/strategy):需给引擎 Generator.answer 加可选
-  kwargs 并补 eval 回归(见 COMPONENT_NOTES N3)。
+- [x] ~~P1 /v1/ask 支持检索过滤~~ **已落地(2026-07-02)**:Generator.answer 可选 kwargs 按需透传,
+  `pharos ask --kind table` 等;动机与实证见 COMPONENT_NOTES N3(Netflix 营收案例)。
+- **P2 跨语言数字题**(N3 实证暴露的残留缺口):中文问英文财报,`kind=table`+rerank 后正确的
+  汇总表仍排不进 top-k(sparse 全失配 + 跨语言表格 dense/rerank 双弱);且无 rerank 时模型可能把
+  分部表错引申成公司总数(实测 case:Netflix 分部营收 4,180,339 被当总营收)。候选方案:
+  查询期术语翻译辅助 / 表格块 embed 文本增强(表标题+列头拼进 embed)/ prompt 加"分部≠总额"约束。
+  先记录使用指引(数字题用文档语言关键词 + --kind table --rerank),实测频率高再做。
 - **P2 观测**:请求日志落盘(query/耗时/status 计数),/healthz 加 model_loaded 与索引统计。
 - **P2 解析编排**:`pharos parse <pdf|docx|xlsx…>` 调 MinerU(在线 API tokens 已有)→ 直接
   ingest 新文档,不再依赖引擎仓预解析产物。

@@ -49,6 +49,12 @@ class AskReq(BaseModel):
     top_k: int | None = None
     rerank: bool = False
     include_contexts: bool = False   # true 时 citations 带被引段原文(大;默认只回溯源元数据)
+    # N3:检索过滤/选路(与 /v1/retrieve 同语义)。实证场景:"数字埋在表里"的题,
+    # 通用问法下表格块被散文挤出 top-k,kind='table' 一击命中。
+    doc_ids: list[str] | None = None
+    doc_type: str | None = None
+    kind: str | None = None
+    strategy: str | None = None      # hybrid|dense|sparse;None=引擎默认(hybrid)
 
 
 class ExpandReq(BaseModel):
@@ -170,6 +176,9 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
             return {"status": "no_identity", "retriable": False, "hint": no_id_hint}
         if not (q.query or "").strip():
             return {"status": "empty_query", "retriable": False, "hint": "query 为空,请提供具体问题。"}
+        if q.strategy is not None and q.strategy not in ("hybrid", "dense", "sparse"):
+            return {"status": "bad_arg", "retriable": False,
+                    "hint": f"strategy 必须 hybrid|dense|sparse(收到 {q.strategy})。"}
         try:
             gen = _get_generator()
         except ValueError:
@@ -181,7 +190,8 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
                     "hint": "生成器初始化失败(依赖或引擎配置问题),详见服务端日志。"}
         try:
             # 检索在 LockedRetriever 锁内、LLM 网络调用在锁外(不阻塞其他检索请求)
-            ans = gen.answer(q.query, state.user, top_k=q.top_k, rerank=q.rerank)
+            ans = gen.answer(q.query, state.user, top_k=q.top_k, rerank=q.rerank,
+                             doc_ids=q.doc_ids, doc_type=q.doc_type, kind=q.kind, strategy=q.strategy)
         except Exception:
             log.exception("ask 失败")   # 细节只进服务端日志,不外泄给客户端
             return {"status": "ask_failed", "retriable": True,

@@ -28,12 +28,21 @@
 
 ## 刻意不修(记录在案,可再议)
 
-### N3:`Generator.answer` 不支持检索过滤(doc_ids/doc_type/kind/strategy)
+### N3:`Generator.answer` 不支持检索过滤 —— **已于 2026-07-02 落地**(状态流转:不修→修)
 
-`/v1/ask` 目前只透传 top_k/rerank——想"只在财报里问"得走 agentic 或 /v1/retrieve 自己拼。
-**不修的理由**:改 Generator.answer 签名会牵动 eval(run_eval/decompose 都调它),而 v0.1 的
-闭管道定位是"整库问答";按 doc 过滤的需求先用 agentic 出口顶。列入 TODO(P2),真要做时
-在 generator 仓加可选 kwargs 并补 eval 回归。
+原判"先用 agentic 出口顶,列 TODO"。用户实测暴露真实痛点:"Netflix 2015 营收"类
+**数字埋在表里**的题,通用问法下表格块被 MD&A 散文挤出 top-k,top_k/rerank 都救不动,
+而 `kind=table` 过滤一击命中(数字在 p.16 Selected Financial Data 表,库内验证)。
+**动作**:引擎 Generator.answer 加可选 doc_ids/doc_type/kind/strategy——**按需传**
+(不设的参数不出现在调用里),老窄签名 retriever(单测 mock/smoke)与既有调用零影响;
+eval 只用 top_k/rerank 关键字(run_eval.py:80 核实),不受牵动,故未重跑 72 题评估。
+`/v1/ask` 与 `pharos ask --kind/--doc-type/--doc-id/--strategy` 透传。
+**验证**:引擎 17 测(+1 透传/窄签名兼容)、Pharos 38 测(+2)。真库实证(诚实版):
+英文总营收措辞 + `--kind table --rerank` → **正确答出 $6,779,511 千美元并引用 p.16 汇总表**;
+纯中文问法 + kind=table + rerank → 仍未召回 p.16 表但**诚实拒答**(明说只见到分部数据);
+⚠ 中文 + kind=table + top_k 15 **无 rerank** 曾把分部营收(4,180,339)错答成公司营收——
+跨语言数字题的残留缺口与使用指引见 TODO(P2)与 TESTING §3。**数字题推荐姿势:
+`--kind table --rerank` + 用文档语言的关键词(英文财报用 "total revenues")**。
 
 ### N4:index_real.py 写死路径/ACL —— 不改脚本,产品化到 `pharos index`
 

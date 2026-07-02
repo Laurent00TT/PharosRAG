@@ -51,7 +51,9 @@ def cmd_ask(args) -> None:
     with _client(args.url) as c:
         try:
             r = c.post("/v1/ask", json={"query": args.query, "top_k": args.top_k,
-                                        "rerank": args.rerank, "include_contexts": args.contexts})
+                                        "rerank": args.rerank, "include_contexts": args.contexts,
+                                        "doc_ids": args.doc_id or None, "doc_type": args.doc_type,
+                                        "kind": args.kind, "strategy": args.strategy})
         except Exception as e:
             raise SystemExit(f"连不上 Pharos 守护进程({c.base_url}):{type(e).__name__}。先跑 pharos serve。")
         try:
@@ -110,6 +112,12 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("query")
     sp.add_argument("--top-k", type=int, default=None, dest="top_k")
     sp.add_argument("--rerank", action="store_true")
+    sp.add_argument("--kind", default=None, choices=["text", "table", "image", "chart"],
+                    help="只在此类块里检索(数字/表格题用 table)")
+    sp.add_argument("--doc-type", default=None, dest="doc_type", help="限定文档类型(如 financial_report_en)")
+    sp.add_argument("--doc-id", action="append", default=None, dest="doc_id", help="限定文档(可多次)")
+    sp.add_argument("--strategy", default=None, choices=["hybrid", "dense", "sparse"],
+                    help="检索选路(默认 hybrid)")
     sp.add_argument("--contexts", action="store_true", help="citations 带被引原文")
     sp.add_argument("--json", action="store_true", help="输出原始 JSON")
     sp.add_argument("--url", default=None, help="守护进程地址(默认 PHAROS_URL)")
