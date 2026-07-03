@@ -60,11 +60,35 @@ python -m pharos index --corpus <parsed_dir> --dest ~/rag_real   # 先停 serve(
 `PHAROS_API_KEY`(可选接入门槛)/ `DEEPSEEK_API_KEY`(`/v1/ask` 用)/ `PHAROS_ENGINE`(引擎仓路径,
 默认同级 `../chunk-test-repo`)。
 
+## 部署模式(v0.3)
+
+三种身份模式,按配置自动选(设计见 [DESIGN D10](docs/DESIGN.md)):
+
+| 模式 | 触发 | 适用 | 身份 |
+|---|---|---|---|
+| **open** | 都不配 | 个人、仅回环 | 启动绑定的单身份 |
+| **legacy** | 只设 `PHAROS_API_KEY` | 个人加一道门槛 | 单密钥 + 启动绑定身份 |
+| **keys** | 设 `PHAROS_KEYS_FILE` | **团队** | 每请求 X-API-Key → 独立身份(name+tenant+principals) |
+
+团队部署三步(详见 [docs/OPERATIONS.md](docs/OPERATIONS.md)):
+
+```bash
+python -m pharos keys new alice --tenant demo --admin      # 发身份,key 只打印一次
+python -m pharos keys new bob   --tenant demo --principals g_eng
+# .env 里设 PHAROS_KEYS_FILE=~/pharos.keys.json,要局域网访问再加 PHAROS_HOST=0.0.0.0
+sudo systemctl restart pharos
+```
+
 ## 安全模型(必读)
 
-- **ACL 身份启动时绑定**,HTTP 客户端 / agent 不能经参数改;`PHAROS_TENANT` 未设 → 一切检索 fail-closed 返回空。
-- **部署即授权**:能连上端口的人 = 能看到该身份可见的内容。默认只绑 `127.0.0.1`;要暴露到局域网,设 `PHAROS_API_KEY`。
-- 检索正文一律标 `trust: untrusted`(数据不是指令,防 prompt 注入);错误响应不泄内部细节与文档存在性。
+- **身份 = "谁在问"(Pharos 层),ACL = "能看什么"(引擎层)**:X-API-Key 解析成身份,逐请求把
+  该身份的 tenant/principals 传给引擎,引擎 ACL 硬过滤兑现可见性(经 acl_regression 五用户矩阵验证)。
+- **fail-closed 处处**:未知/缺失 key 一律 401;keys 文件格式错拒绝启动;**非回环绑定强制 keys 模式**
+  (不允许把整库裸奔到局域网);未接权限的文档默认拒绝所有人。
+- **会话隔离**:跨调用去重登记按 `身份|会话` 隔离,不同用户互不可见。
+- **不泄密**:请求日志记身份名不记 key、query 可截断/关闭;错误响应不泄内部细节与文档存在性;
+  检索正文标 `trust: untrusted`(防注入)。
+- 默认只绑 `127.0.0.1`;HTTPS/公网明确非目标(要远程走隧道)。
 
 ## 测试
 
@@ -78,11 +102,12 @@ GPU 冒烟与实测记录见 [docs/TESTING.md](docs/TESTING.md)。
 
 | 文档 | 内容 |
 |---|---|
-| [docs/DESIGN.md](docs/DESIGN.md) | 目标/架构/8 项关键决策(含否决的备选)/风险 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 目标/架构/关键决策(含否决的备选)/团队版 D10-D12/风险 |
 | [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) | 模块地图/请求路径/锁模型/与引擎的接缝 |
-| [docs/API.md](docs/API.md) | HTTP API 契约(端点/参数/status 状态机) |
-| [docs/TESTING.md](docs/TESTING.md) | 测试矩阵 + 实测证据(CPU/引擎回归/GPU 冒烟) |
-| [docs/TODO.md](docs/TODO.md) | 版本规划:v0.1 已完成清单 + 后续路线 |
+| [docs/API.md](docs/API.md) | HTTP API 契约(端点/参数/鉴权/status 状态机) |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | **团队运维手册**:部署/密钥/容量实测/备份恢复/故障排查 |
+| [docs/TESTING.md](docs/TESTING.md) | 测试矩阵 + 实测证据(CPU/引擎回归/GPU 冒烟/压测/演练) |
+| [docs/TODO.md](docs/TODO.md) | 版本规划:v0.1/v0.3 已完成 + 后续路线 |
 | [docs/COMPONENT_NOTES.md](docs/COMPONENT_NOTES.md) | **对既有组件的异议/修复留痕**(供一起 review) |
 
 引擎组件的设计/评估文档在 chunk-test-repo(入口:[docs/OVERVIEW.md](../chunk-test-repo/docs/OVERVIEW.md))。

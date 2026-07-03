@@ -123,6 +123,23 @@ python -m pytest embedder/tests/test_store.py -q
 对缺失部分的错误断言是新失败面,择优门槛必须卡住它(③的教训);④ 单轮 LLM eval 噪声底噪
 ±2 题,这个粒度的横向比较必须配对归因(retried 标记已内建 run_eval)。
 
+## 3b. v0.3 团队版实测(2026-07-04)
+
+**CPU 单测 46→59**(test_team.py 新增:keys 解析 fail-closed / 401 / 身份逐请求流到引擎 /
+跨用户会话隔离(伪造同 session id)/ stats admin 门控 / 非回环启动守卫 / 日志不落 key+截断+可关 /
+name 唯一性与禁 `|` / keys new 不裸抛 / 观测崩溃安全 / 结构化失败计入 errors)。
+
+**多身份 live 演示**(真库,alice=demo/admin、bob=other):无 key/伪造 key → 401;alice 见 77 篇;
+**bob(other 租户)见 0 篇、检索 empty**(引擎 ACL fail-closed 兑现,身份只是"谁在问");
+bob 读 stats → 403、alice → 200。
+
+**并发压测**(bench.py,4090/77 篇):检索 p50 随并发线性升(1 并发 408ms → 10 并发 3.07s),
+吞吐天花板 ~3.2 req/s,**零错误**;混合负载下 ask 在飞时检索 p50 仍 352ms(LLM 段不持锁,D8 实锤)。
+完整表见 [OPERATIONS §4](OPERATIONS.md)。容量结论:≤10 人同时活跃体验可用。
+
+**备份恢复演练**:停服→备份(27MB/3s)→恢复到备用目录→8788 端口备用实例→77 篇可见+检索 ok,
+热模型 RTO 33s(冷启动另加模型 lazy load,已在 OPERATIONS 诚实标注)。
+
 ## 4. 对抗评审(P1,已完成)
 
 三视角(安全/正确性·并发/契约·文档)× 每发现 2 独立反驳者,39 agent。结果:
@@ -130,9 +147,18 @@ python -m pytest embedder/tests/test_store.py -q
 (test_review_fixes.py,11 项);3 条被证伪留档。完整清单与处置见
 [COMPONENT_NOTES.md §对抗评审 P1](COMPONENT_NOTES.md)。修复后全量回归:Pharos 36 + 引擎 22+7 全绿。
 
+**v0.3 团队版安全评审(T5,2026-07-04)**:身份/会话/观测/运维四视角 × 每发现 2 反驳者,36 agent。
+**0 confirmed 安全漏洞**——完成的 verify 确认核心 ACL 边界稳固(身份 name 只是展示标签 + 会话去重前缀,
+真边界是 `_current_user` 建的引擎 User;跨租户去重碰撞的失败方向不越权)。⚠ 诚实说明:多数 verify
+agent 撞服务端限流未跑完,**不依赖投票、逐条自核实**。核实后修一批**健壮性/文档/观测完整性**缺陷并
+钉回归测试(test_team.py 相关项):观测崩溃跳过记录→try/finally;结构化失败(200)漏计 errors→按业务
+status 补判;query 截断层耦合→下放 obs 层;name 唯一性 + 禁 `|`;keys new 裸抛→复用 load_keys 校验;
+备份漏 .env / 缺 mkdir;RTO 冷热标注;若干文档字段不一致。回归:Pharos 59 + 引擎 20+22+44+34 全绿。
+
 ## 5. 未覆盖(诚实清单)
 
-- 并发压测(多客户端同时打 /v1/ask + retrieve):锁模型保守(全串行),个人场景未压测;
+- **冷启动 RTO** 未实测(演练是热模型;冷启动加模型 lazy load 20s-2min,已在 OPERATIONS 标注推算值);
+- **>10 并发 / 长时压测**未做(已知吞吐天花板 ~3.2 req/s,更大规模走 v2 Qdrant server 模式);
 - `pharos index` 全量真跑(~/rag_real 已由引擎 index_real.py 建成,indexer.py 是其参数化版,
   仅逻辑评审 + 锁冲突提示路径验证;下次换语料建库时顺带实测);
 - MCP 适配器在 Claude Code 真会话里的端到端(需要你在 app 里连一次;工具逻辑已由

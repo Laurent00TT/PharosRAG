@@ -11,3 +11,7 @@ build/
 
 # 本地索引/临时产物
 *.local/
+
+# 团队版:密钥文件与请求日志(绝不入库)
+*.keys.json
+pharos_logs/

@@ -13,6 +13,16 @@
 - [x] 全套文档(README/DESIGN/IMPLEMENTATION/API/TESTING/TODO/COMPONENT_NOTES)
 - [x] 对抗评审 + confirmed 修复
 
+## v0.3 团队版(2026-07-04)—— 已完成
+
+- [x] 多身份(D10):API key → 身份(keys/legacy/open 三模式),fail-closed,非回环强制 keys;
+  `pharos keys new`;会话按身份隔离;引擎零改动(身份=谁在问,ACL=能看什么)
+- [x] 可观测性(D11):JSONL 请求日志(不落 key/query 可关截断)+ /v1/stats(admin-only)
+- [x] 并发压测(bench.py)+ 备份恢复实弹演练(RTO 33s 热模型)—— 数字进 OPERATIONS
+- [x] 运维手册 docs/OPERATIONS.md(部署/密钥/容量/备份/故障排查)
+- [x] 团队版安全对抗评审(T5)+ 自核实修复(0 confirmed 漏洞 + 一批健壮性/文档缺陷),59 CPU 测试
+- **v0.4 团队候选**:stats 持久化 / logrotate 集成 / per-key 速率限制 / 密钥吊销审计
+
 ## v0.2 候选(按优先级)
 
 - [x] **smart-ask(D9)已落地(2026-07-04)**:hints(拒答时 ≤3 条可操作建议)+ 失败驱动表格

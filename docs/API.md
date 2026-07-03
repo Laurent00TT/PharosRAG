@@ -2,10 +2,18 @@
 
 Base:`http://127.0.0.1:8787`(PHAROS_HOST/PORT)。请求/响应均 JSON(UTF-8)。
 
+## 鉴权(v0.3)
+
+三种模式(DESIGN D10):**open**(仅回环无鉴权)/ **legacy**(单 `PHAROS_API_KEY`)/
+**keys**(`PHAROS_KEYS_FILE`,每 key 一个身份 name+tenant+principals+admin)。所有 /v1/* 需
+`X-API-Key` 头(open 模式除外);`/healthz` 永远免鉴权。keys 模式下 key 解析成身份,逐请求把
+tenant/principals 传给引擎 ACL(决定"能看什么");未知/缺失 key → `401`。`/v1/stats` 在 keys
+模式下需 **admin** key(否则 `403`)。
+
 ## 通用约定
 
 - **领域结果一律 HTTP 200 + `status` 字段**(客户端按状态机决策);HTTP 码只表达传输层:
-  `401`(设了 PHAROS_API_KEY 且 X-API-Key 缺失/不符)、`422`(请求体不是合法 JSON/字段类型错)、`5xx`(崩溃)。
+  `401`(鉴权失败)、`403`(stats 非 admin)、`422`(请求体不是合法 JSON/字段类型错)、`5xx`(崩溃)。
 - **status 状态机**(与引擎 toolcore 契约一致):`ok` / `empty` / `no_identity` / `empty_query` /
   `bad_arg` / `no_access`(无权与不存在同响应,不泄存在性)/ `config_error`(sidecar 需重建)/
   `backend_unavailable`(retriable)/ ask 专属:`llm_unconfigured` / `ask_failed`(retriable)。
@@ -17,7 +25,11 @@ Base:`http://127.0.0.1:8787`(PHAROS_HOST/PORT)。请求/响应均 JSON(UTF-8)。
 ## 端点
 
 ### GET /healthz(免 API key)
-`{status, service:"pharos", version, collection, tenant_bound, llm_model, auth}`
+`{status, service:"pharos", version, collection, tenant_bound, llm_model, identity_mode(open|legacy|keys), uptime_s}`
+
+### GET /v1/stats(keys 模式需 admin key)
+进程内指标:`{status, identity_mode, uptime_s, sessions, log_path, log_write_failures,
+endpoints:{"<路径>":{n, errors, p50_ms, p95_ms, max_ms}}}`。重启归零。
 
 ### GET /v1/instructions
 agent 使用契约全文(与 MCP instructions 同源):`{status, instructions}`

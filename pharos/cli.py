@@ -79,6 +79,18 @@ def cmd_ask(args) -> None:
         print("\n⚠ 答案被 max_tokens 截断(finish_reason=length)。", file=sys.stderr)
 
 
+def cmd_keys_new(args) -> None:
+    from .identity import append_key
+    config.load_env()
+    path = args.file or os.environ.get("PHAROS_KEYS_FILE") or os.path.expanduser("~/pharos.keys.json")
+    principals = [p.strip() for p in args.principals.split(",") if p.strip()]
+    key = append_key(path, name=args.name, tenant=args.tenant, principals=principals, admin=args.admin)
+    print(f"已写入 {path}(建议 chmod 600;文件勿入 git)")
+    print(f"身份 {args.name}(tenant={args.tenant}, principals={principals}, admin={args.admin})")
+    print(f"\nAPI key(只显示这一次,请安全转交给使用者):\n  {key}")
+    print("\n生效方式:确认服务端 PHAROS_KEYS_FILE 指向该文件,然后 sudo systemctl restart pharos")
+
+
 def cmd_health(args) -> None:
     with _client(args.url) as c:
         try:
@@ -130,6 +142,16 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("health", help="守护进程健康检查")
     sp.add_argument("--url", default=None)
     sp.set_defaults(fn=cmd_health)
+
+    sp = sub.add_parser("keys", help="多身份密钥管理(D10)")
+    ksub = sp.add_subparsers(dest="keys_cmd", required=True)
+    kn = ksub.add_parser("new", help="生成新身份并写入 keys 文件(key 只打印这一次)")
+    kn.add_argument("name", help="身份名(进请求日志,不含敏感信息)")
+    kn.add_argument("--tenant", required=True, help="ACL tenant(个人库建的是 demo)")
+    kn.add_argument("--principals", default="", help="逗号分隔 principals")
+    kn.add_argument("--admin", action="store_true", help="可读 /v1/stats")
+    kn.add_argument("--file", default=None, help="keys 文件(默认 PHAROS_KEYS_FILE 或 ~/pharos.keys.json)")
+    kn.set_defaults(fn=cmd_keys_new)
 
     args = p.parse_args(argv)
     args.fn(args)

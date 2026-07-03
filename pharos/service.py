@@ -19,13 +19,15 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from . import __version__, config, engine, smart
+from . import __version__, config, engine, identity as identity_mod, smart
+from .obs import RequestLog, Stats
 from .sessions import SessionRegistry
 
 log = logging.getLogger("pharos")
@@ -70,12 +72,22 @@ class GroupedReq(BaseModel):
 
 
 def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None,
-               generator_factory=None) -> FastAPI:
-    """app 工厂。生产:全默认(从 env 建配置,启动时打开真索引)。测试:注入 fake retriever/user/generator。"""
+               generator_factory=None, keys=None) -> FastAPI:
+    """app 工厂。生产:全默认(从 env 建配置,启动时打开真索引)。测试:注入 fake retriever/user/generator/keys。"""
     cfg = cfg or config.from_env()
     # toolcore 的交付预算走 RAG_MAX_CONTEXT_TOKENS(引擎契约);Pharos 配置在此兑现
     os.environ["RAG_MAX_CONTEXT_TOKENS"] = str(cfg.max_context_tokens)
     tc = engine.load_toolcore(cfg.engine)
+
+    # ---------- 身份模式(D10):keys(团队)/ legacy(v0.2 单密钥)/ open(仅回环)----------
+    if keys is None and cfg.keys_file:
+        keys = identity_mod.load_keys(cfg.keys_file)     # 格式错 → SystemExit,拒绝启动
+    mode = "keys" if keys else ("legacy" if cfg.api_key else "open")
+    if not identity_mod.is_loopback(cfg.host) and mode != "keys":
+        # fail-closed 启动守卫:部署即授权 —— 绑非回环地址必须多身份鉴权,不允许把整库裸奔到局域网
+        raise SystemExit(f"PHAROS_HOST={cfg.host} 非回环地址,必须配置 PHAROS_KEYS_FILE(keys 模式)才能启动。")
+    if mode == "keys" and cfg.api_key:
+        log.warning("keys 模式下 PHAROS_API_KEY 被忽略(身份以 keys 文件为准)。")
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI):
@@ -96,6 +108,20 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
     state.gen_local = threading.local()    # 评审修:Generator/LLM per-thread —— 共享单例的
     state.generator_factory = generator_factory or engine.build_generator   # last_finish_reason 并发下会跨请求串味
     state.sessions = SessionRegistry()
+    state.stats = Stats()                  # D11:进程内指标 + JSONL 请求日志
+    state.reqlog = RequestLog(cfg.log_dir, log_queries=cfg.log_queries)
+
+    def _current_user(request: Request):
+        """本次请求的引擎 User。keys 模式按解析出的身份现建(多身份核心);legacy/open 用启动绑定的。"""
+        iden = getattr(request.state, "identity", None)
+        if mode == "keys" and iden is not None:
+            from embedder import User                   # lifespan 已 bootstrap 引擎
+            return User(tenant=iden.tenant, principals=list(iden.principals))
+        return state.user
+
+    def _iden_name(request: Request) -> str:
+        iden = getattr(request.state, "identity", None)
+        return iden.name if iden is not None else ("local" if mode == "open" else "default")
 
     # 评审修(C2):toolcore 的 no_identity hint 指示设 RAG_TENANT,但 Pharos 只读 PHAROS_TENANT
     # —— 照原 hint 操作后依然 fail-closed,形成死循环误导。绑定层负责把契约文本翻译成本产品的配置名。
@@ -107,27 +133,81 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
             d["hint"] = no_id_hint
         return d
 
-    # ---------- 可选 API key(/healthz 豁免)----------
+    # ---------- 鉴权 + 身份解析(D10;/healthz 豁免)----------
     @app.middleware("http")
     async def _auth(request: Request, call_next):
-        if cfg.api_key and request.url.path != "/healthz":
-            if request.headers.get("x-api-key") != cfg.api_key:
-                return JSONResponse({"status": "unauthorized",
-                                     "hint": "缺少或错误的 X-API-Key(服务端设置了 PHAROS_API_KEY)。"},
-                                    status_code=401)
+        if request.url.path != "/healthz":
+            k = request.headers.get("x-api-key", "")
+            if mode == "keys":
+                iden = keys.get(k)
+                if iden is None:                        # 未知/缺失一律 401,不泄"key 是否存在过"
+                    return JSONResponse({"status": "unauthorized",
+                                         "hint": "缺少或无效的 X-API-Key(本服务为多身份 keys 模式)。"},
+                                        status_code=401)
+                request.state.identity = iden
+            elif mode == "legacy":
+                if k != cfg.api_key:
+                    return JSONResponse({"status": "unauthorized",
+                                         "hint": "缺少或错误的 X-API-Key(服务端设置了 PHAROS_API_KEY)。"},
+                                        status_code=401)
         return await call_next(request)
 
-    def _session_keys(request: Request):
-        """去重 opt-in:带 X-Pharos-Session 头才启用跨调用去重(MCP 适配器每进程一个 uuid)。"""
-        sid = request.headers.get("x-pharos-session")
-        return state.sessions.get(sid) if sid else None
+    # ---------- 观测(D11):计时 + 请求日志(不落 key 本体;截断在 obs 层)----------
+    @app.middleware("http")
+    async def _observe(request: Request, call_next):
+        t0 = time.time()
+        response = None
+        try:
+            response = await call_next(request)
+            return response
+        finally:
+            # try/finally:处理器崩溃(未捕获异常)时仍记录,否则严重错误在观测里隐形(评审)
+            ms = (time.time() - t0) * 1000
+            ep = request.url.path
+            if ep.startswith("/v1/") or ep == "/healthz":
+                code = response.status_code if response is not None else 500
+                extra = dict(getattr(request.state, "log_extra", None) or {})
+                biz = extra.get("status")
+                # errors 计入 http 4xx/5xx **或**结构化业务失败(no_access/bad_arg/ask_failed…);
+                # ok/empty 算成功。此前只看 http>=400,漏计一切返回 200 的结构化失败(评审)
+                err = code >= 400 or (biz is not None and biz not in ("ok", "empty"))
+                state.stats.record(ep, ms, err)
+                rec = {"ts": round(time.time(), 3), "ep": ep, "user": _iden_name(request),
+                       "http": code, "ms": round(ms, 1)}
+                if response is None:
+                    rec["crashed"] = True
+                rec.update(extra)
+                state.reqlog.write(rec, state.stats)
 
-    # ---------- 健康 ----------
+    def _log(request: Request, out: dict, **extra):
+        """统一登记 log_extra(带业务 status,供 _observe 计 errors + 落盘)。返回 out 供直接 return。"""
+        request.state.log_extra = {"status": out.get("status") if isinstance(out, dict) else None, **extra}
+        return out
+
+    def _session_keys(request: Request):
+        """去重 opt-in:带 X-Pharos-Session 头才启用。登记键带身份名前缀 —— 多用户下即便
+        伪造相同会话 id 也互不可见(v0.2 单身份下"会话碰撞无害"的前提在多用户下不再成立)。"""
+        sid = request.headers.get("x-pharos-session")
+        return state.sessions.get(f"{_iden_name(request)}|{sid}") if sid else None
+
+    # ---------- 健康 / 指标 ----------
     @app.get("/healthz")
     def healthz():
         return {"status": "ok", "service": "pharos", "version": __version__,
-                "collection": cfg.collection, "tenant_bound": bool(cfg.tenant),
-                "llm_model": cfg.llm_model, "auth": bool(cfg.api_key)}
+                "collection": cfg.collection, "tenant_bound": bool(cfg.tenant) or mode == "keys",
+                "llm_model": cfg.llm_model, "identity_mode": mode,
+                "uptime_s": round(time.time() - state.stats.started, 1)}
+
+    @app.get("/v1/stats")
+    def stats(request: Request):
+        """进程内指标快照。keys 模式下 admin key 才可读(聚合查询模式也是信息)。"""
+        iden = getattr(request.state, "identity", None)
+        if mode == "keys" and not (iden is not None and iden.admin):
+            return JSONResponse({"status": "forbidden", "hint": "stats 需要 admin key。"}, status_code=403)
+        snap = state.stats.snapshot()
+        snap.update({"status": "ok", "identity_mode": mode, "sessions": len(state.sessions),
+                     "log_path": state.reqlog.path if state.reqlog.enabled else ""})
+        return snap
 
     @app.get("/v1/instructions")
     def instructions():
@@ -137,29 +217,30 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
     # ---------- 检索工具面(六个,与 MCP 工具一一对应,语义同 toolcore)----------
     @app.post("/v1/retrieve")
     def retrieve(q: RetrieveReq, request: Request):
-        return _adapt(tc._retrieve_impl(state.retriever, state.user, q.query, q.top_k, q.rerank,
-                                        q.doc_ids, q.doc_type, q.kind, q.mode, q.strategy,
-                                        q.rerank_top_n, returned_keys=_session_keys(request)))
+        out = _adapt(tc._retrieve_impl(state.retriever, _current_user(request), q.query, q.top_k, q.rerank,
+                                       q.doc_ids, q.doc_type, q.kind, q.mode, q.strategy,
+                                       q.rerank_top_n, returned_keys=_session_keys(request)))
+        return _log(request, out, query=q.query, n=out.get("meta", {}).get("returned_n"))
 
     @app.get("/v1/documents")
-    def list_documents():
-        return _adapt(tc._list_impl(state.retriever, state.user))
+    def list_documents(request: Request):
+        return _log(request, _adapt(tc._list_impl(state.retriever, _current_user(request))))
 
     @app.get("/v1/documents/{doc_id}")
-    def get_document(doc_id: str, max_tokens: int = 6000):
-        return _adapt(tc._get_document_impl(state.retriever, state.user, doc_id, max_tokens))
+    def get_document(doc_id: str, request: Request, max_tokens: int = 6000):
+        return _log(request, _adapt(tc._get_document_impl(state.retriever, _current_user(request), doc_id, max_tokens)))
 
     @app.get("/v1/documents/{doc_id}/outline")
-    def get_outline(doc_id: str):
-        return _adapt(tc._outline_impl(state.retriever, state.user, doc_id))
+    def get_outline(doc_id: str, request: Request):
+        return _log(request, _adapt(tc._outline_impl(state.retriever, _current_user(request), doc_id)))
 
     @app.post("/v1/expand")
-    def expand(q: ExpandReq):
-        return _adapt(tc._expand_impl(state.retriever, state.user, q.chunk_id, q.target_tokens))
+    def expand(q: ExpandReq, request: Request):
+        return _log(request, _adapt(tc._expand_impl(state.retriever, _current_user(request), q.chunk_id, q.target_tokens)))
 
     @app.post("/v1/retrieve_grouped")
-    def retrieve_grouped(q: GroupedReq):
-        return _adapt(tc._grouped_impl(state.retriever, state.user, q.query, q.doc_ids, q.top_k, q.rerank))
+    def retrieve_grouped(q: GroupedReq, request: Request):
+        return _log(request, _adapt(tc._grouped_impl(state.retriever, _current_user(request), q.query, q.doc_ids, q.top_k, q.rerank)))
 
     # ---------- 闭管道问答(generator:检索 + grounding prompt + DeepSeek + 引用解析)----------
     def _get_generator():
@@ -171,23 +252,24 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         return gen
 
     @app.post("/v1/ask")
-    def ask(q: AskReq):
-        if not state.user or not state.user.tenant:
-            return {"status": "no_identity", "retriable": False, "hint": no_id_hint}
+    def ask(q: AskReq, request: Request):
+        req_user = _current_user(request)
+        if not req_user or not req_user.tenant:
+            return _log(request, {"status": "no_identity", "retriable": False, "hint": no_id_hint})
         if not (q.query or "").strip():
-            return {"status": "empty_query", "retriable": False, "hint": "query 为空,请提供具体问题。"}
+            return _log(request, {"status": "empty_query", "retriable": False, "hint": "query 为空,请提供具体问题。"})
         if q.strategy is not None and q.strategy not in ("hybrid", "dense", "sparse"):
-            return {"status": "bad_arg", "retriable": False,
-                    "hint": f"strategy 必须 hybrid|dense|sparse(收到 {q.strategy})。"}
+            return _log(request, {"status": "bad_arg", "retriable": False,
+                                  "hint": f"strategy 必须 hybrid|dense|sparse(收到 {q.strategy})。"})
         try:
             gen = _get_generator()
         except ValueError:
-            return {"status": "llm_unconfigured", "retriable": False,
-                    "hint": f"缺 LLM API key(环境变量 {cfg.llm_api_key_env},放 .env)。"}
+            return _log(request, {"status": "llm_unconfigured", "retriable": False,
+                                  "hint": f"缺 LLM API key(环境变量 {cfg.llm_api_key_env},放 .env)。"})
         except Exception:                  # 评审修:openai 包缺失/引擎路径断等不再裸抛 500
             log.exception("Generator 构建失败")
-            return {"status": "ask_failed", "retriable": False,
-                    "hint": "生成器初始化失败(依赖或引擎配置问题),详见服务端日志。"}
+            return _log(request, {"status": "ask_failed", "retriable": False,
+                                  "hint": "生成器初始化失败(依赖或引擎配置问题),详见服务端日志。"})
         # smart-ask 第 2 层(D9):**失败驱动**表格补检——第一轮纯净;数值题拒答/部分拒答时
         # 带 kind=table 腿重问一轮(硬上限 1 次重试;auto 留痕;用户显式给 kind 则尊重用户)。
         # ⚠ 前置腿方案已被 88 题实测否决(误伤 5 道散文题),留档 TESTING §3——别改回去。
@@ -198,11 +280,11 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
             numeric = looks_numeric(q.query)
         try:
             # 检索在 LockedRetriever 锁内、LLM 网络调用在锁外(不阻塞其他检索请求)
-            ans = gen.answer(q.query, state.user, top_k=q.top_k, rerank=q.rerank,
+            ans = gen.answer(q.query, req_user, top_k=q.top_k, rerank=q.rerank,
                              doc_ids=q.doc_ids, doc_type=q.doc_type, kind=q.kind, strategy=q.strategy)
             if cfg.smart_ask and numeric and q.kind is None and smart.is_refusal(ans.text):
                 from generator import DEFAULT_TABLE_LEG
-                ans2 = gen.answer(q.query, state.user, top_k=q.top_k, rerank=q.rerank,
+                ans2 = gen.answer(q.query, req_user, top_k=q.top_k, rerank=q.rerank,
                                   doc_ids=q.doc_ids, doc_type=q.doc_type, strategy=q.strategy,
                                   extra_legs=[dict(DEFAULT_TABLE_LEG)])
                 # 只采用**完整答出**的重试(不再含拒答/缺失声明)。88 题实测:部分回答会夹带
@@ -215,8 +297,8 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
                     auto.append("table_leg_retry_discarded")   # 留痕:重试过但按守则弃用
         except Exception:
             log.exception("ask 失败")   # 细节只进服务端日志,不外泄给客户端
-            return {"status": "ask_failed", "retriable": True,
-                    "hint": "生成失败(检索后端或 LLM 上游异常),请稍后重试。"}
+            return _log(request, {"status": "ask_failed", "retriable": True,
+                                  "hint": "生成失败(检索后端或 LLM 上游异常),请稍后重试。"}, query=q.query)
         citations = []
         for c in ans.citations:
             d = {"marker": c.marker, "chunk_id": c.chunk_id, "doc_id": c.doc_id,
@@ -228,9 +310,10 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         hints = (smart.build_hints(q.query, auto=auto, req_kind=q.kind, req_rerank=q.rerank,
                                    numeric=numeric)
                  if cfg.smart_ask and smart.is_refusal(ans.text) else [])
-        return {"status": "ok", "answer": ans.text, "citations": citations,
-                "n_contexts": ans.n_contexts, "model": cfg.llm_model,
-                "finish_reason": getattr(gen.llm, "last_finish_reason", None),
-                "auto": auto, "hints": hints}
+        return _log(request, {"status": "ok", "answer": ans.text, "citations": citations,
+                              "n_contexts": ans.n_contexts, "model": cfg.llm_model,
+                              "finish_reason": getattr(gen.llm, "last_finish_reason", None),
+                              "auto": auto, "hints": hints},
+                    query=q.query, auto=auto or None, n_citations=len(citations), refusal=bool(hints))
 
     return app

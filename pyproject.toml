@@ -16,3 +16,6 @@ pharos = "pharos.cli:main"
 
 [tool.setuptools]
 packages = ["pharos"]
+
+[dependency-groups]
+dev = ["pytest>=8"]

@@ -40,7 +40,9 @@ class FakeRetriever:
     def search_with_context(self, query, user, top_k=None, rerank=False, doc_ids=None,
                             doc_type=None, kind=None, assemble=True, strategy="hybrid", rerank_top_n=None):
         self.calls.append({"query": query, "top_k": top_k, "rerank": rerank, "assemble": assemble,
-                           "doc_ids": doc_ids, "doc_type": doc_type, "kind": kind, "strategy": strategy})
+                           "doc_ids": doc_ids, "doc_type": doc_type, "kind": kind, "strategy": strategy,
+                           "user_tenant": getattr(user, "tenant", None),        # 多身份:证明身份流到引擎
+                           "user_principals": list(getattr(user, "principals", []) or [])})
         return self._rf()
 
     def get_document(self, doc_id, user, max_tokens=6000):
@@ -70,6 +72,6 @@ def make_cfg(**kw):
     return pconfig.PharosConfig(**kw)
 
 
-def make_app(retriever=None, user=None, cfg=None, generator_factory=None):
+def make_app(retriever=None, user=None, cfg=None, generator_factory=None, keys=None):
     return create_app(cfg=cfg or make_cfg(), retriever=retriever or FakeRetriever(),
-                      user=user or make_user(), generator_factory=generator_factory)
+                      user=user or make_user(), generator_factory=generator_factory, keys=keys)

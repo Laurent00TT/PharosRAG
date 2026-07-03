@@ -79,7 +79,10 @@ class PharosConfig:
     # 服务
     host: str = "127.0.0.1"
     port: int = 8787
-    api_key: str = ""            # 可选:设了则 /v1/* 需 X-API-Key
+    api_key: str = ""            # legacy 单密钥模式(个人,v0.2 兼容)
+    keys_file: str = ""          # keys 模式(团队,D10):JSON 文件路径,配了即启用多身份
+    log_dir: str = ""            # 请求日志目录(D11);空=关
+    log_queries: bool = True     # 日志是否含 query 文本(截断;内网默认开)
     max_context_tokens: int = 12000
     # smart-ask(/v1/ask 的产品层智能:数值题表格补检 + 拒答 hints;off=纯净模式)
     smart_ask: bool = True
@@ -109,6 +112,9 @@ def from_env() -> PharosConfig:
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
         port=_int_env("PHAROS_PORT", 8787),
         api_key=os.environ.get("PHAROS_API_KEY", "").strip(),
+        keys_file=os.path.expanduser(os.environ.get("PHAROS_KEYS_FILE", "").strip()),
+        log_dir=os.path.expanduser(os.environ.get("PHAROS_LOG_DIR", "~/pharos_logs").strip()),
+        log_queries=os.environ.get("PHAROS_LOG_QUERIES", "on").strip().lower() not in ("off", "0", "false"),
         smart_ask=os.environ.get("PHAROS_SMART_ASK", "on").strip().lower() not in ("off", "0", "false"),
         max_context_tokens=_int_env("PHAROS_MAX_CONTEXT_TOKENS", 12000),
         llm_base_url=os.environ.get("PHAROS_LLM_BASE_URL", "https://api.deepseek.com"),
