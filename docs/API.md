@@ -34,6 +34,10 @@ agent 使用契约全文(与 MCP instructions 同源):`{status, instructions}`
 ```
 `finish_reason=length` = 答案被 max_tokens 截断(尾部引用可能被切)。
 
+smart-ask(默认开,`PHAROS_SMART_ASK=off` 关;设计见 DESIGN D9):响应另含
+`auto: ["table_leg_retry"?]`(自动动作留痕——数值题第一轮拒答时带 kind=table 补检腿重问一轮)与
+`hints: [...]`(仅当最终答案仍为拒答/部分拒答时,≤3 条可操作建议;正常答案为空数组)。
+
 ### POST /v1/retrieve —— 混合检索(+ small-to-big 上下文)
 请求:`{query, top_k?, rerank?=false, doc_ids?, doc_type?, kind?, mode?="full"|"concise",
 strategy?="hybrid"|"dense"|"sparse", rerank_top_n?}`

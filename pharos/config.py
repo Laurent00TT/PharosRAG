@@ -81,6 +81,8 @@ class PharosConfig:
     port: int = 8787
     api_key: str = ""            # 可选:设了则 /v1/* 需 X-API-Key
     max_context_tokens: int = 12000
+    # smart-ask(/v1/ask 的产品层智能:数值题表格补检 + 拒答 hints;off=纯净模式)
+    smart_ask: bool = True
     # LLM(闭管道 /v1/ask)
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-v4-flash"
@@ -107,6 +109,7 @@ def from_env() -> PharosConfig:
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
         port=_int_env("PHAROS_PORT", 8787),
         api_key=os.environ.get("PHAROS_API_KEY", "").strip(),
+        smart_ask=os.environ.get("PHAROS_SMART_ASK", "on").strip().lower() not in ("off", "0", "false"),
         max_context_tokens=_int_env("PHAROS_MAX_CONTEXT_TOKENS", 12000),
         llm_base_url=os.environ.get("PHAROS_LLM_BASE_URL", "https://api.deepseek.com"),
         llm_model=os.environ.get("PHAROS_LLM_MODEL", "deepseek-v4-flash"),

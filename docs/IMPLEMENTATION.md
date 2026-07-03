@@ -11,6 +11,7 @@ pharos/
                   / LockedRetriever(线程锁代理)/ build_retriever / build_user / build_generator
   sessions.py     SessionRegistry:per-session returned_keys,有界 LRU(64 会话)
   service.py      FastAPI app 工厂 create_app(cfg, retriever, user, generator_factory 全可注入)
+  smart.py        smart-ask 产品层(D9):拒答检测 + hints;数值判定/补检腿参数来自引擎 signals
   mcp_adapter.py  MCP 薄适配器:六工具 → httpx 转发;结构化降级;进程级 uuid 会话头
   indexer.py      pharos index:MinerU 解析目录 → chunker → embedder(index_real.py 的参数化版)
   cli.py          serve / mcp / index / ask / health
@@ -39,12 +40,17 @@ HTTP 请求 ─► API key 中间件 ─► pydantic 请求模型(只定形,不�
         · threading.local:共享单例的 llm.last_finish_reason 在并发 ask 下会跨请求串味(评审修);
           线程池有界 → 实例数有界,同线程内 answer→读 finish_reason 无并发窗口
         · ValueError(缺 key)→ status=llm_unconfigured;其余构建异常 → ask_failed(不裸抛 500)
-  ─► gen.answer(query, user, top_k, rerank)
+  ─► 第一轮 gen.answer(query, user, top_k, rerank, filters…)——**纯净,与无 smart 同路径**
         · 检索段:LockedRetriever 锁内;DeepSeek 网络调用:锁外(D8)
         · 零召回 → generator R3.E 确定性"信息不足"(不调 LLM)
         · 异常 → status=ask_failed(retriable),细节只进服务端日志
+  ─► smart-ask(D9,PHAROS_SMART_ASK=on):looks_numeric(query) 且未显式给 kind 且
+        is_refusal(第一轮答案) → 重问一轮 gen.answer(…, extra_legs=[DEFAULT_TABLE_LEG])
+        (kind=table top_k=5 rerank_top_n=50;腿命中按 chunk_id 去重并集在主命中之后),
+        auto+=["table_leg_retry"];硬上限 1 次重试
+  ─► 拒答/部分拒答 → smart.build_hints(≤3 条,不重复建议已自动做过的动作)
   ─► Answer → {answer, citations[](默认不带原文,include_contexts=true 才带), n_contexts,
-               finish_reason(=length 表示被 max_tokens 截断), model}
+               finish_reason(=length 表示被 max_tokens 截断), model, auto[], hints[]}
 ```
 
 **MCP 适配器**:六工具 = 纯转发函数 + `_call()` 统一错误映射

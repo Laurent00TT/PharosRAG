@@ -25,7 +25,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from . import __version__, config, engine
+from . import __version__, config, engine, smart
 from .sessions import SessionRegistry
 
 log = logging.getLogger("pharos")
@@ -188,10 +188,31 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
             log.exception("Generator 构建失败")
             return {"status": "ask_failed", "retriable": False,
                     "hint": "生成器初始化失败(依赖或引擎配置问题),详见服务端日志。"}
+        # smart-ask 第 2 层(D9):**失败驱动**表格补检——第一轮纯净;数值题拒答/部分拒答时
+        # 带 kind=table 腿重问一轮(硬上限 1 次重试;auto 留痕;用户显式给 kind 则尊重用户)。
+        # ⚠ 前置腿方案已被 88 题实测否决(误伤 5 道散文题),留档 TESTING §3——别改回去。
+        auto: list[str] = []
+        numeric = False
+        if cfg.smart_ask:
+            from generator import looks_numeric
+            numeric = looks_numeric(q.query)
         try:
             # 检索在 LockedRetriever 锁内、LLM 网络调用在锁外(不阻塞其他检索请求)
             ans = gen.answer(q.query, state.user, top_k=q.top_k, rerank=q.rerank,
                              doc_ids=q.doc_ids, doc_type=q.doc_type, kind=q.kind, strategy=q.strategy)
+            if cfg.smart_ask and numeric and q.kind is None and smart.is_refusal(ans.text):
+                from generator import DEFAULT_TABLE_LEG
+                ans2 = gen.answer(q.query, state.user, top_k=q.top_k, rerank=q.rerank,
+                                  doc_ids=q.doc_ids, doc_type=q.doc_type, strategy=q.strategy,
+                                  extra_legs=[dict(DEFAULT_TABLE_LEG)])
+                # 只采用**完整答出**的重试(不再含拒答/缺失声明)。88 题实测:部分回答会夹带
+                # "未提供 X"的错误缺失声明(X 其实在 context 里),忠实度 1.0->0.93——宁可保留
+                # 第一轮的诚实拒答+hints,不说错话。忠实度是本系统头牌,排序在"多答一点"之前。
+                if not smart.is_refusal(ans2.text):
+                    ans = ans2
+                    auto.append("table_leg_retry")
+                else:
+                    auto.append("table_leg_retry_discarded")   # 留痕:重试过但按守则弃用
         except Exception:
             log.exception("ask 失败")   # 细节只进服务端日志,不外泄给客户端
             return {"status": "ask_failed", "retriable": True,
@@ -203,8 +224,13 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
             if q.include_contexts:
                 d["text"] = c.text
             citations.append(d)
+        # smart-ask 第 1 层:拒答/部分拒答时给可操作 hints(正常答案不打扰)
+        hints = (smart.build_hints(q.query, auto=auto, req_kind=q.kind, req_rerank=q.rerank,
+                                   numeric=numeric)
+                 if cfg.smart_ask and smart.is_refusal(ans.text) else [])
         return {"status": "ok", "answer": ans.text, "citations": citations,
                 "n_contexts": ans.n_contexts, "model": cfg.llm_model,
-                "finish_reason": getattr(gen.llm, "last_finish_reason", None)}
+                "finish_reason": getattr(gen.llm, "last_finish_reason", None),
+                "auto": auto, "hints": hints}
 
     return app

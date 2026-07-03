@@ -15,6 +15,11 @@
 
 ## v0.2 候选(按优先级)
 
+- [x] **smart-ask(D9)已落地(2026-07-04)**:hints(拒答时 ≤3 条可操作建议)+ 失败驱动表格
+  补检(数值题第一轮拒答→带 kind=table 腿重试一轮,**择优采用**:完整答出才替换)。
+  四轮 88 题实验定形(前置腿/浅精排池/无条件采用三版负结果全留档),实录见 TESTING §3。
+  `PHAROS_SMART_ASK=off` 回纯净模式;eval 用 `--smart-tables` 跑同源生产行为。
+
 - [x] ~~P1 systemd/自启~~ **已落地(2026-07-03)**:`/etc/systemd/system/pharos.service`
   (enabled,Restart=always,崩溃自愈实测通过:kill 主进程 8 秒内自动恢复);Windows 登录自启 =
   启动文件夹 `PharosWSL.vbs`(静默拉起 WSL 并保持一个客户端连接——**WSL 空闲无客户端会休眠**,

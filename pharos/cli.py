@@ -71,6 +71,10 @@ def cmd_ask(args) -> None:
         for c_ in data["citations"]:
             sec = f" §{c_['section']}" if c_.get("section") else ""
             print(f"  [{c_['marker']}] {c_['title']} (p.{c_['page']}{sec})  {c_['chunk_id']}")
+    if data.get("hints"):
+        print("\n💡 提示:")
+        for h in data["hints"]:
+            print(f"  · {h}")
     if data.get("finish_reason") == "length":
         print("\n⚠ 答案被 max_tokens 截断(finish_reason=length)。", file=sys.stderr)
 
