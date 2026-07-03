@@ -15,8 +15,11 @@
 
 ## v0.2 候选(按优先级)
 
-- **P1 systemd/自启**:WSL 里给 `pharos serve` 配 systemd unit(或 Windows 任务计划唤 WSL),
-  开机即有;现在要手动起。
+- [x] ~~P1 systemd/自启~~ **已落地(2026-07-03)**:`/etc/systemd/system/pharos.service`
+  (enabled,Restart=always,崩溃自愈实测通过:kill 主进程 8 秒内自动恢复);Windows 登录自启 =
+  启动文件夹 `PharosWSL.vbs`(静默拉起 WSL 并保持一个客户端连接——**WSL 空闲无客户端会休眠**,
+  连带 systemd 服务一起停,保活连接是必须的,不是装饰)。运维:`systemctl {status|restart} pharos`、
+  日志 `journalctl -u pharos -f`;取消自启=删 .vbs + `systemctl disable pharos`。
 - [x] ~~P1 /v1/ask 支持检索过滤~~ **已落地(2026-07-02)**:Generator.answer 可选 kwargs 按需透传,
   `pharos ask --kind table` 等;动机与实证见 COMPONENT_NOTES N3(Netflix 营收案例)。
 - [x] ~~分部数字被错引申成总体~~ **已修(2026-07-03)**:SYSTEM 窄靶数值范围约束 + source 行并入
@@ -24,10 +27,9 @@
 - [x] ~~P2 表格块检索文本增强~~ **已落地(2026-07-03,引擎 2bd97a5)**:面包屑+表头+行标签进
   检索文本(存在性门控保 chunk id 稳定);两索引已重建;动机案例中文 kind=table 直接答对。
   回归取舍与完整实录见 TESTING §3。
-- **P2 gold 集补表格题**(增强回归暴露的测量盲区):现 72 题 gold 采样自散文块,表格可答题型
-  近乎为零——表格相关改动在该 gold 上只会显示成本(冗余 gold 位移)不显示收益(动机案例类)。
-  做法:gen_gold 对 kind=table 且 content_raw 非空的块定向采样 10-15 题(问表内数值/对比),
-  与现 gold 合并;之后表格向改动才有对称的验收标尺。
+- [x] ~~P2 gold 集补表格题~~ **已落地(2026-07-03,引擎 2ccda93)**:16 道表格题(QC 拦幻觉),
+  gold 72→88 口径断代;新基线与拆分见 TESTING §3。表格题当前 检索 0.750/正确 0.625/忠实 1.000
+  ——4 个检索 miss + 2 个表格读数错 = 下一步表格向工作的对称标尺。
 - **P2 观测**:请求日志落盘(query/耗时/status 计数),/healthz 加 model_loaded 与索引统计。
 - **P2 解析编排**:`pharos parse <pdf|docx|xlsx…>` 调 MinerU(在线 API tokens 已有)→ 直接
   ingest 新文档,不再依赖引擎仓预解析产物。

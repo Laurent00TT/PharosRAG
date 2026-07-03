@@ -35,6 +35,8 @@ cp .env.example .env                 # 默认 PHAROS_TENANT=demo,匹配 ~/rag_re
 conda activate navikb
 
 # 1) 起守护进程(独占索引;首次 retrieve 时加载 dense 模型,~20s-2min)
+#    日常已由 systemd 托管(开机自启+崩溃自愈):systemctl status pharos / journalctl -u pharos -f
+#    手动跑(python -m pharos serve)仅调试用 —— 先 sudo systemctl stop pharos(索引单客户端锁)
 python -m pharos serve
 
 # 2) 问答(另一个终端;闭管道,带引用)
