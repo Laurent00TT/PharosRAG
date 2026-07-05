@@ -1,21 +1,39 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "pharos"
-version = "0.1.0"
-description = "Pharos(法罗斯):多格式 agentic RAG 服务 —— HTTP API 闭管道问答 + MCP agentic 双出口"
+version = "0.3.0"
+description = "Pharos(法罗斯):自包含多格式 agentic RAG 系统 —— 解析→分块→混合检索→生成,HTTP 闭管道问答 + MCP 双出口"
+readme = "README.md"
 requires-python = ">=3.10"
+# 核心 = 闭管道跑起来的最小集(引擎三包折入后,其运行依赖并入此处)。
+# GPU dense/rerank 走 [gpu] extra;解析/表格/office 各自 extra;详见 requirements-gpu.txt。
 dependencies = [
-    "fastapi>=0.110",
+    "fastapi>=0.110",       # HTTP 服务
     "uvicorn>=0.29",
-    "httpx>=0.27",
-    "mcp>=1.0",
-    "openai>=1.30",
+    "httpx>=0.27",          # MCP 适配器 -> 守护进程
+    "mcp>=1.0",             # MCP 出口
+    "openai>=1.30",         # generator 的 OpenAI-compatible LLM(DeepSeek)
+    "qdrant-client>=1.12",  # embedder 向量库(named dense+sparse, RRF, Modifier.IDF)
+    "jieba",                # embedder BM25 sparse 中文分词(纯 CPU)
+    "numpy",
 ]
+
+[project.optional-dependencies]
+# dense(Qwen3-VL-Embedding-8B)+ reranker,GPU 重依赖;本机在 WSL navikb(torch cu128)。
+gpu = ["transformers>=4.57.0", "qwen-vl-utils>=0.0.14", "torch>=2.8.0", "accelerate"]
+# 解析编排(pharos parse / MinerU 客户端 + chunker.meta 页码元数据)
+parse = ["pypdf", "requests"]
+# 表格分块(xlsx)
+table = ["openpyxl", "xlrd"]
+# 旧回退适配器(office 主路是 MinerU;docx/pptx 适配器为 deprecated 兜底)
+docx = ["python-docx", "python-pptx"]
+dev = ["pytest>=8"]
 
 [project.scripts]
 pharos = "pharos.cli:main"
 
-[tool.setuptools]
-packages = ["pharos"]
-
-[dependency-groups]
-dev = ["pytest>=8"]
+[tool.setuptools.packages.find]
+where = ["src"]

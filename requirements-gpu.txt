@@ -1,0 +1,12 @@
+# Pharos GPU 栈(dense embedder + reranker)——等价于 pyproject 的 [gpu] extra,但钉死本机实测版本。
+# 本机实际环境:WSL Ubuntu conda env `navikb`,GPU=RTX 4090(按名锁定),torch 2.8.0+cu128。
+# 模型(Qwen3-VL-Embedding-8B / reranker)用 modelscope 下到 ~/models,其官方 scripts/ 目录随下载而来,
+# dense.py/rerank.py 运行时 sys.path.insert 加载它 —— 不是本仓代码,勿删(见 docs 不变量)。
+#
+# 安装(在 navikb):pip install -r requirements-gpu.txt
+# 或用 extra:pip install -e .[gpu]
+
+torch>=2.8.0          # 必须 CUDA 版(cu128);conda/官方 index 装
+transformers>=4.57.0
+qwen-vl-utils>=0.0.14
+accelerate
