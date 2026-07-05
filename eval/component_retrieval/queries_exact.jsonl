@@ -1,0 +1,25 @@
+{"query": "2048122", "golden": "academic_paper__2023.acl-long.386#0032", "kind": "exact"}
+{"query": "100244", "golden": "academic_paper__2023.acl-long.386#0033", "kind": "exact"}
+{"query": "CLEF-2021", "golden": "academic_paper__2023.acl-long.386#0036", "kind": "exact"}
+{"query": "Section 6.1", "golden": "academic_paper__2309.17421v2#0004", "kind": "exact"}
+{"query": "Section 9.7", "golden": "academic_paper__2309.17421v2#0005", "kind": "exact"}
+{"query": "218553", "golden": "academic_paper__2309.17421v2#0015", "kind": "exact"}
+{"query": "1819910", "golden": "academic_paper__2309.17421v2#0017", "kind": "exact"}
+{"query": "08311977", "golden": "academic_paper__2309.17421v2#0041", "kind": "exact"}
+{"query": "$1196", "golden": "academic_paper__2309.17421v2#0387", "kind": "exact"}
+{"query": "CoNLL-2002", "golden": "academic_paper__D18-1034#0033", "kind": "exact"}
+{"query": "1646860", "golden": "financial_report_en__AMAZON_2017_10K#0002", "kind": "exact"}
+{"query": "409051", "golden": "financial_report_en__ASX_AJY_2020#0002", "kind": "exact"}
+{"query": "$33,823,183,533", "golden": "financial_report_en__NETFLIX_2015_10K#0005", "kind": "exact"}
+{"query": "$2,400", "golden": "financial_report_en__NETFLIX_2015_10K#0039", "kind": "exact"}
+{"query": "$1,500.0", "golden": "financial_report_en__NETFLIX_2015_10K#0089", "kind": "exact"}
+{"query": "$1,098.6", "golden": "financial_report_en__NETFLIX_2015_10K#0092", "kind": "exact"}
+{"query": "415000", "golden": "financial_research_zh__AP202601231818309962#0034", "kind": "exact"}
+{"query": "20260105", "golden": "financial_research_zh__AP202601261818429332#0003", "kind": "exact"}
+{"query": "50585608", "golden": "financial_research_zh__AP202601261818429332#0046", "kind": "exact"}
+{"query": "59707105", "golden": "financial_research_zh__AP202601261818429332#0047", "kind": "exact"}
+{"query": "$10,000", "golden": "government__21-00620-INLSR-Vol2_Report-FINAL#0005", "kind": "exact"}
+{"query": "$44,200", "golden": "government__21-00620-INLSR-Vol2_Report-FINAL#0061", "kind": "exact"}
+{"query": "$14,000", "golden": "government__21-00620-INLSR-Vol2_Report-FINAL#0083", "kind": "exact"}
+{"query": "PUB-002493", "golden": "law__2021687414#0000", "kind": "exact"}
+{"query": "$63,700", "golden": "law__2021687414#0058", "kind": "exact"}

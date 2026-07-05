@@ -1,0 +1,31 @@
+{"query": "How can large language models be used to decompose fact-checking into structured reasoning steps?", "golden": "academic_paper__2023.acl-long.386#0003", "lang": "en", "kind": "semantic"}
+{"query": "How can a question-answering component be implemented to work in both open-book and closed-book settings during fact verification?", "golden": "academic_paper__2023.acl-long.386#0011", "lang": "en", "kind": "semantic"}
+{"query": "What evaluation metrics and dataset variants are used to benchmark few-shot fact-checking models against fine-tuned and in-context learning baselines?", "golden": "academic_paper__2023.acl-long.386#0013", "lang": "en", "kind": "semantic"}
+{"query": "What types of inputs does a multimodal vision-language model support, including combinations of text and images?", "golden": "academic_paper__2309.17421v2#0011", "lang": "en", "kind": "semantic"}
+{"query": "Can a vision-language model handle tasks that involve only text, without any images?", "golden": "academic_paper__2309.17421v2#0012", "lang": "en", "kind": "semantic"}
+{"query": "How can a multimodal model extract and aggregate specific numerical values from multiple scanned documents?", "golden": "academic_paper__2309.17421v2#0018", "lang": "en", "kind": "semantic"}
+{"query": "How can named entity recognition be transferred to low-resource languages that lack annotated training data?", "golden": "academic_paper__D18-1034#0001", "lang": "en", "kind": "semantic"}
+{"query": "What is the step-by-step process for aligning word embeddings across languages to enable cross-lingual transfer?", "golden": "academic_paper__D18-1034#0006", "lang": "en", "kind": "semantic"}
+{"query": "How are translated source-language words used together with target-language labels to train a sequence labeling model?", "golden": "academic_paper__D18-1034#0008", "lang": "en", "kind": "semantic"}
+{"query": "When was this company founded and where did it go public?", "golden": "financial_report_en__AMAZON_2017_10K#0009", "lang": "en", "kind": "semantic"}
+{"query": "How does the company make money from third-party merchants selling on its platform?", "golden": "financial_report_en__AMAZON_2017_10K#0012", "lang": "en", "kind": "semantic"}
+{"query": "How did the global health crisis in 2020 affect business operations and future planning?", "golden": "financial_report_en__ASX_AJY_2020#0003", "lang": "en", "kind": "semantic"}
+{"query": "How did the company hold its shareholder meeting during the pandemic?", "golden": "financial_report_en__ASX_AJY_2020#0005", "lang": "en", "kind": "semantic"}
+{"query": "Did the company repurchase any of its own shares during the fiscal year?", "golden": "financial_report_en__ASX_AJY_2020#0006", "lang": "en", "kind": "semantic"}
+{"query": "How did the Federal Reserve conduct anti-money laundering oversight during the pandemic when in-person activities were restricted?", "golden": "government__21-00620-INLSR-Vol2_Report-FINAL#0018", "lang": "en", "kind": "semantic"}
+{"query": "What role did US law enforcement play in helping recover assets looted by a former African head of state?", "golden": "government__21-00620-INLSR-Vol2_Report-FINAL#0024", "lang": "en", "kind": "semantic"}
+{"query": "What are the details of the large-scale economic development zone established between a small East African nation and a major Asian power, including its size, job creation goals, and financing structure?", "golden": "law__2021687414#0035", "lang": "en", "kind": "semantic"}
+{"query": "What criticisms have been raised about large infrastructure investments in a small African country failing to benefit local workers, and how is the investor country's appetite for such projects changing?", "golden": "law__2021687414#0043", "lang": "en", "kind": "semantic"}
+{"query": "How does a Middle Eastern country align its national development strategy with a foreign power's global infrastructure initiative, and what sectors does their cooperation cover?", "golden": "law__2021687414#0046", "lang": "en", "kind": "semantic"}
+{"query": "英伟达在2026年初的科技展会上发布了哪些面向数据中心和人工智能推理的新硬件平台和开源模型？", "golden": "financial_research_zh__AP202601131816964706#0005", "lang": "zh", "kind": "semantic"}
+{"query": "AI大模型公司如何将健康类应用的个人数据整合进医疗服务产品？", "golden": "financial_research_zh__AP202601131816964706#0007", "lang": "zh", "kind": "semantic"}
+{"query": "某顶级芯片企业在年度技术大会上一次性发布多款计算硬件和开源模型的具体内容是什么？", "golden": "financial_research_zh__AP202601131816964706#0009", "lang": "zh", "kind": "semantic"}
+{"query": "半导体巨头与出行平台合作推进无人驾驶商业化落地的最新进展如何？", "golden": "financial_research_zh__AP202601131816964706#0010", "lang": "zh", "kind": "semantic"}
+{"query": "全球最大合约芯片制造商近年资本支出规划及其对上下游产业链的带动效应是什么？", "golden": "financial_research_zh__AP202601231818309962#0001", "lang": "zh", "kind": "semantic"}
+{"query": "存储器行业景气复苏时封装测试厂商会如何调整产能与定价？", "golden": "financial_research_zh__AP202601231818309962#0002", "lang": "zh", "kind": "semantic"}
+{"query": "先进工艺产能需求强劲时，全球领先晶圆代工厂如何分配其年度资本投入预算？", "golden": "financial_research_zh__AP202601231818309962#0029", "lang": "zh", "kind": "semantic"}
+{"query": "成熟制程和先进制程晶圆代工分别面临怎样的涨价压力？国内企业有哪些受益机会？", "golden": "financial_research_zh__AP202601231818309962#0031", "lang": "zh", "kind": "semantic"}
+{"query": "人工智能基础设施投资大规模增长对服务器及相关存储芯片供需格局带来哪些影响？", "golden": "financial_research_zh__AP202601261818429332#0005", "lang": "zh", "kind": "semantic"}
+{"query": "国内哪些半导体和算力相关企业受AI需求拉动实现了较高的业绩增速？", "golden": "financial_research_zh__AP202601261818429332#0006", "lang": "zh", "kind": "semantic"}
+{"query": "某周期内电子行业各细分板块相对大盘的涨跌表现以及推荐关注哪些投资方向？", "golden": "financial_research_zh__AP202601261818429332#0007", "lang": "zh", "kind": "semantic"}
+{"query": "云计算巨头大规模扩充数据中心引发处理器短缺时，头部芯片供应商会采取什么应对措施？", "golden": "financial_research_zh__AP202601261818429332#0010", "lang": "zh", "kind": "semantic"}
