@@ -1,4 +1,4 @@
-"""v0.3 团队版单测(D10 多身份 + D11 观测):keys 解析 fail-closed / 401 / 身份流到引擎 /
+"""团队服务面单测(D10 多身份 + D11 观测):keys 解析 fail-closed / 401 / 身份流到引擎 /
 跨用户会话隔离 / stats admin 门控 / 非回环启动守卫 / 请求日志(不落 key、query 截断/可关)。"""
 import json
 import os

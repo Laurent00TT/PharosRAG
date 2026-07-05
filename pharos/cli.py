@@ -101,7 +101,7 @@ def cmd_health(args) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="pharos", description="Pharos:个人多格式 agentic RAG 系统")
+    p = argparse.ArgumentParser(prog="pharos", description="Pharos:多格式 agentic RAG 服务")
     p.add_argument("--version", action="version", version=f"pharos {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
     ksub = sp.add_subparsers(dest="keys_cmd", required=True)
     kn = ksub.add_parser("new", help="生成新身份并写入 keys 文件(key 只打印这一次)")
     kn.add_argument("name", help="身份名(进请求日志,不含敏感信息)")
-    kn.add_argument("--tenant", required=True, help="ACL tenant(个人库建的是 demo)")
+    kn.add_argument("--tenant", required=True, help="ACL tenant(示例库建库 tenant=demo)")
     kn.add_argument("--principals", default="", help="逗号分隔 principals")
     kn.add_argument("--admin", action="store_true", help="可读 /v1/stats")
     kn.add_argument("--file", default=None, help="keys 文件(默认 PHAROS_KEYS_FILE 或 ~/pharos.keys.json)")

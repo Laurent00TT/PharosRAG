@@ -68,6 +68,9 @@ tar czf ~/backups/pharos_$(date +%F).tar.gz \
 sudo systemctl start pharos
 ```
 
+> 上面按默认路径打包(索引 `~/rag_real`、keys `~/pharos.keys.json`)。若改过 `PHAROS_INDEX_DIR` /
+> `PHAROS_KEYS_FILE` / `PHAROS_LOG_DIR`,把 tar 的对应路径换成实际值。
+
 **实测(2026-07-04)**:备份 27MB / 3 秒;恢复(解包→备用目录→新实例拉起→77 篇可见 + 检索验证)
 **RTO = 33 秒**。⚠ 该 33 秒是**热模型**下测得(演练紧接主服务停机、dense 模型仍在显存);
 **冷启动**(重启机器/换机)首次检索会触发模型 lazy load(§7),真实 RTO 到"可服务" ≈ 33s + 20s~2min。
@@ -76,8 +79,9 @@ sudo systemctl start pharos
 
 ## 6. 观测(D11)
 
-- **请求日志** `~/pharos_logs/requests.jsonl`,每行:`{ts, ep, user(身份名,绝不含 key), http,
-  ms, query(截 120 字,PHAROS_LOG_QUERIES=off 可关), status/n/auto/n_citations/refusal}`。
+- **请求日志** `~/pharos_logs/requests.jsonl`,每行:`{ts, ep, user, http, ms,
+  query(截 120 字,PHAROS_LOG_QUERIES=off 可关), status/n/auto/n_citations/refusal}`。
+  `user` = keys 模式身份名(绝不含 key);legacy/open 单身份下恒为 `default`/`local`(此时无法按人区分请求)。
   单文件追加;体积大了用 logrotate 或直接 mv 走(服务不持句柄常开)。
 - **/v1/stats**(keys 模式 admin-only):每端点 n/errors/p50/p95/max、uptime、会话数、日志写失败计数。
   重启归零(设计内)。

@@ -1,7 +1,7 @@
 [project]
 name = "pharos"
 version = "0.1.0"
-description = "Pharos(法罗斯):个人多格式 agentic RAG 系统 —— HTTP API 闭管道问答 + MCP agentic 双出口"
+description = "Pharos(法罗斯):多格式 agentic RAG 服务 —— HTTP API 闭管道问答 + MCP agentic 双出口"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",

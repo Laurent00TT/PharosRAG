@@ -144,8 +144,9 @@ mode/strategy 等枚举校验故意**不在 pydantic 层做**(否则变 422),留
 
 ### D11:可观测性 —— 请求日志 + 内存指标,够用为度
 
-- **请求日志**:JSONL 追加(`PHAROS_LOG_DIR`,默认 ~/pharos_logs),每行 {ts, ep, user(身份名),
-  http, ms, status, n/n_citations/auto/refusal, query(截断,`PHAROS_LOG_QUERIES=off` 可关)}。
+- **请求日志**:JSONL 追加(`PHAROS_LOG_DIR`,默认 ~/pharos_logs),每行 {ts, ep, user, http, ms,
+  status, n/n_citations/auto/refusal, query(截断,`PHAROS_LOG_QUERIES=off` 可关)}。`user` = keys 模式下
+  的身份名,legacy/open 单身份模式恒为占位 `default`/`local`(**绝不落 key 本体**)。
   **绝不落盘 key 本体**;query 记录默认开(内网调试价值 > 隐私风险,可关并已文档化)。
 - **指标**:进程内存(计数器 + 每端点延迟环形队列)→ `/v1/stats`(keys 模式下 admin key
   才可读——聚合查询模式也是信息);重启归零(当前可接受,持久化指标见 TODO,需要时再做)。

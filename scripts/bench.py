@@ -1,4 +1,4 @@
-"""并发压测(v0.3-T3):对 live 守护进程打混合负载,输出 p50/p95/max/吞吐/错误数。
+"""并发压测:对 live 守护进程打混合负载,输出 p50/p95/max/吞吐/错误数。
 
 用法(WSL navikb):
   python scripts/bench.py --key <API_KEY> --clients 5 --n 10 [--ask-ratio 0.1]

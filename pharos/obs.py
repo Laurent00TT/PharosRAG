@@ -13,7 +13,7 @@ from collections import defaultdict, deque
 
 
 class Stats:
-    """进程内指标:每端点计数/错误数/延迟环形队列(p50/p95)。重启归零(v0.3 接受)。"""
+    """进程内指标:每端点计数/错误数/延迟环形队列(p50/p95)。重启归零(当前可接受)。"""
 
     def __init__(self, window: int = 1000):
         self._lock = threading.Lock()

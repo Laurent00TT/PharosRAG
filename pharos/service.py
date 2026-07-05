@@ -79,7 +79,7 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
     os.environ["RAG_MAX_CONTEXT_TOKENS"] = str(cfg.max_context_tokens)
     tc = engine.load_toolcore(cfg.engine)
 
-    # ---------- 身份模式(D10):keys(团队)/ legacy(v0.2 单密钥)/ open(仅回环)----------
+    # ---------- 身份模式(D10):keys(团队,默认)/ legacy(单密钥)/ open(仅回环)----------
     if keys is None and cfg.keys_file:
         keys = identity_mod.load_keys(cfg.keys_file)     # 格式错 → SystemExit,拒绝启动
     mode = "keys" if keys else ("legacy" if cfg.api_key else "open")
@@ -186,7 +186,7 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
 
     def _session_keys(request: Request):
         """去重 opt-in:带 X-Pharos-Session 头才启用。登记键带身份名前缀 —— 多用户下即便
-        伪造相同会话 id 也互不可见(v0.2 单身份下"会话碰撞无害"的前提在多用户下不再成立)。"""
+        伪造相同会话 id 也互不可见(单身份下"会话碰撞无害"的前提在多用户下不再成立)。"""
         sid = request.headers.get("x-pharos-session")
         return state.sessions.get(f"{_iden_name(request)}|{sid}") if sid else None
 

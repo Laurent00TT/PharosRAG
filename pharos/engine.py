@@ -1,7 +1,7 @@
 """引擎装配:把 chunk-test-repo 的组件接进 Pharos。
 
 依赖方式 = **path-dep**(sys.path 插入引擎仓的 {chunker,embedder,generator}/src),与引擎仓自身
-的用法(server.py / eval/_common.py)完全一致 —— 单机个人部署,不引入发布/安装环节(决策见 docs/DESIGN.md §4)。
+的用法(server.py / eval/_common.py)完全一致 —— 单机同机部署,不引入发布/安装环节(决策见 docs/DESIGN.md §4)。
 
 toolcore(mcp_server/toolcore.py,纯 stdlib 工具语义层)按**文件路径**加载,不经 sys.path ——
 避免顶层模块名(toolcore)在别的路径下被撞名。

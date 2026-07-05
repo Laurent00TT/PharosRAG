@@ -1,9 +1,9 @@
 # Pharos 测试文档
 
 > 三层:CPU 单测(每改必跑)/ 引擎回归(接缝改动时跑)/ GPU 冒烟(投产前跑)。
-> 本文所有"实测"均为 2026-07-02 在 WSL `navikb`(4090)真实运行结果。
+> 数字均为 WSL `navikb`(4090)真实运行结果,非估算。
 
-## 1. CPU 单测(38 项,~2s,不碰 Qdrant/GPU/网络)
+## 1. CPU 单测(59 项,~2s,不碰 Qdrant/GPU/网络)
 
 ```bash
 conda activate navikb && cd pharos && python -m pytest tests -q
@@ -15,11 +15,13 @@ conda activate navikb && cd pharos && python -m pytest tests -q
 | test_service.py | healthz;六端点 wiring;**no_identity fail-closed**;bad_arg 走结构化不走 422;API key 门槛(healthz 豁免/错 key 拒);**per-session 去重隔离 + 无头不去重**;ask(引用映射/include_contexts/空 query/llm_unconfigured/ask_failed 不泄内部细节) |
 | test_adapter.py | 六工具转发参数映射;backend-down→结构化 backend_unavailable(hint 指向 pharos serve);401/5xx/非 JSON 映射;会话头存在;instructions 与引擎同源 |
 | test_review_fixes.py | 对抗评审 P1 修复回归:no_identity hint 指 PHAROS_TENANT;indexer 拒 restricted+空 allow;工厂异常降级 ask_failed;doc_id URL 编码/空参本地拒/3xx 结构化;.env 行内注释/引号/int 指名报错/覆盖路径 expanduser;**适配器与引擎六工具 docstring 逐字同文**(直接 exec 引擎 server.py 断言) |
+| test_smart.py | smart-ask(D9):数值题拒答才触发表格腿重试(择优采用)/ 非数值不触发 / 显式 kind 尊重 / 开关 / 拒答 hints |
+| test_team.py | 多身份(D10):keys 解析 fail-closed / 401 / 身份逐请求流到引擎 / 跨用户会话隔离 / stats admin 门控 / 非回环启动守卫 / name 唯一+禁`\|` / keys new 不裸抛 / 观测崩溃安全 / 结构化失败计 errors / 日志不落 key+截断可关 |
 
 工具语义本体(already_returned/omitted_budget/预算含资产/无权不泄存在性…)**不在 Pharos 重测**——
 单一来源在引擎 toolcore,由引擎 test_tools.py(22 项)覆盖。
 
-**实测**:`38 passed, 1 warning in 1.88s`(N3 检索过滤落地后 +2:ask 过滤透传 / bad strategy 结构化)。
+**实测**:`59 passed`(六个测试文件:sessions/service/adapter/review_fixes/smart/team)。
 
 ## 2. 引擎回归(toolcore 拆分后)
 

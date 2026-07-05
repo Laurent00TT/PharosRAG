@@ -1,6 +1,6 @@
 """Pharos 配置:全走环境变量(PHAROS_*),启动时读取一次成不可变 dataclass。
 
-设计:不引入 toml/yaml —— 与引擎组件(RAG_* 环境变量)同一风格,个人部署一个 .env 就够;
+设计:不引入 toml/yaml —— 与引擎组件(RAG_* 环境变量)同一风格,单实例部署一个 .env 就够;
 .env 读取用极简解析(复用 eval/_common.py 的做法,免 python-dotenv 依赖),已存在的环境变量优先。
 """
 from __future__ import annotations
@@ -79,7 +79,7 @@ class PharosConfig:
     # 服务
     host: str = "127.0.0.1"
     port: int = 8787
-    api_key: str = ""            # legacy 单密钥模式(个人,v0.2 兼容)
+    api_key: str = ""            # legacy 单密钥模式(单人门槛)
     keys_file: str = ""          # keys 模式(团队,D10):JSON 文件路径,配了即启用多身份
     log_dir: str = ""            # 请求日志目录(D11);空=关
     log_queries: bool = True     # 日志是否含 query 文本(截断;内网默认开)

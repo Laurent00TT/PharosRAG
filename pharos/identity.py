@@ -2,7 +2,7 @@
 
 三种模式(service.py 按配置自动选):
   keys   —— 团队:PHAROS_KEYS_FILE 指向 JSON,每请求 X-API-Key 解析成身份;未知/缺失一律 401。
-  legacy —— 个人(向后兼容 v0.2):只设 PHAROS_API_KEY,单密钥 + 启动绑定身份。
+  legacy —— 单人/一道门槛:只设 PHAROS_API_KEY,单密钥 + 启动绑定身份。
   open   —— 都不设:仅限回环地址的无鉴权模式。
 
 fail-closed 铁律:keys 文件格式错 → 拒绝启动(不静默降级);非回环绑定必须 keys 模式
