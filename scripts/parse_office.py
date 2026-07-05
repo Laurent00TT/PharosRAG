@@ -24,7 +24,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-DEFAULT_MINERU = "C:/Users/11541/Desktop/projects/MinerU"
+DEFAULT_MINERU = os.path.expanduser("~/MinerU")   # MinerU 源仓;env MINERU_REPO 覆盖
 sys.path.insert(0, os.environ.get("MINERU_REPO", DEFAULT_MINERU))
 
 from loguru import logger                                        # noqa: E402

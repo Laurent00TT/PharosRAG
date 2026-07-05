@@ -63,7 +63,7 @@ sudo systemctl stop pharos                       # 单客户端锁:必须先停
 mkdir -p ~/backups                               # 新机上 ~/backups 未必存在,先建
 tar czf ~/backups/pharos_$(date +%F).tar.gz \
     -C ~ rag_real pharos.keys.json \
-    -C /mnt/c/Users/11541/Desktop/projects/pharos .env
+    -C /path/to/pharos .env                      # 换成你的 pharos 仓路径
 sudo systemctl start pharos
 ```
 

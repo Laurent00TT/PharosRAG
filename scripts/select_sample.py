@@ -17,7 +17,7 @@ from pathlib import Path
 
 # 语料构建脚本(一次性):从外部数据集(knowledge-base/datasets)选样并写 sample_manifest.csv。
 # KB_ROOT = 外部数据集根(不在本仓;env PHAROS_KB_ROOT 覆盖);REPO = 本仓根(__file__ 相对)。
-KB_ROOT = Path(os.environ.get("PHAROS_KB_ROOT", r"C:\Users\11541\Desktop\projects\knowledge-base"))
+KB_ROOT = Path(os.environ.get("PHAROS_KB_ROOT") or os.path.expanduser("~/knowledge-base"))
 DS = KB_ROOT / "datasets"
 REPO = Path(__file__).resolve().parent.parent
 CORPUS = REPO / "corpus"
