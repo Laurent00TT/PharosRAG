@@ -1,6 +1,6 @@
-"""Pharos CLI:serve(HTTP 守护进程)/ mcp(薄适配器)/ index(建库)/ ask(一次性问答)/ health。
+"""Pharos CLI:serve(HTTP 守护进程)/ mcp(薄适配器)/ index(建库)/ parse(解析语料)/ ask(问答)/ health。
 
-serve/index 需要 WSL navikb 环境(GPU + 引擎依赖);mcp/ask/health 只需 httpx(+ mcp 包)。
+serve/index 需要 WSL navikb 环境(GPU + 引擎依赖);parse 需 MINERU_TOKEN_*;mcp/ask/health 只需 httpx(+ mcp 包)。
 """
 from __future__ import annotations
 
@@ -50,6 +50,15 @@ def cmd_index(args) -> None:
     run_index(cfg, corpus=args.corpus, dest=args.dest, collection=args.collection,
               tenant=args.tenant, visibility=args.visibility, allow=args.allow,
               only=args.only, limit=args.limit)
+
+
+def cmd_parse(args) -> None:
+    from .parser import run_parse
+    cfg = config.from_env()
+    manifest = args.manifest or os.path.join(config.REPO_ROOT, "sample_manifest.csv")
+    dest = os.path.expanduser(args.dest or cfg.corpus_dir or os.path.join(config.REPO_ROOT, "parsed"))
+    corpus_root = args.corpus_root or config.REPO_ROOT
+    run_parse(manifest, dest, corpus_root)
 
 
 def cmd_ask(args) -> None:
@@ -130,6 +139,12 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--only", default=None, help="只建目录名以此前缀开头的文档")
     sp.add_argument("--limit", type=int, default=None, help="只建前 N 篇(冒烟)")
     sp.set_defaults(fn=cmd_index)
+
+    sp = sub.add_parser("parse", help="MinerU 批量解析语料 PDF -> parsed/<doc_id>/(供 index;需 MINERU_TOKEN_*)")
+    sp.add_argument("--manifest", default=None, help="解析清单 CSV(默认仓根 sample_manifest.csv;scripts/select_sample.py 生成)")
+    sp.add_argument("--dest", default=None, help="输出目录(默认 PHAROS_CORPUS_DIR,再默认仓根 parsed/)")
+    sp.add_argument("--corpus-root", default=None, dest="corpus_root", help="解析 manifest 相对 corpus_path 的根(默认仓根)")
+    sp.set_defaults(fn=cmd_parse)
 
     sp = sub.add_parser("ask", help="一次性问答(经守护进程 /v1/ask,闭管道+引用)")
     sp.add_argument("query")

@@ -54,7 +54,8 @@ python -m pharos index --corpus <parsed_dir> --dest ~/rag_real
 sudo systemctl start pharos
 ```
 
-> 从 PDF 生成 parsed/ 的解析编排见 [../scripts/README.md](../scripts/README.md)(需 MinerU token)。
+> 从 PDF 生成 parsed/:`pharos parse --manifest sample_manifest.csv --dest <PHAROS_CORPUS_DIR>`
+> (MinerU 批量解析,需 `MINERU_TOKEN_*`;清单用 `scripts/select_sample.py` 生成,详见 [../scripts/README.md](../scripts/README.md))。
 
 ## 5. 跑 eval(Tier1:DeepSeek 自判,仓内可复现;需停守护进程避 GPU 争用)
 

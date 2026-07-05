@@ -44,6 +44,13 @@ def test_build_retriever_asserts_model_scripts(tmp_path):
         build_retriever(make_cfg(dense_model_path=str(tmp_path / "no-such-model")))
 
 
+# ---------- pharos parse:manifest 缺失时清晰报错(不静默/不裸抛)----------
+def test_pharos_parse_missing_manifest(tmp_path):
+    from pharos.parser import run_parse
+    with pytest.raises(SystemExit, match="manifest 不存在"):
+        run_parse(str(tmp_path / "nope.csv"), str(tmp_path / "out"), str(tmp_path))
+
+
 # ---------- ask:工厂非 ValueError 异常不再裸抛 500 ----------
 def test_ask_factory_runtime_error_degrades():
     def boom(retriever, cfg):
