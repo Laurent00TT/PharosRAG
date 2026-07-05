@@ -15,3 +15,28 @@ build/
 # 团队版:密钥文件与请求日志(绝不入库)
 *.keys.json
 pharos_logs/
+
+# MCP 本机配置(含 WSL 绝对路径/用户名;用 .mcp.json.example 占位)
+.mcp.json
+
+# eval 私有产物与基线(含研报节选,绝不入库;均可再生)
+eval/gold*.jsonl
+eval/baseline_*.json
+eval/results_*.json
+eval/verdicts.json
+eval/system_outputs.jsonl
+eval/*.log
+eval/_units/
+eval/_judge/
+
+# 大型可再生数据(解析产物/语料/分块;留在仓外,配置指向)
+corpus/
+corpus_multiformat/
+parsed/
+parsed_office/
+parsed_scanned/
+chunks/
+chunks_proto/
+chunks_realtok/
+unlimited-ocr-out/
+_xlsx_redteam/

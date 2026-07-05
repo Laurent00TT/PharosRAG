@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rag": {
+      "command": "wsl",
+      "args": ["bash", "-lc",
+        "source <PATH_TO_MINICONDA>/etc/profile.d/conda.sh && conda activate <CONDA_ENV> && cd <PATH_TO>/pharos && PHAROS_URL=http://127.0.0.1:8787 python -m pharos mcp"]
+    }
+  }
+}
