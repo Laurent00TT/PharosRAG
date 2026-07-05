@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.set_defaults(fn=cmd_mcp)
 
     sp = sub.add_parser("index", help="从 MinerU 解析目录建索引(需 GPU;先停 serve)")
-    sp.add_argument("--corpus", default=None, help="语料目录(默认引擎仓 parsed/)")
+    sp.add_argument("--corpus", default=None, help="语料目录(MinerU 解析产物;默认 PHAROS_CORPUS_DIR)")
     sp.add_argument("--dest", default=None, help="索引输出目录(默认 PHAROS_INDEX_DIR=~/rag_real)")
     sp.add_argument("--collection", default=None)
     sp.add_argument("--tenant", default=None, help="ACL tenant(默认 PHAROS_TENANT 或 demo)")

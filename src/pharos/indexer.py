@@ -37,7 +37,10 @@ def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | N
         raise SystemExit("--visibility restricted 需要 --allow 至少一个 principal:"
                          "restricted+空 allow 的文档对任何身份都不可见(fail-closed),"
                          "建库会\"成功\"但全部静默检索不到。")
-    corpus = corpus or os.path.join(cfg.engine, "parsed")
+    corpus = corpus or cfg.corpus_dir
+    if not corpus:
+        raise SystemExit("未指定语料目录:请用 --corpus 或设 PHAROS_CORPUS_DIR"
+                         "(MinerU 解析产物目录;数据留仓外,不随迁移入库)。")
     dest = os.path.expanduser(dest or cfg.index_dir)
     collection = collection or cfg.collection
     acl = {"tenant": (tenant or cfg.tenant or "demo"), "allow": allow_list,

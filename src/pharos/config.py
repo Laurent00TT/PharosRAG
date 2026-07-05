@@ -76,6 +76,7 @@ class PharosConfig:
     sidecar_dir: str = ""
     collection: str = "real"
     dense_dim: int = 1024
+    corpus_dir: str = ""         # 入库语料目录(MinerU 解析产物;留仓外,PHAROS_CORPUS_DIR)
     # 服务
     host: str = "127.0.0.1"
     port: int = 8787
@@ -109,6 +110,7 @@ def from_env() -> PharosConfig:
         sidecar_dir=os.path.expanduser(sidecar) if sidecar else os.path.join(index_dir, "sidecar"),
         collection=os.environ.get("PHAROS_COLLECTION", "real"),
         dense_dim=_int_env("PHAROS_DENSE_DIM", 1024),
+        corpus_dir=os.path.expanduser(os.environ.get("PHAROS_CORPUS_DIR", "").strip()),
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
         port=_int_env("PHAROS_PORT", 8787),
         api_key=os.environ.get("PHAROS_API_KEY", "").strip(),
