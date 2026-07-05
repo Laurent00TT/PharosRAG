@@ -1,5 +1,9 @@
 # 分批对抗评审计划(Batch1-7 + ③ + 去偏/decompose 全量复审)
 
+> ⚠ 历史文档(引擎期):下文路径按**引擎仓旧布局**书写(`mcp_server/` · `embedder/` · `chunker/` 等顶层包,
+> 以及 `mcp_server/AGENTIC_REVIEW_LOG.md`)。折入本仓后:`mcp_server/server.py`→`src/pharos/{mcp_stdio,mcp_adapter}.py`、
+> `mcp_server/toolcore.py`→`src/pharos/toolcore.py`、三包→`src/{chunker,embedder,generator}`;`AGENTIC_REVIEW_LOG.md`/`AGENTIC_TODO.md` 未随迁(引擎期产物)。保留原文作方法论谱系。
+
 把这一长串改动(MCP agentic RAG 的 Batch1-7、表格数值 grounding ③ 修复、去偏评估管道、decompose)做一次**系统的对抗性 agent 复审**。
 Batch2/3 当时已各做过一轮对抗 review(见 `mcp_server/AGENTIC_REVIEW_LOG.md`),但 **③ 修复(最新、改了喂进 LLM 的内容)、Batch4-7、eval 方法论从未被独立对抗复审**——本计划补齐 + 重扫全栈。
 

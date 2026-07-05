@@ -30,3 +30,12 @@
 - **大型可再生数据**(~3.2GB:`corpus/ parsed/ chunks*/ …` + 已建索引 `~/rag_real`)——留仓外,可从源 PDF 经 MinerU 重建,配置指向(`PHAROS_CORPUS_DIR` / `PHAROS_INDEX_DIR`)。
 - **eval 私有产物**(`gold*.jsonl` / `results_*.json` / `verdicts.json` / `baseline_*.json` / `_judge/` / `_units/`)——含研报节选,gitignored,跑一遍脚本即重建。
 - 引擎仓的 `index_real.py` / `index_demo.py`(已被 `src/pharos/indexer.py` 产品化取代)。
+- 引擎各包的 `examples/`、`scratchpad/` 验证/演示脚本(`run_mineru.py` / `verify_dense.py` / `smoke_deepseek.py` /
+  `diag_acl.py` / `e2e*.py` 等)与 `mcp_server/AGENTIC_{REVIEW_LOG,TODO}.md`——引擎期产物,未随迁。`docs/components/` 里
+  引用它们的段落是引擎期原文;要复现相应验证请查引擎仓,或看 `tests/engine/` 的对应单测。
+
+## 一处刻意的默认值变更(stdio-direct)
+
+引擎 stdio server 无 env 时回落 `EmbedConfig` 默认(`~/qdrant_data` / collection `rag_chunks`);折入后 `pharos mcp --direct`
+改走 pharos 配置默认(`~/rag_real` / collection `real`,与守护进程同源)。**旧部署若依赖过 `~/qdrant_data`/`rag_chunks` 默认,
+需显式设 `PHAROS_INDEX_DIR`/`PHAROS_COLLECTION`(或用 `RAG_*` 别名)。**

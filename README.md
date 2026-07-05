@@ -42,8 +42,8 @@ pip install -e .[dev]                    # src-layout 可编辑安装,import 名
 python -m pharos ask "库里关于 X 的内容有哪些?"
 python -m pharos health
 
-# Claude Code agentic:本仓 .mcp.json 已配置(rag → pharos mcp 薄适配器,stdio→HTTP),
-# 各成员在 .mcp.json 里填自己的 PHAROS_API_KEY 即可(前提:守护进程在跑)。
+# Claude Code agentic:复制 .mcp.json.example → .mcp.json(gitignored),填入你的 PHAROS_API_KEY 与本机路径,
+# 即得 rag 工具(pharos mcp 薄适配器,stdio→HTTP;前提:守护进程在跑)。
 # 无守护进程时可用 pharos mcp --direct(stdio 直连,自己加载 GPU 模型,无需常驻服务)。
 ```
 
