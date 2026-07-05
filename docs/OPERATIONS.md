@@ -1,7 +1,7 @@
 # Pharos 运维手册
 
 > 面向:运维本服务的人(可能不是开发者)。所有容量/RTO 数字均为真实实测,非估算。
-> 架构与设计动机见 [DESIGN.md](DESIGN.md)(服务面 = D10-D12)。
+> 架构与设计动机见 [DESIGN.md](DESIGN.md)(服务面 = D10-D11)。
 
 ## 1. 部署拓扑
 
@@ -54,17 +54,16 @@ Windows 登录 ─► 启动文件夹 PharosWSL.vbs(静默保活 WSL,防空闲�
 
 ## 5. 备份 / 恢复(演练实录 2026-07-04)
 
-**要备份的全部状态**:`~/rag_real`(qdrant+sidecar)+ `~/pharos.keys.json` + **两个 `.env`**
-(pharos 仓 + 引擎仓——`.gitignore` 忽略,git 恢复不回来,漏了它服务会 fail-closed 空跑 / ask 无 LLM key)
-+ 两仓 git(代码/文档)。请求日志(~/pharos_logs)按需。
+**要备份的全部状态**:`~/rag_real`(qdrant+sidecar)+ `~/pharos.keys.json` + **`.env`**
+(仓根 `pharos/.env`——`.gitignore` 忽略,git 恢复不回来,漏了它服务会 fail-closed 空跑 / ask 无 LLM key)
++ git(代码/文档,单仓)。请求日志(~/pharos_logs)按需。
 
 ```bash
 sudo systemctl stop pharos                       # 单客户端锁:必须先停
 mkdir -p ~/backups                               # 新机上 ~/backups 未必存在,先建
 tar czf ~/backups/pharos_$(date +%F).tar.gz \
     -C ~ rag_real pharos.keys.json \
-    -C /mnt/c/Users/11541/Desktop/projects/pharos .env \
-    -C /mnt/c/Users/11541/Desktop/projects/chunk-test-repo .env
+    -C /mnt/c/Users/11541/Desktop/projects/pharos .env
 sudo systemctl start pharos
 ```
 
@@ -98,5 +97,5 @@ sudo systemctl start pharos
 | 某用户看不到任何文档 | 该身份 tenant 与建库 tenant 不符(fail-closed) | 核对 keys 文件里的 tenant(示例库建库 tenant=demo) |
 | 首个检索 20s-2min | dense 模型 lazy 加载 | 正常;重启后第一查慢,之后毫秒级 |
 | 一段时间后服务消失 | WSL 空闲休眠(无客户端连接) | 确认启动文件夹 PharosWSL.vbs 在;临时:开个 wsl 窗口 |
-| ask 全部 llm_unconfigured | DEEPSEEK_API_KEY 缺失/过期 | 补 .env(pharos 或引擎仓)+ restart |
+| ask 全部 llm_unconfigured | DEEPSEEK_API_KEY 缺失/过期 | 补 `pharos/.env` + restart |
 | GPU OOM | eval/建库与服务同时跑 rerank | 压测/eval 前 `systemctl stop pharos`(见 TESTING) |

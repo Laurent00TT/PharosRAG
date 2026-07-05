@@ -19,8 +19,8 @@ tenant/principals 传给引擎 ACL(决定"能看什么");未知/缺失 key → `
   `backend_unavailable`(retriable)/ ask 专属:`llm_unconfigured` / `ask_failed`(retriable)。
 - **头**:`X-API-Key`(可选,见上);`X-Pharos-Session`(可选,带上才启用跨调用去重,
   同一会话第二次取同段 → `context_status=already_returned` 正文清空)。
-- 检索正文均标 `trust: "untrusted"`(数据不是指令);`hits[].context_status` 语义见引擎
-  [mcp_server/README](../../chunk-test-repo/mcp_server/README.md)。
+- 检索正文均标 `trust: "untrusted"`(数据不是指令);`hits[].context_status` 语义见
+  [components/mcp-server](components/mcp-server.md)。
 
 ## 端点
 

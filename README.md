@@ -2,8 +2,8 @@
 
 > 亚历山大灯塔守在亚历山大图书馆旁,为航船指路。Pharos 为团队的文档库导航。
 
-把 [chunk-test-repo](../chunk-test-repo) 里逐个打磨过的 RAG 组件(chunker / embedder / generator /
-mcp_server 工具层)组装成一个**面向小团队内部知识库的完整服务**——多身份鉴权、可观测、systemd 托管,双出口:
+逐个打磨过的 RAG 组件(chunker / embedder / generator / MCP 工具层)在同一个仓里组成一个
+**面向小团队内部知识库的完整服务**——多身份鉴权、可观测、systemd 托管,双出口:
 
 | 出口 | 命令 | 消费方 | 模式 |
 |---|---|---|---|
@@ -20,8 +20,8 @@ mcp_server 工具层)组装成一个**面向小团队内部知识库的完整服
  Claude Code ─ stdio ─►│  · ACL 身份启动时绑定(fail-closed)          │     77 篇 / 7652 chunk)
    pharos mcp(薄适配器,│  · per-session 去重(X-Pharos-Session)       │
    零 GPU,毫秒启动)  └──────────────────────────────────────────────┘
-                                │ 引擎(path-dep)
-                        chunk-test-repo:chunker + embedder + generator + mcp_server/toolcore
+                                │  单仓 src/ 直接 import(无跨仓 path-dep)
+     src/{chunker, embedder, generator, pharos(engine + toolcore + mcp_stdio)}
 ```
 
 **为什么是守护进程**:嵌入式 Qdrant 单客户端独占锁 + 8B 模型加载 1-2 分钟。老的 stdio 直连模式每个
@@ -36,12 +36,15 @@ API key,然后:
 
 ```bash
 conda activate navikb
+pip install -e .[dev]                    # src-layout 可编辑安装,import 名不变
+
 # 问答(闭管道,带引用):
 python -m pharos ask "库里关于 X 的内容有哪些?"
 python -m pharos health
 
-# Claude Code agentic:本仓 .mcp.json 已配置(rag → pharos mcp 薄适配器),
+# Claude Code agentic:本仓 .mcp.json 已配置(rag → pharos mcp 薄适配器,stdio→HTTP),
 # 各成员在 .mcp.json 里填自己的 PHAROS_API_KEY 即可(前提:守护进程在跑)。
+# 无守护进程时可用 pharos mcp --direct(stdio 直连,自己加载 GPU 模型,无需常驻服务)。
 ```
 
 管理员建库(语料 = MinerU 解析产物目录):
@@ -73,15 +76,15 @@ sudo systemctl restart pharos
 
 ## 配置
 
-全走环境变量(`.env`,见 [.env.example](.env.example)):`PHAROS_KEYS_FILE`(团队多身份)/
-`PHAROS_INDEX_DIR`(默认 `~/rag_real`)/ `PHAROS_COLLECTION` / `PHAROS_PORT`(8787)/ `PHAROS_HOST`
-(非回环强制 keys 模式)/ `PHAROS_LOG_DIR`(请求日志)/ `DEEPSEEK_API_KEY`(`/v1/ask` 用)/
-`PHAROS_ENGINE`(引擎仓路径,默认同级 `../chunk-test-repo`)。
+全走仓根单一 `.env`(见 [.env.example](.env.example),统一 `PHAROS_*` 命名):`PHAROS_KEYS_FILE`(团队多身份)/
+`PHAROS_CORPUS_DIR`(语料目录)/ `PHAROS_INDEX_DIR`(索引,默认 `~/rag_real`)/ `PHAROS_COLLECTION` /
+`PHAROS_PORT`(8787)/ `PHAROS_HOST`(非回环强制 keys 模式)/ `PHAROS_LOG_DIR`(请求日志)/
+`DEEPSEEK_API_KEY`(`/v1/ask` 用)。旧 `RAG_*` 变量名保留为过渡期弃用别名(仅本版兼容)。
 
 ## 安全模型(必读)
 
-- **身份 = "谁在问"(Pharos 层),ACL = "能看什么"(引擎层)**:X-API-Key 解析成身份,逐请求把
-  该身份的 tenant/principals 传给引擎,引擎 ACL 硬过滤兑现可见性(经 acl_regression 五用户矩阵验证)。
+- **身份 = "谁在问"(接入层),ACL = "能看什么"(检索层)**:X-API-Key 解析成身份,逐请求把
+  该身份的 tenant/principals 传给检索层,ACL 硬过滤兑现可见性(经 acl_regression 五用户矩阵验证)。
 - **fail-closed 处处**:未知/缺失 key 一律 401;keys 文件格式错拒绝启动;**非回环绑定强制 keys 模式**
   (不允许把整库裸奔到局域网);未接权限的文档默认拒绝所有人。
 - **会话隔离**:跨调用去重登记按 `身份|会话` 隔离,不同用户互不可见。
@@ -92,21 +95,26 @@ sudo systemctl restart pharos
 ## 测试
 
 ```bash
-python -m pytest tests -q            # 59 项 CPU 单测(fake retriever + MockLLM,不碰 GPU/网络)
+python -m pytest tests -q            # 179 项 CPU 单测(产品 59 + 引擎 120,含 test_acl.py ACL 谓词)
 ```
 
-GPU 冒烟、并发压测、备份演练、安全评审记录见 [docs/TESTING.md](docs/TESTING.md)。
+单跑产品层用 `pytest tests -q --ignore=tests/engine`(fake retriever + MockLLM,不碰 GPU/网络)。
+GPU 端到端 0-leak 回归(`eval/acl_regression.py`,WSL+4090,非 CPU CI)、并发压测、备份演练、
+安全评审记录见 [docs/TESTING.md](docs/TESTING.md)。
 
 ## 文档索引
 
 | 文档 | 内容 |
 |---|---|
-| [docs/DESIGN.md](docs/DESIGN.md) | 目标/架构/关键决策(含否决的备选)/团队版 D10-D12/风险 |
-| [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) | 模块地图/请求路径/锁模型/与引擎的接缝 |
+| [docs/OVERVIEW.md](docs/OVERVIEW.md) | **系统总览(权威入口)**:全貌/组件地图/如何读这套文档 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 目标/架构/关键决策(含否决的备选)/团队版多身份·可观测/风险 |
+| [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) | 模块地图/请求路径/锁模型/检索层接缝 |
 | [docs/API.md](docs/API.md) | HTTP API 契约(端点/参数/鉴权/status 状态机) |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | **团队运维手册**:部署/密钥/容量实测/备份恢复/故障排查 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试矩阵 + 实测证据(CPU/引擎回归/GPU 冒烟/压测/演练/安全评审) |
+| [docs/TESTING.md](docs/TESTING.md) | 测试矩阵 + 实测证据(CPU 单测/ACL 回归/GPU 冒烟/压测/演练/安全评审) |
 | [docs/TODO.md](docs/TODO.md) | 路线图:后续候选 + 明确不做 |
 | [docs/COMPONENT_NOTES.md](docs/COMPONENT_NOTES.md) | **对既有组件的异议/修复留痕**(供一起 review) |
+| [docs/PROVENANCE.md](docs/PROVENANCE.md) | 组件来历/合仓过程/口径断代留痕 |
 
-引擎组件的设计/评估文档在 chunk-test-repo(入口:[docs/OVERVIEW.md](../chunk-test-repo/docs/OVERVIEW.md))。
+组件级设计/评估文档见 [docs/components/](docs/components/)(chunker / embedder / generator / mcp-server)
+与方法论 [docs/methodology/](docs/methodology/)(惰性标题树 / 多格式实现 / chunking 评估 / review 计划)。

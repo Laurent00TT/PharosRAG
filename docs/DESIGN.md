@@ -4,8 +4,8 @@
 
 ## 1. 目标与非目标
 
-**目标**:把 chunk-test-repo 的四个组件组装成一个**面向小团队内部知识库**的完整 RAG 服务,
-提供两种消费方式且共用同一检索引擎、同一套契约:
+**目标**:把本仓内的四个组件(chunker / embedder / generator / pharos)组装成一个**面向小团队内部知识库**的完整 RAG 服务,
+提供两种消费方式且共用同一检索栈、同一套契约:
 
 1. **闭管道问答**(HTTP `/v1/ask`):一问一答,检索→grounding prompt→DeepSeek→带引用答案。
    系统评估(异厂 Claude 裁判)已定论这是**默认最优消费方式**:忠实度 ≈1.0、正确性 0.847、最便宜。
@@ -15,13 +15,13 @@
 服务面覆盖:多身份鉴权(keys 模式,§D10)、请求日志与指标(§D11)、systemd 托管、备份恢复。
 
 **非目标**(明确不做,理由见 [TODO.md](TODO.md)):HTTPS/公网终结(内网信任边界 + key,要远程走隧道)、
-水平扩展/多副本(嵌入式 Qdrant 天花板,规模驱动的 v2 才做)、SSO/OIDC、解析编排(MinerU 调用仍在引擎仓脚本)、前端 UI。
+水平扩展/多副本(嵌入式 Qdrant 天花板,规模驱动的 v2 才做)、SSO/OIDC、解析编排(MinerU 调用在本仓 `scripts/`)、前端 UI。
 
 ## 2. 核心架构决策
 
 ### D1:守护进程独占资源,一切消费走 HTTP(本项目最重要的决策)
 
-**问题**:引擎的 stdio MCP 直连模式(mcp_server/server.py)有两个实测痛点:
+**问题**:stdio MCP 直连模式(`pharos mcp --direct`,`src/pharos/mcp_stdio.py`)有两个实测痛点:
 - 嵌入式 Qdrant **单客户端独占锁**——第二个进程打开同一索引直接报错(eval 为此专门 copytree 避锁);
 - dense 模型(Qwen3-VL 8B)**加载 1-2 分钟**——stdio 每会话一进程,每开一个 Claude Code 会话重付一次。
 
@@ -30,29 +30,28 @@
 
 **否决的备选**:
 - *每消费方各开索引*:被单客户端锁直接堵死;
-- *MCP 进程内嵌引擎(现状)*:保留在引擎仓作 fallback(不跑守护进程时可用),但每会话重付加载,不作为产品默认;
+- *MCP 进程内直连检索栈(`pharos mcp --direct`)*:本仓保留作 fallback(不跑守护进程时,stdio 直连、无 daemon),但每会话重付加载,不作为产品默认;
 - *Qdrant server 模式(docker)*:解锁多客户端,但引入常驻服务运维 + 数据迁移,当前规模(单实例/小团队)收益不抵复杂度。规模上去后这是 v2 的自然升级路径(EmbedConfig 换 url 即可)。
 
 ### D2:MCP = 零 GPU 依赖的薄适配器
 
 `pharos mcp` 只 import mcp + httpx + toolcore(纯 stdlib),六个工具原样转发 HTTP。
 守护进程未启动时返回结构化 `backend_unavailable`(hint 指向 `pharos serve`),不裸抛。
-工具名/入参/返回契约与引擎 stdio server **完全一致**——agent 侧无感切换。
+工具名/入参/返回契约与本仓 stdio 直连(`pharos mcp --direct`,`src/pharos/mcp_stdio.py`)**完全一致**——agent 侧无感切换。
 
-### D3:工具语义单一来源(引擎 toolcore)
+### D3:工具语义单一来源(toolcore)
 
 HTTP 端点与 MCP 适配器的校验/结构化结果/去重/预算/错误映射/_INSTRUCTIONS 全部来自
-`chunk-test-repo/mcp_server/toolcore.py`(为此做了引擎重构,commit `7fbf709`,留痕见
-[COMPONENT_NOTES.md](COMPONENT_NOTES.md))。**动机**:这层契约经 R1-R5 五轮对抗评审打磨
+`src/pharos/toolcore.py`(留痕见 [COMPONENT_NOTES.md](COMPONENT_NOTES.md))。**动机**:这层契约经 R1-R5 五轮对抗评审打磨
 (already_returned/omitted_budget/预算含资产/无权不泄存在性…),复制一份必然漂移。
-toolcore 按文件路径 importlib 加载(不占 sys.path 顶层名,防撞名)。
+折入本仓后 toolcore 是普通包内模块(`import`,不再按文件路径 importlib 加载)。
 
-### D4:引擎依赖 = path-dep(不发布、不 vendor)
+### D4:单仓自包含(path-dep 已作废)
 
-与引擎仓自身用法(server.py / eval)完全一致:sys.path 插入三个组件包的 src + toolcore 文件加载。
-单实例同机部署,发布/版本管理是纯开销;vendor 复制则必然与引擎漂移。代价:pharos 与引擎仓必须
-同机同布局(默认同级目录,`PHAROS_ENGINE` 可改)——同机部署下可接受,已在 engine.bootstrap
-里给出清晰报错。
+四个组件(chunker / embedder / generator / pharos)现已折入本仓 `src/`,src-layout 可编辑安装
+(`pip install -e .[dev]`),导入名不变。**历史**:早期 pharos 是薄产品壳、经 path-dep(sys.path 插引擎
+src)消费一个独立引擎仓——该跨仓接缝(含 `PHAROS_ENGINE` 定位、`bootstrap()`/版本守卫)**已随合仓拆除**。
+`engine.py` 现只是 `LockedRetriever` + `build_*`,走本仓普通包导入,不再有 sys.path 注入与跨仓漂移面。
 
 ### D5:部署即授权 —— 身份是安全边界的入口
 
@@ -60,11 +59,11 @@ toolcore 按文件路径 importlib 加载(不占 sys.path 顶层名,防撞名)�
 客户端不可经参数篡改;tenant 未设 → toolcore 层 fail-closed(`no_identity`,空结果)。
 身份的三种绑定方式(keys / legacy / open)与多身份产品化见 **§D10**;此处只立不变量:
 默认绑 127.0.0.1、非回环强制鉴权、`/healthz` 是唯一免鉴权端点。
-身份只回答"谁在问",可见性("能看什么")由引擎 ACL 硬过滤兑现(与引擎 stdio server 同一 fail-closed 模型)。
+身份只回答"谁在问",可见性("能看什么")由 embedder 层 ACL 硬过滤兑现(与 stdio 直连路径同一 fail-closed 模型)。
 
 ### D6:去重 opt-in,per-session 隔离
 
-引擎 server.py 的 `_RETURNED_KEYS` 是进程级的(stdio 下进程=会话,成立;其注释明确预告
+stdio 直连路径的 `_RETURNED_KEYS` 是进程级的(stdio 下进程=会话,成立;其注释明确预告
 "换 HTTP 多会话前必须 per-session 隔离")。Pharos 兑现它:`X-Pharos-Session` 头 → SessionRegistry
 (有界 LRU 64 会话)取该会话的 returned_keys;**不带头 = 不去重**(curl 一次性调用不该有
 跨调用状态)。MCP 适配器每进程一个 uuid,自动获得会话语义。冒烟实测:同会话第二次全
@@ -111,7 +110,7 @@ mode/strategy 等枚举校验故意**不在 pydantic 层做**(否则变 422),留
 **腿参数教训**:rerank_top_n 必须 ≥ "对的块在粗排的最差名次"(实测 30 装不进粗排 31-50 名的
 五年表,重试形同虚设;50 一发命中)。精排纠正的是排序,前提是候选池里得有它。
 
-**单一来源**:数值判定/拒答判定/腿参数在引擎 `generator/signals.py`,pharos 与
+**单一来源**:数值判定/拒答判定/腿参数在 `src/generator/signals.py`,pharos 与
 `run_eval --smart-tables` 共用——考卷跑的就是生产行为。
 
 **否决的备选**:前置补检腿(上述实测);默认全局 rerank(每问 +3~5s,散文题收益甚微);
@@ -119,16 +118,17 @@ mode/strategy 等枚举校验故意**不在 pydantic 层做**(否则变 422),留
 
 ## 2b. 服务面:多身份 / 可观测 / 分层(D10-D12)
 
-**分层原则(D12):身份在产品层,ACL 在引擎层。** 身份回答"谁在问"(Pharos 产品关注点),
-可见性回答"能看什么"(引擎关注点,多租户 ACL 机制经 acl_regression 五用户矩阵验证)。两者正交:
-产品层做多身份鉴权时对引擎**零改动**——这是分层设计的检验,若某处必须动引擎则视为分层缺陷、单独评审。
+**分层原则(D12):身份在服务层,ACL 在检索层。** 合仓后这是**本仓内部的模块分层**(不再是跨仓不变量):
+身份回答"谁在问"(pharos 服务层的 identity 模块关注点),可见性回答"能看什么"(embedder 层关注点,
+多租户 ACL 机制经 acl_regression 五用户矩阵验证)。两者正交:服务层做多身份鉴权时,可见性硬过滤的兑现
+**收敛在 embedder ACL 一处**——这是分层职责的检验,身份不越界替 ACL 决策、ACL 不感知具体身份来源。
 
 ### D10:多身份模型 —— API key → 身份,三种模式,fail-closed
 
 - **keys 模式**(团队部署,默认):`PHAROS_KEYS_FILE` 指向 JSON(`{"keys":[{"key","name","tenant",
   "principals",["admin"]}]}`,gitignored、建议 chmod 600)。每个 /v1/* 请求经 X-API-Key
-  解析成身份(name + 引擎 User),**未知/缺失 key 一律 401**;检索时把该身份的 User 传给
-  引擎(引擎 ACL 硬过滤兑现"能看什么")。
+  解析成身份(name + User),**未知/缺失 key 一律 401**;检索时把该身份的 User 传给
+  检索栈(embedder ACL 硬过滤兑现"能看什么")。
 - **legacy / open 模式**(单人 / 本地开发):只设 PHAROS_API_KEY = 单密钥门槛;都不设 = 仅回环无鉴权。
   ⚠ 两者都是**单身份**:所有客户端共享启动绑定的那一个身份,**不是多租户**——多用户务必用 keys 模式。
 - **name 约束**(fail-closed 校验):身份 name 必须**唯一**且**不含 `|`**(它是会话去重登记键
@@ -163,7 +163,7 @@ mode/strategy 等枚举校验故意**不在 pydantic 层做**(否则变 422),留
 | 风险 | 现状 | 缓解 |
 |---|---|---|
 | 守护进程单点(无多副本) | 当前规模可接受 | systemd 自愈 + 适配器结构化降级 + hint 指向恢复动作 |
-| path-dep 引擎漂移 | toolcore 契约测试在引擎仓,pharos 测试同跑 | 两仓测试都绿才算过;COMPONENT_NOTES 记录接缝 |
+| 适配器与 stdio 直连契约漂移 | 合仓后为单仓结构化契约测试(适配器 vs `mcp_stdio` docstring 相等 + `_INSTRUCTIONS` 单一来源自 toolcore) | 一条 pytest 套件(179 passed)全绿才算过;COMPONENT_NOTES 记录接缝 |
 | index 与 serve 抢锁 | 单客户端锁 | indexer 捕获锁错误给明确提示;文档要求先停 serve |
 | 端口暴露即数据暴露 | 默认 127.0.0.1 | PHAROS_API_KEY;公网/HTTPS 明确非目标 |
 | LLM 上游故障 | /v1/ask 返回 ask_failed(retriable) | 细节只进服务端日志,不外泄 |

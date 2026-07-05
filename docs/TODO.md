@@ -13,7 +13,8 @@
 - **P2 per-key 速率限制**:当前无限流,吞吐天花板 ~3.2 req/s 下单个重度用户可饿死他人。按 key
   令牌桶,超限返回结构化 `rate_limited`。
 - **P2 解析编排**:`pharos parse <pdf|docx|xlsx…>` 调 MinerU(在线 API tokens 已有)→ 直接 ingest
-  新文档,不再依赖引擎仓预解析产物,让"加一篇文档"成为一条命令。
+  新文档,让"加一篇文档"成为一条命令。解析现已在本仓(`scripts/parse_batch.py`/`parse_office.py`/
+  `mineru_client.py`,见 [scripts/README](../scripts/README.md));`pharos parse` 子命令化仍待做。
 - **P2 表格向检索**:表格题当前 检索 0.750 / 正确 0.688(88 题基线);4 个检索 miss + 2 个大表读数错
   是对称标尺(TESTING §3)。候选:表格块 embed 增强、跨语言查询辅助。
 - **P3 LLM 有界重试**(COMPONENT_NOTES N6):DeepSeek 偶发 5xx 现打成 `ask_failed`;观察实际频率后
@@ -32,4 +33,4 @@
 
 - **HTTPS/公网终结**:内网信任边界 + API key;要远程走 tailscale 之类隧道,不在应用层做 TLS。
 - **SSO/OIDC**:当前规模不值得引入 IdP 依赖;keys 文件 + 重启的轮换足够。
-- **跨文档综合难题的检索增强**:评估显示 multi_cross 是研究性问题,引擎仓已定论不追。
+- **跨文档综合难题的检索增强**:评估显示 multi_cross 是研究性问题(仓内 eval 已定论),不追。

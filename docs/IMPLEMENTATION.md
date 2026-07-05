@@ -5,19 +5,22 @@
 ## 1. 模块地图
 
 ```
-pharos/
-  config.py       env → 不可变 PharosConfig;.env 双源加载(本仓 → 引擎仓兜底,setdefault 语义)
-  engine.py       引擎装配:bootstrap(sys.path 插三个组件 src)/ load_toolcore(按文件路径 importlib)
-                  / LockedRetriever(线程锁代理)/ build_retriever / build_user / build_generator
+src/pharos/
+  config.py       env → 不可变 PharosConfig;单一 .env(仓根 pharos/.env)加载
+  engine.py       LockedRetriever(线程锁代理)+ build_retriever / build_user / build_generator
+                  工厂,普通 in-repo 导入(from chunker/embedder/generator import …)
+  toolcore.py     transport 无关的工具语义层(六工具原语 + _INSTRUCTIONS 单一来源)
+  mcp_stdio.py    stdio-direct MCP server(pharos mcp --direct 的无守护回退)
   sessions.py     SessionRegistry:per-session returned_keys,有界 LRU(64 会话)
   service.py      FastAPI app 工厂 create_app(cfg, retriever, user, generator_factory 全可注入)
-  smart.py        smart-ask 产品层(D9):拒答检测 + hints;数值判定/补检腿参数来自引擎 signals
+  smart.py        smart-ask 产品层(D9):拒答检测 + hints;数值判定/补检腿参数来自 signals
   mcp_adapter.py  MCP 薄适配器:六工具 → httpx 转发;结构化降级;进程级 uuid 会话头
   indexer.py      pharos index:MinerU 解析目录 → chunker → embedder(index_real.py 的参数化版)
   cli.py          serve / mcp / index / ask / health
   identity.py     多身份(D10):keys 文件解析/生成(fail-closed 校验)/身份 dataclass
   obs.py          可观测(D11):Stats(端点计数+延迟分位)+ RequestLog(JSONL,截断在本层)
-tests/            59 项 CPU 单测(_fakes.py 提供 FakeRetriever/make_app)
+src/{chunker,embedder,generator}/  三个组件包(pip install -e .[dev],src-layout 可编辑安装)
+tests/            179 项(产品 59 + 引擎 120 在 tests/engine/);_fakes.py 提供 FakeRetriever/make_app
 ```
 
 ## 2. 请求路径
@@ -30,7 +33,7 @@ HTTP 请求 ─► API key 中间件 ─► pydantic 请求模型(只定形,不�
   ─► toolcore._retrieve_impl(LockedRetriever, bound_user, …, returned_keys)
         · 校验(no_identity/empty_query/bad_arg)在锁外、检索在锁内
         · already_returned / omitted_budget / 预算含资产 —— 全部 toolcore 原语义
-  ─► _adapt():no_identity 的 hint 翻译成 PHAROS_TENANT 措辞(评审 C2:引擎 hint 指 RAG_TENANT 会死循环误导)
+  ─► _adapt():no_identity 的 hint 统一成 PHAROS_TENANT 措辞(评审 C2:toolcore 底层 hint 若指旧 RAG_TENANT 别名会死循环误导)
   ─► 结构化 dict 原样出(HTTP 200 + status 字段)
 ```
 
@@ -59,7 +62,8 @@ HTTP 请求 ─► API key 中间件 ─► pydantic 请求模型(只定形,不�
 (RequestError→backend_unavailable+`pharos serve` hint;401→unauthorized;3xx→backend_unavailable
 (httpx 不跟随重定向,否则误报"非 JSON");≥400→backend_unavailable;非 JSON→backend_unavailable)。
 路径参数 doc_id 一律 `quote(…, safe="")`(#、/ 不再截断/改路由),空 doc_id 本地即拒(bad_arg)。
-instructions 与引擎同源(toolcore._INSTRUCTIONS);六工具 docstring 与引擎逐字同文(回归测试钉住)。
+instructions 单一来源于 toolcore._INSTRUCTIONS;适配器与 mcp_stdio 的六工具 docstring 逐字同文
+(in-repo 结构化回归测试钉住:adapter vs mcp_stdio docstring 相等 + _INSTRUCTIONS 单源)。
 
 ## 3. 并发与锁
 
@@ -70,14 +74,17 @@ instructions 与引擎同源(toolcore._INSTRUCTIONS);六工具 docstring 与引�
 - toolcore 的 returned_keys set 操作发生在 impl 内(检索锁外)——单会话内的两次并发调用
   理论上可交错,常规用法(一个 agent 会话串行调工具)不构成实际问题,记入 TODO 观察项。
 
-## 4. 与引擎的接缝(全部收在 engine.py)
+## 4. 组件装配(全部收在 engine.py)
 
-| 接缝 | 方式 | 断裂时表现 |
+组件(chunker/embedder/generator)与 toolcore 都是同仓包,`pip install -e .[dev]` 后普通 import;
+engine.py 只做工厂装配,不再有跨仓接缝。
+
+| 装配点 | 方式 | 断裂时表现 |
 |---|---|---|
-| chunker/embedder/generator | sys.path 插 `<engine>/{pkg}/src` | bootstrap 抛 FileNotFoundError,报错含修复提示 |
-| toolcore | importlib 按文件路径加载(模块名 pharos_engine_toolcore) | load_toolcore 抛 FileNotFoundError(要求引擎 ≥ 7fbf709) |
-| 交付预算 | create_app 把 PHAROS_MAX_CONTEXT_TOKENS 写进 RAG_MAX_CONTEXT_TOKENS | —(toolcore 契约) |
-| .env | 本仓 .env → 引擎 .env 兜底(DEEPSEEK_API_KEY 历史在引擎仓) | ask 返回 llm_unconfigured |
+| chunker/embedder/generator | in-repo 包(`from chunker/embedder/generator import …`),src-layout 可编辑安装 | ImportError(未 `pip install -e .`) |
+| toolcore | 同仓模块 `from pharos import toolcore`(六工具原语 + _INSTRUCTIONS) | ImportError |
+| 交付预算 | create_app 把 PHAROS_MAX_CONTEXT_TOKENS 传给 toolcore | —(toolcore 契约) |
+| .env | 单一 .env(仓根 pharos/.env;DEEPSEEK_API_KEY 在此) | ask 返回 llm_unconfigured |
 
 ## 5. 配置兑现
 
@@ -89,9 +96,9 @@ instructions 与引擎同源(toolcore._INSTRUCTIONS);六工具 docstring 与引�
 
 自底向上、每层带测试:
 
-- **引擎重构先行**:mcp_server 拆出 toolcore(transport 无关的工具语义层,引擎 commit `7fbf709`),
-  让引擎 stdio server 与 Pharos HTTP 共用同一套契约(单一来源)。原引擎测试一行未改跑绿 = 拆分无回归的证据。
+- **toolcore 先行**:从 MCP server 拆出 toolcore(transport 无关的工具语义层),让 stdio / HTTP 两条
+  transport 共用同一套契约(单一来源)。组件测试一行未改跑绿 = 拆分无回归的证据。
 - **产品层分层搭建**:config/engine/sessions → service(FastAPI)+ mcp_adapter + indexer + cli →
   身份(identity)+ 观测(obs)。每加一层补 CPU 单测(fake retriever + MockLLM,不碰 GPU/网络)。
-- **每层两道把关**:CPU 单测(逻辑,现 59 项)+ GPU 冒烟/压测/演练(真库真行为);行为质量(smart-ask)
-  与服务面(多身份)各经一轮对抗评审 + 自核实修复。全部数字与实录见 [TESTING.md](TESTING.md)。
+- **每层两道把关**:CPU 单测(逻辑,产品 59 + 引擎 120 = 179 项)+ GPU 冒烟/压测/演练(真库真行为);
+  行为质量(smart-ask)与服务面(多身份)各经一轮对抗评审 + 自核实修复。全部数字与实录见 [TESTING.md](TESTING.md)。
