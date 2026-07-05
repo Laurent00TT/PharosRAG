@@ -47,15 +47,10 @@ mcp = FastMCP("rag", instructions=_INSTRUCTIONS)
 _retriever: Retriever | None = None
 
 
-_cfg = None
-
-
 def _pcfg():
-    """本进程的 Pharos 配置(PHAROS_*,与守护进程同一 .env);首次调用时读一次。"""
-    global _cfg
-    if _cfg is None:
-        _cfg = _pconfig.from_env()
-    return _cfg
+    """本进程的 Pharos 配置(PHAROS_*,与守护进程同一 .env)。每次读 env —— 身份可测、不缓存
+    (启动即绑定,进程内 env 不变;stdio 偶发工具调用重解析 .env 成本可忽略)。"""
+    return _pconfig.from_env()
 
 
 def _config() -> EmbedConfig:

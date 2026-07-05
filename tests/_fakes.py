@@ -1,5 +1,5 @@
 """测试替身:fake retriever / user / app 构造器(纯 CPU,不碰 Qdrant/GPU/网络)。
-形状对齐引擎 mcp_server/tests/test_tools.py 的 _MockRet(同一 duck-typing 契约)。"""
+形状对齐 tests/engine/test_tools.py 的 _MockRet(同一 duck-typing 契约)。"""
 from __future__ import annotations
 
 from types import SimpleNamespace

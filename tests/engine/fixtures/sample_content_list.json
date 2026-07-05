@@ -1,0 +1,15 @@
+[
+  {"type": "header", "text": "DEMO RUNNING HEADER", "page_idx": 0, "bbox": [100, 20, 500, 40]},
+  {"type": "text", "text": "A Tiny Demo Paper", "text_level": 1, "page_idx": 0, "bbox": [100, 50, 500, 80]},
+  {"type": "text", "text": "1 Introduction", "text_level": 1, "page_idx": 0, "bbox": [100, 100, 300, 120]},
+  {"type": "text", "text": "This paper introduces a tiny demo for the chunker component, showing heading-level recovery and small-to-big retrieval on a self-contained fixture.", "page_idx": 0, "bbox": [100, 130, 500, 180]},
+  {"type": "text", "text": "2 Methods", "text_level": 1, "page_idx": 0, "bbox": [100, 200, 300, 220]},
+  {"type": "text", "text": "2.1 Data", "text_level": 2, "page_idx": 0, "bbox": [100, 230, 300, 250]},
+  {"type": "text", "text": "We use a small dataset of synthetic documents for demonstration purposes only.", "page_idx": 0, "bbox": [100, 260, 500, 300]},
+  {"type": "text", "text": "2.2 Model", "text_level": 2, "page_idx": 0, "bbox": [100, 320, 300, 340]},
+  {"type": "text", "text": "The model is a simple stack-based heading tree builder with numbering correction.", "page_idx": 0, "bbox": [100, 350, 500, 390]},
+  {"type": "table", "table_caption": ["Table 1: Demo results"], "table_footnote": ["Source: demo fixture"], "table_body": "<table><tr><td>metric</td><td>value</td></tr><tr><td>acc</td><td>0.9</td></tr></table>", "page_idx": 1, "bbox": [100, 100, 500, 300]},
+  {"type": "text", "text": "3 Conclusion", "text_level": 1, "page_idx": 1, "bbox": [100, 320, 300, 340]},
+  {"type": "text", "text": "This demo confirms numbering correction (2 vs 2.1) and small-to-big assembly within the chunker component.", "page_idx": 1, "bbox": [100, 350, 500, 390]},
+  {"type": "footer", "text": "请仔细阅读尾页声明 / page footer noise", "page_idx": 1, "bbox": [100, 750, 500, 770]}
+]
