@@ -20,10 +20,7 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 
 from . import config
-from .engine import load_toolcore
-
-_ENGINE = config.load_env()
-_tc = load_toolcore(_ENGINE)
+from . import toolcore as _tc
 
 mcp = FastMCP("rag", instructions=_tc._INSTRUCTIONS)
 _SESSION_ID = uuid.uuid4().hex

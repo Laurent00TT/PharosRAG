@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import os
 
+from chunker import Chunker
+from chunker.adapters.mineru import from_mineru_dir
+from embedder import EmbedConfig, Embedder
+
 from . import config
-from .engine import bootstrap
 
 
 def detect_lang(elements) -> str:
@@ -34,11 +37,6 @@ def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | N
         raise SystemExit("--visibility restricted 需要 --allow 至少一个 principal:"
                          "restricted+空 allow 的文档对任何身份都不可见(fail-closed),"
                          "建库会\"成功\"但全部静默检索不到。")
-    bootstrap(cfg.engine)
-    from chunker import Chunker
-    from chunker.adapters.mineru import from_mineru_dir
-    from embedder import EmbedConfig, Embedder
-
     corpus = corpus or os.path.join(cfg.engine, "parsed")
     dest = os.path.expanduser(dest or cfg.index_dir)
     collection = collection or cfg.collection

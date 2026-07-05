@@ -120,10 +120,8 @@ def test_adapter_docstrings_match_engine():
 
 
 # ---------- N3:/v1/ask 检索过滤透传 ----------
-from pharos.engine import bootstrap as _bootstrap
-_bootstrap(make_cfg().engine)
-from generator import Generator, MockLLM  # noqa: E402
-from _fakes import make_res, make_hit     # noqa: E402
+from generator import Generator, MockLLM
+from _fakes import make_res, make_hit
 
 
 def test_ask_forwards_filters_to_retriever():

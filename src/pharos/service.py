@@ -26,9 +26,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from . import __version__, config, engine, identity as identity_mod, smart
+from . import __version__, config, engine, identity as identity_mod, smart, toolcore
 from .obs import RequestLog, Stats
 from .sessions import SessionRegistry
+from embedder import User
+from generator import DEFAULT_TABLE_LEG, looks_numeric
 
 log = logging.getLogger("pharos")
 
@@ -77,7 +79,7 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
     cfg = cfg or config.from_env()
     # toolcore 的交付预算走 RAG_MAX_CONTEXT_TOKENS(引擎契约);Pharos 配置在此兑现
     os.environ["RAG_MAX_CONTEXT_TOKENS"] = str(cfg.max_context_tokens)
-    tc = engine.load_toolcore(cfg.engine)
+    tc = toolcore
 
     # ---------- 身份模式(D10):keys(团队,默认)/ legacy(单密钥)/ open(仅回环)----------
     if keys is None and cfg.keys_file:
@@ -115,7 +117,6 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         """本次请求的引擎 User。keys 模式按解析出的身份现建(多身份核心);legacy/open 用启动绑定的。"""
         iden = getattr(request.state, "identity", None)
         if mode == "keys" and iden is not None:
-            from embedder import User                   # lifespan 已 bootstrap 引擎
             return User(tenant=iden.tenant, principals=list(iden.principals))
         return state.user
 
@@ -276,14 +277,12 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         auto: list[str] = []
         numeric = False
         if cfg.smart_ask:
-            from generator import looks_numeric
             numeric = looks_numeric(q.query)
         try:
             # 检索在 LockedRetriever 锁内、LLM 网络调用在锁外(不阻塞其他检索请求)
             ans = gen.answer(q.query, req_user, top_k=q.top_k, rerank=q.rerank,
                              doc_ids=q.doc_ids, doc_type=q.doc_type, kind=q.kind, strategy=q.strategy)
             if cfg.smart_ask and numeric and q.kind is None and smart.is_refusal(ans.text):
-                from generator import DEFAULT_TABLE_LEG
                 ans2 = gen.answer(q.query, req_user, top_k=q.top_k, rerank=q.rerank,
                                   doc_ids=q.doc_ids, doc_type=q.doc_type, strategy=q.strategy,
                                   extra_legs=[dict(DEFAULT_TABLE_LEG)])

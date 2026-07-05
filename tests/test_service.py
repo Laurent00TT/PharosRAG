@@ -12,11 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from fastapi.testclient import TestClient
 
 from _fakes import FakeRetriever, make_app, make_cfg, make_hit, make_res, make_user
-from pharos import config as pconfig
-from pharos.engine import bootstrap
-
-bootstrap(pconfig._default_engine())          # 引擎组件入 path(MockLLM/Generator)
-from generator import Generator, MockLLM     # noqa: E402
+from generator import Generator, MockLLM
 
 
 # ---------- 健康 / 基本 wiring ----------

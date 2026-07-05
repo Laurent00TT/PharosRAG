@@ -9,11 +9,7 @@ from fastapi.testclient import TestClient
 
 from _fakes import FakeRetriever, make_app, make_cfg, make_hit, make_res
 from pharos import smart
-from pharos.engine import bootstrap
-from pharos import config as pconfig
-
-bootstrap(pconfig._default_engine())
-from generator import Generator, MockLLM  # noqa: E402
+from generator import Generator, MockLLM
 
 
 def _gen_factory(r, c):

@@ -13,10 +13,6 @@ from types import SimpleNamespace
 
 from _fakes import FakeRetriever, make_app, make_cfg, make_hit, make_res, make_user
 from pharos import identity as I
-from pharos.engine import bootstrap
-from pharos import config as pconfig
-
-bootstrap(pconfig._default_engine())
 
 ALICE = I.Identity(name="alice", tenant="demo", principals=["g_eng"], admin=True)
 BOB = I.Identity(name="bob", tenant="other", principals=[])

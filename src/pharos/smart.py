@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import re
 
+from generator import is_refusal as _ir
+
 _CJK = re.compile(r"[一-鿿]")
 
 
 def is_refusal(answer_text: str) -> bool:
-    from generator import is_refusal as _ir     # lazy:generator 需 engine bootstrap 后才可 import
     return _ir(answer_text)
 
 
