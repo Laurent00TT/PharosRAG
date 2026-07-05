@@ -67,7 +67,6 @@ def make_user(tenant="t1", principals=("g",)):
 
 
 def make_cfg(**kw):
-    kw.setdefault("engine", pconfig._default_engine())
     kw.setdefault("tenant", "t1")
     return pconfig.PharosConfig(**kw)
 

@@ -3,7 +3,7 @@
 与闭管道 generator(一问一答)的区别:这里不替 agent 决定检索几次、怎么改写;agent(如 Claude Code)
 自己决定何时检索、如何改写、要不要多跳,把本 server 的工具当"手"用。
 
-**安全模型(关键)**:ACL 身份在**启动时**由环境变量 RAG_TENANT/RAG_PRINCIPALS 绑定,**agent 不能经工具
+**安全模型(关键)**:ACL 身份在**启动时**由环境变量 PHAROS_TENANT/PHAROS_PRINCIPALS 绑定,**agent 不能经工具
 参数篡改**(防越权——agent 是不可信驱动方,工具才是安全边界)。每次工具调用都走 embedder 的 fail-closed
 检索/列举(跨租户/无权/unset 文档根本召回不到)。身份未配置 -> fail-closed 返回空 + 明确提示(不静默)。
 
@@ -19,8 +19,8 @@
 无关),本文件只做 stdio 绑定:FastMCP 注册 + 环境身份 + lazy retriever + 进程级会话集合。Pharos 守护进程
 (HTTP API / MCP 薄适配器,见 projects/pharos)复用同一 toolcore,契约不漂移。
 
-配置(环境变量):RAG_TENANT(必需,否则 fail-closed 空)、RAG_PRINCIPALS(逗号分隔)、
-RAG_QDRANT_PATH、RAG_SIDECAR_DIR、RAG_COLLECTION、RAG_DENSE_DIM(默认取 EmbedConfig 默认值)。
+配置(环境变量,统一 PHAROS_*,与守护进程同一 .env):PHAROS_TENANT(必需,否则 fail-closed 空)、
+PHAROS_PRINCIPALS、PHAROS_COLLECTION(默认 real)、PHAROS_INDEX_DIR / PHAROS_QDRANT_PATH / PHAROS_SIDECAR_DIR。
 dense 模型(Qwen3-VL 8B,GPU)在**首次 retrieve 时 lazy 加载**(启动快,首查慢)。需 pip install mcp + embedder 依赖。
 
 接入 Claude Code(stdio):见同目录 README.md。
@@ -32,6 +32,8 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from embedder import EmbedConfig, Retriever, User
+
+from . import config as _pconfig
 
 # 工具层核心(transport 无关)。显式 re-export:既有单测与下游经 `mcp_stdio._X` 访问,折入后保持兼容。
 from .toolcore import (                                 # noqa: F401  (re-export)
@@ -45,17 +47,21 @@ mcp = FastMCP("rag", instructions=_INSTRUCTIONS)
 _retriever: Retriever | None = None
 
 
+_cfg = None
+
+
+def _pcfg():
+    """本进程的 Pharos 配置(PHAROS_*,与守护进程同一 .env);首次调用时读一次。"""
+    global _cfg
+    if _cfg is None:
+        _cfg = _pconfig.from_env()
+    return _cfg
+
+
 def _config() -> EmbedConfig:
-    kw: dict = {}
-    if os.environ.get("RAG_QDRANT_PATH"):
-        kw["qdrant_path"] = os.environ["RAG_QDRANT_PATH"]
-    if os.environ.get("RAG_SIDECAR_DIR"):
-        kw["sidecar_dir"] = os.environ["RAG_SIDECAR_DIR"]
-    if os.environ.get("RAG_COLLECTION"):
-        kw["collection"] = os.environ["RAG_COLLECTION"]
-    if os.environ.get("RAG_DENSE_DIM"):
-        kw["dense_dim"] = int(os.environ["RAG_DENSE_DIM"])
-    return EmbedConfig(**kw)
+    cfg = _pcfg()
+    return EmbedConfig(qdrant_path=cfg.qdrant_path, sidecar_dir=cfg.sidecar_dir,
+                       collection=cfg.collection, dense_dim=cfg.dense_dim)
 
 
 def get_retriever() -> Retriever:
@@ -66,10 +72,10 @@ def get_retriever() -> Retriever:
 
 
 def _bound_user() -> User:
-    """ACL 身份 = 启动时环境绑定,agent 不可改。tenant 未设 -> 空 tenant,检索/列举 fail-closed 返回空。"""
-    tenant = os.environ.get("RAG_TENANT", "").strip()
-    principals = [p.strip() for p in os.environ.get("RAG_PRINCIPALS", "").split(",") if p.strip()]
-    return User(tenant=tenant, principals=principals)
+    """ACL 身份 = 启动时环境绑定(PHAROS_TENANT/PHAROS_PRINCIPALS,与守护进程同源),agent 不可改。
+    tenant 未设 -> 空 tenant,检索/列举 fail-closed 返回空。"""
+    cfg = _pcfg()
+    return User(tenant=cfg.tenant, principals=list(cfg.principals))
 
 
 # B5.A 会话级已交付 (doc_id, anchor/chunk) 集合:stdio 下进程=会话=单一绑定身份,故进程级即会话级。

@@ -1,7 +1,7 @@
 """Pharos 配置:全走环境变量(PHAROS_*),启动时读取一次成不可变 dataclass。
 
-设计:不引入 toml/yaml —— 与引擎组件(RAG_* 环境变量)同一风格,单实例部署一个 .env 就够;
-.env 读取用极简解析(复用 eval/_common.py 的做法,免 python-dotenv 依赖),已存在的环境变量优先。
+设计:不引入 toml/yaml —— 单实例部署一个 .env 就够;.env 读取用极简解析(免 python-dotenv 依赖),
+已存在的环境变量优先。全部配置统一 PHAROS_* 命名空间(引擎折入本仓后不再有 RAG_* 第二命名空间)。
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-# 仓库根(pharos/src/pharos/config.py 的上上上级 —— src-layout 过渡态；W3 退役 _default_engine 后此项消失)
+# 仓库根(pharos/src/pharos/config.py 的上上上级 —— 用于定位 .env)
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _INLINE_COMMENT = re.compile(r"\s+#.*$")
@@ -50,23 +50,13 @@ def _int_env(name: str, default: int) -> int:
         raise SystemExit(f"环境变量 {name} 必须是整数(收到 {raw!r}),请检查 .env。")
 
 
-def _default_engine() -> str:
-    """默认引擎仓:与 pharos 同级的 chunk-test-repo。"""
-    return os.path.join(os.path.dirname(REPO_ROOT), "chunk-test-repo")
-
-
-def load_env() -> str:
-    """加载 pharos/.env,再用引擎仓 .env 兜底(DEEPSEEK_API_KEY 历史上放引擎仓)。返回引擎根路径。"""
+def load_env() -> None:
+    """加载 pharos/.env(引擎已折入本仓,不再有第二个 .env 兜底)。"""
     _load_env_file(os.path.join(REPO_ROOT, ".env"))
-    engine = os.environ.get("PHAROS_ENGINE") or _default_engine()
-    _load_env_file(os.path.join(engine, ".env"))
-    return engine
 
 
 @dataclass(frozen=True)
 class PharosConfig:
-    # 引擎(chunk-test-repo)
-    engine: str = ""
     # 身份(ACL):fail-closed —— tenant 为空则一切检索/列举返回空
     tenant: str = ""
     principals: list[str] = field(default_factory=list)
@@ -95,14 +85,13 @@ class PharosConfig:
 
 
 def from_env() -> PharosConfig:
-    engine = load_env()
+    load_env()
     index_dir = os.path.expanduser(os.environ.get("PHAROS_INDEX_DIR", "~/rag_real"))
     principals = [p.strip() for p in os.environ.get("PHAROS_PRINCIPALS", "").split(",") if p.strip()]
     # 评审修:显式覆盖项同样 expanduser(否则写 ~/x 会在字面 "./~" 下开出空库)
     qdrant = os.environ.get("PHAROS_QDRANT_PATH", "").strip()
     sidecar = os.environ.get("PHAROS_SIDECAR_DIR", "").strip()
     return PharosConfig(
-        engine=engine,
         tenant=os.environ.get("PHAROS_TENANT", "").strip(),
         principals=principals,
         index_dir=index_dir,

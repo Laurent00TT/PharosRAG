@@ -77,8 +77,8 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
                generator_factory=None, keys=None) -> FastAPI:
     """app 工厂。生产:全默认(从 env 建配置,启动时打开真索引)。测试:注入 fake retriever/user/generator/keys。"""
     cfg = cfg or config.from_env()
-    # toolcore 的交付预算走 RAG_MAX_CONTEXT_TOKENS(引擎契约);Pharos 配置在此兑现
-    os.environ["RAG_MAX_CONTEXT_TOKENS"] = str(cfg.max_context_tokens)
+    # toolcore 的交付预算读环境变量;此处把 Pharos 配置兑现到产品命名空间(cfg 为单一真源)
+    os.environ["PHAROS_MAX_CONTEXT_TOKENS"] = str(cfg.max_context_tokens)
     tc = toolcore
 
     # ---------- 身份模式(D10):keys(团队,默认)/ legacy(单密钥)/ open(仅回环)----------
@@ -124,10 +124,8 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         iden = getattr(request.state, "identity", None)
         return iden.name if iden is not None else ("local" if mode == "open" else "default")
 
-    # 评审修(C2):toolcore 的 no_identity hint 指示设 RAG_TENANT,但 Pharos 只读 PHAROS_TENANT
-    # —— 照原 hint 操作后依然 fail-closed,形成死循环误导。绑定层负责把契约文本翻译成本产品的配置名。
-    no_id_hint = tc._NO_IDENTITY_HINT.replace("RAG_TENANT", "PHAROS_TENANT").replace(
-        "RAG_PRINCIPALS", "PHAROS_PRINCIPALS")
+    # toolcore 的 no_identity hint 已在源头用 PHAROS_* 命名(W3 命名空间统一),绑定层无需再翻译。
+    no_id_hint = tc._NO_IDENTITY_HINT
 
     def _adapt(d: dict) -> dict:
         if isinstance(d, dict) and d.get("status") == "no_identity":
