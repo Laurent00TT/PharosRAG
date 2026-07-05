@@ -104,19 +104,17 @@ def test_override_paths_expanduser(monkeypatch):
     assert cfg.sidecar_dir == os.path.expanduser("~/stest")
 
 
-# ---------- 契约同文:适配器六工具 docstring 与引擎 server.py 逐一相同 ----------
-def test_adapter_docstrings_match_engine():
-    import importlib.util
-    eng = os.path.join(make_cfg().engine, "mcp_server")
-    sys.path.insert(0, os.path.join(make_cfg().engine, "embedder", "src"))
-    sys.path.insert(0, eng)
-    spec = importlib.util.spec_from_file_location("engine_server_for_test", os.path.join(eng, "server.py"))
-    srv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(srv)
+# ---------- 契约不漂移:HTTP 适配器与 stdio-direct 两个传输的六工具 docstring 逐一相同,
+#            且 _INSTRUCTIONS 单一真源来自 in-repo toolcore(不再 exec 外部引擎仓) ----------
+def test_transports_contract_no_drift():
+    from pharos import mcp_stdio as S
+    from pharos import toolcore
     for name in ["retrieve", "list_documents", "get_document", "get_outline", "expand", "retrieve_grouped"]:
-        eng_doc = getattr(srv, name).__doc__ or ""
-        adp_doc = getattr(A, name).__doc__ or ""
-        assert adp_doc.strip() == eng_doc.strip(), f"{name} docstring 与引擎不同文"
+        adp_doc = (getattr(A, name).__doc__ or "").strip()
+        std_doc = (getattr(S, name).__doc__ or "").strip()
+        assert adp_doc == std_doc, f"{name} docstring 两传输不同文"
+    assert A._tc is toolcore                          # HTTP 适配器的工具语义真源 = in-repo toolcore
+    assert S._INSTRUCTIONS is toolcore._INSTRUCTIONS  # stdio 的 instructions 同源(单一真源结构强制)
 
 
 # ---------- N3:/v1/ask 检索过滤透传 ----------

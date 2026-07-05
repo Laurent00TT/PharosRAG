@@ -34,9 +34,14 @@ def cmd_serve(args) -> None:
     uvicorn.run(create_app(cfg), host=host, port=port, log_level="info")
 
 
-def cmd_mcp(_args) -> None:
-    from .mcp_adapter import main as adapter_main
-    adapter_main()
+def cmd_mcp(args) -> None:
+    if getattr(args, "direct", False):
+        # no-daemon 兜底:stdio 直连引擎(独占嵌入式 Qdrant 锁 + 常驻 GPU),不经守护进程
+        from .mcp_stdio import main as stdio_main
+        stdio_main()
+    else:
+        from .mcp_adapter import main as adapter_main
+        adapter_main()
 
 
 def cmd_index(args) -> None:
@@ -111,6 +116,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.set_defaults(fn=cmd_serve)
 
     sp = sub.add_parser("mcp", help="启动 MCP 薄适配器(stdio→HTTP,接 Claude Code)")
+    sp.add_argument("--direct", action="store_true",
+                    help="no-daemon 兜底:stdio 直连引擎(独占 Qdrant 锁 + 常驻 GPU,不经守护进程)")
     sp.set_defaults(fn=cmd_mcp)
 
     sp = sub.add_parser("index", help="从 MinerU 解析目录建索引(需 GPU;先停 serve)")

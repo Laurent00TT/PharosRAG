@@ -28,20 +28,13 @@ dense 模型(Qwen3-VL 8B,GPU)在**首次 retrieve 时 lazy 加载**(启动快,�
 from __future__ import annotations
 
 import os
-import sys
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_REPO = os.path.dirname(_HERE)
-for _p in ("embedder", "chunker"):                      # retriever 运行期 lazy import chunker
-    sys.path.insert(0, os.path.join(_REPO, _p, "src"))
-sys.path.insert(0, _HERE)                               # 保证 `from toolcore import ...` 在被外部 import 时也可解析
 
 from mcp.server.fastmcp import FastMCP
 
 from embedder import EmbedConfig, Retriever, User
 
-# 工具层核心(transport 无关)。显式 re-export:既有单测与下游经 `server._X` 访问,拆分保持兼容。
-from toolcore import (                                  # noqa: F401  (re-export)
+# 工具层核心(transport 无关)。显式 re-export:既有单测与下游经 `mcp_stdio._X` 访问,折入后保持兼容。
+from .toolcore import (                                 # noqa: F401  (re-export)
     _INSTRUCTIONS, _NO_IDENTITY_HINT, _EMPTY_HINT, _UNTRUSTED_WARNING, _RETURNED_KEYS_CAP,
     _max_ctx_tokens, _err, _hit_dict, _demote, _hit_tokens, _dedup_key,
     _build_retrieve_result, _build_list_result, _safe_doc_call,
@@ -157,5 +150,9 @@ def retrieve_grouped(query: str, doc_ids: list[str], top_k: int = 3, rerank: boo
     return _grouped_impl(get_retriever(), user, query, doc_ids, top_k, rerank)
 
 
+def main() -> None:
+    mcp.run()                                           # 默认 stdio transport(pharos mcp --direct 入口)
+
+
 if __name__ == "__main__":
-    mcp.run()                                           # 默认 stdio transport
+    main()
