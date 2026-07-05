@@ -65,7 +65,7 @@ single_chunk/already_returned…)决定要不要 expand/get_document。**更强�
     "rag": {
       "command": "wsl",
       "args": ["bash", "-lc",
-        "source /home/tiantian/miniconda3/etc/profile.d/conda.sh && conda activate navikb && PHAROS_TENANT=demo PHAROS_PRINCIPALS=g_demo PHAROS_INDEX_DIR=/home/tiantian/rag_demo PHAROS_COLLECTION=demo python -m pharos mcp --direct"]
+        "source <PATH_TO_MINICONDA>/etc/profile.d/conda.sh && conda activate <CONDA_ENV> && PHAROS_TENANT=demo PHAROS_PRINCIPALS=g_demo PHAROS_INDEX_DIR=<PATH_TO>/rag_demo PHAROS_COLLECTION=demo python -m pharos mcp --direct"]
     }
   }
 }

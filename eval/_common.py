@@ -17,15 +17,6 @@ DEMO_SRC = os.path.expanduser("~/rag_demo")
 DEMO_COLLECTION = "demo"
 DENSE_DIM = 1024
 
-# 评估库源(可 env 覆盖指向更大的库,如 index_eval_corpus.py 建的 ~/rag_eval_big / collection=evalbig)
-EVAL_SRC = os.environ.get("PHAROS_EVAL_SRC") or os.environ.get("RAG_EVAL_SRC", DEMO_SRC)
-EVAL_COLLECTION = os.environ.get("PHAROS_EVAL_COLLECTION") or os.environ.get("RAG_EVAL_COLLECTION", DEMO_COLLECTION)
-
-# 评估三档模型(全走 DeepSeek;同厂自评的循环偏差见 README "诚实警告")。RAG_EVAL_* 留一版弃用别名。
-# ⚠ PHAROS_EVAL_GEN_MODEL 须与生产 PHAROS_LLM_MODEL 一致 —— 否则测的不是实际部署配置。
-GEN_MODEL = os.environ.get("PHAROS_EVAL_GEN_MODEL") or os.environ.get("RAG_EVAL_GEN_MODEL", "deepseek-v4-flash")
-JUDGE_MODEL = os.environ.get("PHAROS_EVAL_JUDGE_MODEL") or os.environ.get("RAG_EVAL_JUDGE_MODEL", "deepseek-v4-flash")
-
 
 def load_env(path: str | None = None) -> None:
     """极简 .env 加载(免 python-dotenv);已存在的环境变量优先(setdefault)。"""
@@ -39,6 +30,20 @@ def load_env(path: str | None = None) -> None:
                 continue
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.strip())
+
+
+# 评审修:先加载 .env,下面的模块级常量才能读到 .env 里的 PHAROS_EVAL_*(原调用在常量之后 -> .env 静默失效)
+load_env()
+
+# 评估库源(可 env 覆盖指向更大的库,如 index_eval_corpus.py 建的 ~/rag_eval_big / collection=evalbig)
+EVAL_SRC = os.environ.get("PHAROS_EVAL_SRC") or os.environ.get("RAG_EVAL_SRC", DEMO_SRC)
+EVAL_COLLECTION = os.environ.get("PHAROS_EVAL_COLLECTION") or os.environ.get("RAG_EVAL_COLLECTION", DEMO_COLLECTION)
+
+# 评估三档模型(全走 DeepSeek;同厂自评的循环偏差见 README "诚实警告")。RAG_EVAL_* 留一版弃用别名。
+# GEN_MODEL 默认回退到生产 PHAROS_LLM_MODEL —— 保证测的是实际部署配置(仍可用 PHAROS_EVAL_GEN_MODEL 显式覆盖)。
+GEN_MODEL = (os.environ.get("PHAROS_EVAL_GEN_MODEL") or os.environ.get("PHAROS_LLM_MODEL")
+             or os.environ.get("RAG_EVAL_GEN_MODEL", "deepseek-v4-flash"))
+JUDGE_MODEL = os.environ.get("PHAROS_EVAL_JUDGE_MODEL") or os.environ.get("RAG_EVAL_JUDGE_MODEL", "deepseek-v4-flash")
 
 
 def copy_demo(dest: str, src: str | None = None) -> tuple[str, str]:

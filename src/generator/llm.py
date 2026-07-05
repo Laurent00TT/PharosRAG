@@ -53,7 +53,7 @@ class OpenAICompatibleLLM:
                  thinking: bool = False, reasoning_effort: str | None = None,
                  max_tokens: int = 2000, temperature: float = 0.0, timeout: float = 120,
                  send_thinking: bool | None = None):
-        from openai import OpenAI       # lazy:不用此后端就不强求装 openai(对齐包的 import 卫生)
+        from openai import OpenAI       # lazy:import generator 不触发 openai 导入(仅构造 LLM 后端才需要;openai 在核心依赖里)
         key = api_key or os.environ.get(api_key_env)
         if not key:
             raise ValueError(f"缺 API key:传 api_key= 或设环境变量 {api_key_env}(建议放 .env,勿提交)。")

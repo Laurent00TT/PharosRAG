@@ -23,12 +23,13 @@ NOTE on coordinates (validated empirically, see PROCESS_LOG):
 import ast
 import csv
 import json
+import os
 import re
 import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
 
-KB = Path(r"C:\Users\11541\Desktop\projects\knowledge-base")
+KB = Path(os.environ.get("PHAROS_KB_ROOT", r"C:\Users\11541\Desktop\projects\knowledge-base"))  # 外部数据集根(BYO;env PHAROS_KB_ROOT 覆盖)
 REPO = Path(__file__).resolve().parent.parent
 PARSED = REPO / "parsed"
 CHUNKS = REPO / "chunks"

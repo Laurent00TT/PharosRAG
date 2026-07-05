@@ -50,6 +50,22 @@ def _int_env(name: str, default: int) -> int:
         raise SystemExit(f"环境变量 {name} 必须是整数(收到 {raw!r}),请检查 .env。")
 
 
+def _ns(suffix: str, default: str = "") -> str:
+    """PHAROS_<suffix> 优先,回退 RAG_<suffix>(引擎旧命名的一版弃用别名,保护旧部署 .env 不静默失效)。"""
+    return os.environ.get("PHAROS_" + suffix) or os.environ.get("RAG_" + suffix) or default
+
+
+def _int_ns(suffix: str, default: int) -> int:
+    """整数版 _ns:PHAROS_<suffix> 优先、RAG_<suffix> 兜底,错值指名报错。"""
+    raw = (os.environ.get("PHAROS_" + suffix) or os.environ.get("RAG_" + suffix) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise SystemExit(f"环境变量 PHAROS_{suffix}/RAG_{suffix} 必须是整数(收到 {raw!r}),请检查 .env。")
+
+
 def load_env() -> None:
     """加载 pharos/.env(引擎已折入本仓,不再有第二个 .env 兜底)。"""
     _load_env_file(os.path.join(REPO_ROOT, ".env"))
@@ -87,18 +103,18 @@ class PharosConfig:
 def from_env() -> PharosConfig:
     load_env()
     index_dir = os.path.expanduser(os.environ.get("PHAROS_INDEX_DIR", "~/rag_real"))
-    principals = [p.strip() for p in os.environ.get("PHAROS_PRINCIPALS", "").split(",") if p.strip()]
+    principals = [p.strip() for p in _ns("PRINCIPALS").split(",") if p.strip()]
     # 评审修:显式覆盖项同样 expanduser(否则写 ~/x 会在字面 "./~" 下开出空库)
-    qdrant = os.environ.get("PHAROS_QDRANT_PATH", "").strip()
-    sidecar = os.environ.get("PHAROS_SIDECAR_DIR", "").strip()
+    qdrant = _ns("QDRANT_PATH").strip()
+    sidecar = _ns("SIDECAR_DIR").strip()
     return PharosConfig(
-        tenant=os.environ.get("PHAROS_TENANT", "").strip(),
+        tenant=_ns("TENANT").strip(),
         principals=principals,
         index_dir=index_dir,
         qdrant_path=os.path.expanduser(qdrant) if qdrant else os.path.join(index_dir, "qdrant"),
         sidecar_dir=os.path.expanduser(sidecar) if sidecar else os.path.join(index_dir, "sidecar"),
-        collection=os.environ.get("PHAROS_COLLECTION", "real"),
-        dense_dim=_int_env("PHAROS_DENSE_DIM", 1024),
+        collection=_ns("COLLECTION", "real"),
+        dense_dim=_int_ns("DENSE_DIM", 1024),
         corpus_dir=os.path.expanduser(os.environ.get("PHAROS_CORPUS_DIR", "").strip()),
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
         port=_int_env("PHAROS_PORT", 8787),
@@ -107,7 +123,7 @@ def from_env() -> PharosConfig:
         log_dir=os.path.expanduser(os.environ.get("PHAROS_LOG_DIR", "~/pharos_logs").strip()),
         log_queries=os.environ.get("PHAROS_LOG_QUERIES", "on").strip().lower() not in ("off", "0", "false"),
         smart_ask=os.environ.get("PHAROS_SMART_ASK", "on").strip().lower() not in ("off", "0", "false"),
-        max_context_tokens=_int_env("PHAROS_MAX_CONTEXT_TOKENS", 12000),
+        max_context_tokens=_int_ns("MAX_CONTEXT_TOKENS", 12000),
         llm_base_url=os.environ.get("PHAROS_LLM_BASE_URL", "https://api.deepseek.com"),
         llm_model=os.environ.get("PHAROS_LLM_MODEL", "deepseek-v4-flash"),
         llm_api_key_env=os.environ.get("PHAROS_LLM_API_KEY_ENV", "DEEPSEEK_API_KEY"),
