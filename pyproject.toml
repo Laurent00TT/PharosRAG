@@ -24,8 +24,8 @@ dependencies = [
 [project.optional-dependencies]
 # dense(Qwen3-VL-Embedding-8B)+ reranker,GPU 重依赖;本机在 WSL navikb(torch cu128)。
 gpu = ["transformers>=4.57.0", "qwen-vl-utils>=0.0.14", "torch>=2.8.0", "accelerate"]
-# 解析编排(pharos parse / MinerU 客户端 + chunker.meta 页码元数据)
-parse = ["pypdf", "requests"]
+# 解析编排(MinerU 客户端 + chunker.meta 页码元数据;见 scripts/README)
+parse = ["pypdf", "requests", "python-dotenv"]
 # 表格分块(xlsx)
 table = ["openpyxl", "xlrd"]
 # 旧回退适配器(office 主路是 MinerU;docx/pptx 适配器为 deprecated 兜底)
