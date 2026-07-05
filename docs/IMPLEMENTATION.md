@@ -1,6 +1,6 @@
 # Pharos 实施文档
 
-> 对应版本 v0.1。设计动机见 [DESIGN.md](DESIGN.md);本文讲"代码怎么长的"。
+> 设计动机见 [DESIGN.md](DESIGN.md);本文讲"代码怎么长的"。
 
 ## 1. 模块地图
 
@@ -15,7 +15,9 @@ pharos/
   mcp_adapter.py  MCP 薄适配器:六工具 → httpx 转发;结构化降级;进程级 uuid 会话头
   indexer.py      pharos index:MinerU 解析目录 → chunker → embedder(index_real.py 的参数化版)
   cli.py          serve / mcp / index / ask / health
-tests/            25 项 CPU 单测(_fakes.py 提供 FakeRetriever/make_app)
+  identity.py     多身份(D10):keys 文件解析/生成(fail-closed 校验)/身份 dataclass
+  obs.py          可观测(D11):Stats(端点计数+延迟分位)+ RequestLog(JSONL,截断在本层)
+tests/            59 项 CPU 单测(_fakes.py 提供 FakeRetriever/make_app)
 ```
 
 ## 2. 请求路径
@@ -66,7 +68,7 @@ instructions 与引擎同源(toolcore._INSTRUCTIONS);六工具 docstring 与引�
   store.list_documents 全部加同一把 `threading.Lock`(嵌入式 Qdrant 与 GPU 前向都按串行对待)。
 - SessionRegistry 自带锁;generator 为 per-thread 实例(threading.local,无共享可变状态)。
 - toolcore 的 returned_keys set 操作发生在 impl 内(检索锁外)——单会话内的两次并发调用
-  理论上可交错,个人场景(一个 agent 会话串行调工具)不构成实际问题,记入 TODO 观察项。
+  理论上可交错,常规用法(一个 agent 会话串行调工具)不构成实际问题,记入 TODO 观察项。
 
 ## 4. 与引擎的接缝(全部收在 engine.py)
 
@@ -83,12 +85,13 @@ instructions 与引擎同源(toolcore._INSTRUCTIONS);六工具 docstring 与引�
 `PHAROS_INDEX_DIR` 展开后派生 qdrant_path/sidecar_dir(可分别覆盖)。
 适配器进程只用 `adapter_base_url()`(PHAROS_URL)+ PHAROS_API_KEY,不建 PharosConfig。
 
-## 6. 实现顺序(实际发生)
+## 6. 构建脉络
 
-1. 引擎重构:toolcore 拆分(引擎 commit `7fbf709`,原测试不改跑绿);
-2. 骨架 + config/engine/sessions;
-3. service(FastAPI)+ mcp_adapter + indexer + cli;
-4. 25 项 CPU 测试(一把全绿)→ on_event→lifespan 清告警;
-5. GPU 冒烟(healthz/documents/retrieve/ask/去重/适配器/CLI 全过,见 TESTING.md);
-6. 对抗评审 P1(39 agent,三视角×双反驳)→ 15 项修复 + 11 项回归测试 + 3 项证伪留档
-   (清单见 COMPONENT_NOTES §对抗评审 P1);修复后全量回归 36+22+7 全绿。
+自底向上、每层带测试:
+
+- **引擎重构先行**:mcp_server 拆出 toolcore(transport 无关的工具语义层,引擎 commit `7fbf709`),
+  让引擎 stdio server 与 Pharos HTTP 共用同一套契约(单一来源)。原引擎测试一行未改跑绿 = 拆分无回归的证据。
+- **产品层分层搭建**:config/engine/sessions → service(FastAPI)+ mcp_adapter + indexer + cli →
+  身份(identity)+ 观测(obs)。每加一层补 CPU 单测(fake retriever + MockLLM,不碰 GPU/网络)。
+- **每层两道把关**:CPU 单测(逻辑,现 59 项)+ GPU 冒烟/压测/演练(真库真行为);行为质量(smart-ask)
+  与服务面(多身份)各经一轮对抗评审 + 自核实修复。全部数字与实录见 [TESTING.md](TESTING.md)。

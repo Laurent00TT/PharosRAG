@@ -123,7 +123,7 @@ python -m pytest embedder/tests/test_store.py -q
 对缺失部分的错误断言是新失败面,择优门槛必须卡住它(③的教训);④ 单轮 LLM eval 噪声底噪
 ±2 题,这个粒度的横向比较必须配对归因(retried 标记已内建 run_eval)。
 
-## 3b. v0.3 团队版实测(2026-07-04)
+## 3b. 团队服务面实测(多身份 / 观测 / 压测 / 演练)
 
 **CPU 单测 46→59**(test_team.py 新增:keys 解析 fail-closed / 401 / 身份逐请求流到引擎 /
 跨用户会话隔离(伪造同 session id)/ stats admin 门控 / 非回环启动守卫 / 日志不落 key+截断+可关 /
@@ -147,7 +147,7 @@ bob 读 stats → 403、alice → 200。
 (test_review_fixes.py,11 项);3 条被证伪留档。完整清单与处置见
 [COMPONENT_NOTES.md §对抗评审 P1](COMPONENT_NOTES.md)。修复后全量回归:Pharos 36 + 引擎 22+7 全绿。
 
-**v0.3 团队版安全评审(T5,2026-07-04)**:身份/会话/观测/运维四视角 × 每发现 2 反驳者,36 agent。
+**团队服务面安全评审(T5)**:身份/会话/观测/运维四视角 × 每发现 2 反驳者,36 agent。
 **0 confirmed 安全漏洞**——完成的 verify 确认核心 ACL 边界稳固(身份 name 只是展示标签 + 会话去重前缀,
 真边界是 `_current_user` 建的引擎 User;跨租户去重碰撞的失败方向不越权)。⚠ 诚实说明:多数 verify
 agent 撞服务端限流未跑完,**不依赖投票、逐条自核实**。核实后修一批**健壮性/文档/观测完整性**缺陷并

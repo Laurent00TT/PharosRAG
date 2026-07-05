@@ -1,7 +1,7 @@
-# Pharos 运维手册(v0.3 团队版)
+# Pharos 运维手册
 
-> 面向:运维本服务的人(可能不是开发者)。所有数字都是 2026-07-04 实测,非估算。
-> 架构与设计动机见 [DESIGN.md](DESIGN.md)(团队版=D10-D12)。
+> 面向:运维本服务的人(可能不是开发者)。所有容量/RTO 数字均为真实实测,非估算。
+> 架构与设计动机见 [DESIGN.md](DESIGN.md)(服务面 = D10-D12)。
 
 ## 1. 部署拓扑
 
@@ -91,7 +91,7 @@ sudo systemctl start pharos
 | 服务起不来,日志见 "already accessed" | 别的进程占着索引(手动 serve/建库脚本) | 找到并停掉;永远只让 systemd 实例碰 ~/rag_real |
 | 服务起不来,日志见 keys 文件报错 | keys JSON 格式/字段错(fail-closed 设计) | 修文件或 `pharos keys new` 重建;别绕过 |
 | 全部请求 401 | keys 模式下 key 不在文件里 / 改文件没 restart | 核对文件 + `systemctl restart pharos` |
-| 某用户看不到任何文档 | 该身份 tenant 与建库 tenant 不符(fail-closed) | 核对 keys 文件里的 tenant(个人库=demo) |
+| 某用户看不到任何文档 | 该身份 tenant 与建库 tenant 不符(fail-closed) | 核对 keys 文件里的 tenant(示例库建库 tenant=demo) |
 | 首个检索 20s-2min | dense 模型 lazy 加载 | 正常;重启后第一查慢,之后毫秒级 |
 | 一段时间后服务消失 | WSL 空闲休眠(无客户端连接) | 确认启动文件夹 PharosWSL.vbs 在;临时:开个 wsl 窗口 |
 | ask 全部 llm_unconfigured | DEEPSEEK_API_KEY 缺失/过期 | 补 .env(pharos 或引擎仓)+ restart |

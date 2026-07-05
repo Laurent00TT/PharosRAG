@@ -1,8 +1,8 @@
-# Pharos HTTP API 契约(v0.1)
+# Pharos HTTP API 契约
 
 Base:`http://127.0.0.1:8787`(PHAROS_HOST/PORT)。请求/响应均 JSON(UTF-8)。
 
-## 鉴权(v0.3)
+## 鉴权
 
 三种模式(DESIGN D10):**open**(仅回环无鉴权)/ **legacy**(单 `PHAROS_API_KEY`)/
 **keys**(`PHAROS_KEYS_FILE`,每 key 一个身份 name+tenant+principals+admin)。所有 /v1/* 需
