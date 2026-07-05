@@ -37,6 +37,13 @@ def test_indexer_restricted_with_allow_passes_guard():
         run_index(make_cfg(), corpus="Z:/definitely/not/exist", visibility="restricted", allow="g_hr")
 
 
+# ---------- 模型路径上浮 config:缺 scripts/ 目录时 build_retriever 启动即清晰报错 ----------
+def test_build_retriever_asserts_model_scripts(tmp_path):
+    from pharos.engine import build_retriever
+    with pytest.raises(SystemExit, match="scripts 目录缺失"):
+        build_retriever(make_cfg(dense_model_path=str(tmp_path / "no-such-model")))
+
+
 # ---------- ask:工厂非 ValueError 异常不再裸抛 500 ----------
 def test_ask_factory_runtime_error_degrades():
     def boom(retriever, cfg):

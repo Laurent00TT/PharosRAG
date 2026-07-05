@@ -83,6 +83,10 @@ class PharosConfig:
     collection: str = "real"
     dense_dim: int = 1024
     corpus_dir: str = ""         # 入库语料目录(MinerU 解析产物;留仓外,PHAROS_CORPUS_DIR)
+    # GPU / 本地模型(dense embedder + reranker;默认 ~/models,须含官方 scripts/;GPU 按名锁 4090)
+    dense_model_path: str = os.path.expanduser("~/models/Qwen3-VL-Embedding-8B")
+    rerank_model_path: str = os.path.expanduser("~/models/Qwen3-VL-Reranker-8B")
+    gpu_name: str = "4090"       # torch device 0 卡名须含此串(防 FASTEST_FIRST 漂到错卡);置空=不校验
     # 服务
     host: str = "127.0.0.1"
     port: int = 8787
@@ -116,6 +120,9 @@ def from_env() -> PharosConfig:
         collection=_ns("COLLECTION", "real"),
         dense_dim=_int_ns("DENSE_DIM", 1024),
         corpus_dir=os.path.expanduser(os.environ.get("PHAROS_CORPUS_DIR", "").strip()),
+        dense_model_path=os.path.expanduser(os.environ.get("PHAROS_DENSE_MODEL_PATH", "~/models/Qwen3-VL-Embedding-8B")),
+        rerank_model_path=os.path.expanduser(os.environ.get("PHAROS_RERANK_MODEL_PATH", "~/models/Qwen3-VL-Reranker-8B")),
+        gpu_name=os.environ.get("PHAROS_GPU_NAME", "4090"),
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
         port=_int_env("PHAROS_PORT", 8787),
         api_key=os.environ.get("PHAROS_API_KEY", "").strip(),

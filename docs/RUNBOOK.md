@@ -13,7 +13,7 @@ cp .env.example .env                 # 填 DEEPSEEK_API_KEY;示例库用 PHAROS_
 ```
 
 > GPU 模型(Qwen3-VL-Embedding-8B / reranker)用 modelscope 下到 `~/models`,首次 `retrieve` 时 lazy 加载(约 1-2 分钟)。
-> 非 4090 机器改 `PHAROS_*` 里的模型/GPU 名。
+> 非 4090 机器 / 模型放别处:设 `PHAROS_GPU_NAME`(torch device 0 卡名子串,置空=不校验)、`PHAROS_DENSE_MODEL_PATH` / `PHAROS_RERANK_MODEL_PATH`(须含官方 `scripts/`;缺则 `pharos serve` 启动即清晰报错)。
 
 ## 1. 启动 / 停止守护进程(独占 GPU + 嵌入式 Qdrant,常驻)
 
