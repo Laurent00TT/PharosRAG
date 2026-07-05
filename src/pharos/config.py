@@ -9,8 +9,8 @@ import os
 import re
 from dataclasses import dataclass, field
 
-# 仓库根(pharos/pharos/config.py 的上上级)
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 仓库根(pharos/src/pharos/config.py 的上上上级 —— src-layout 过渡态；W3 退役 _default_engine 后此项消失)
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _INLINE_COMMENT = re.compile(r"\s+#.*$")
 
