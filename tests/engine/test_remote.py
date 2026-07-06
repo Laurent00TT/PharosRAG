@@ -246,3 +246,23 @@ def test_rerank_degrades_on_inference_unavailable():                 # M4:非对
     out = r.search("x", User("t", []), top_k=2, rerank=True)
     assert [h.chunk_id for h in out] == ["c0", "c1"]                 # rerank 失败降级返回 hybrid top-2,不 loud、不崩
     assert all(h.score_kind == "rrf" for h in out)                   # 仍 hybrid 量纲(dense loud / rerank 降级 的非对称)
+
+
+def test_mrl_fp32_normalize_on_bf16_input():
+    """阶段B审查 M1:真实建库入口是 **bf16 张量**进 Dense._mrl(model.process 返回 bf16)。fp32 修复(先 .float()
+    再截+normalize)-> norm=1.0;反向守卫证明 bf16 上 normalize 会坏(norm≈1.002)。删 dense.py:_mrl 的 .float()
+    本测试即红——守住 P1-2 修复。纯 CPU(torch CPU),进 CI,不需 GPU。"""
+    import torch
+    import torch.nn.functional as F
+
+    from embedder.dense import Dense
+    torch.manual_seed(0)                                             # 固定随机(bf16 舍入偏差依赖具体值,否则 flaky)
+    emb_bf16 = torch.randn(32, 4096).bfloat16()                     # 模拟 model.process 的 bf16 输出(生产建库入口)
+    v = Dense(EmbedConfig(dense_dim=1024))._mrl(emb_bf16)            # 生产路径:bf16 -> _mrl(.float() 后截+normalize)
+    assert v.dtype == np.float32
+    v_dev = float(np.abs(np.linalg.norm(v, axis=-1) - 1.0).max())   # 偏离 1(双向)
+    assert v_dev < 1e-5, f"fp32 修复应让 norm=1.0(偏离<1e-5),实测偏离 {v_dev:.2e}"
+    bad = F.normalize(emb_bf16[:, :1024], p=2, dim=-1).float().cpu().numpy()   # 旧路径:bf16 上 normalize
+    bad_dev = float(np.abs(np.linalg.norm(bad, axis=-1) - 1.0).max())
+    assert bad_dev > 5e-4, \
+        f"bf16 上 normalize 应产生明显 norm 偏差(证明 fp32 修复必要 + 本测试能抓回归),实测偏离 {bad_dev:.2e}"

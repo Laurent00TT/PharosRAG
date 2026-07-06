@@ -259,21 +259,28 @@ PHAROS_INFERENCE_URL=http://localhost:8900 pytest tests/test_equivalence_gpu.py 
   "全 local 建全 local 查"一致(score 差 <1e-5)
 - **E3 reranker**:同 query+docs,local `score` vs remote `/rerank` `allclose`
 
-**里程碑**:E1/E2/E3 全过。**E2 不过则整个方案不上生产** —— 混建混查错位是静默数据损坏,最难查。
+**里程碑**:E1/E3 实测等价 + **E2 混建混查端到端 top-k 一致**。⚠ E1 逐元素等价**不蕴含** E2(top-k 要过 HNSW
+近似 + RRF **rank** 融合两层,近重复段分差可 < E1 maxdiff 而翻转排序);**E2 必须端到端实测,不能逻辑替代**。
+**E2 不过则整个方案不上生产** —— 混建混查错位是静默数据损坏,最难查。
 
-**阶段 B 完成状态(2026-07)**:✅ M1 锁下沉先行(`fe04256`),等价性实测通过:
-- **E1 encode 完全等价**:cosine=**1.0000000**、maxdiff **2.98e-08**、query cosine=1.0(fp32 torch/numpy 浮点极限)。
+**阶段 B 完成状态(2026-07;经阶段B对抗审查修订)**:M1 锁下沉先行(`fe04256`);**E1/E3 实测等价,E2 未端到端验证**:
+- **E1 encode 完全等价**:cosine=**1.0000000**、maxdiff **2.98e-08**、query cosine=1.0(分时实测 `scripts/equiv_gpu.py`)。
 - **E3 rerank 完全等价**:maxdiff **0.00**。
-- **修了 P1-2 真 bug**:`Dense._mrl` 原在 **bf16** 上 normalize → 转 fp32 后 norm≈**1.002**;统一 fp32 后 norm=**1.000**,
-  local↔remote 数值完全一致(否则 COSINE 方向虽等价但数值不一致埋隐患)。`dense.py:_mrl` 先 `.float()` 再截+normalize。
-  **旧库兼容**:截维前缀 bf16→fp32 无损、方向不变,旧 bf16 库仍可 COSINE 查;重建可获数值一致。
-- **E2 混建混查**:E1 逐元素等价(maxdiff 2.98e-8)+ Qdrant 检索确定性 ⟹ top-k 必然一致(**逻辑保证**);
-  端到端起服务实测留作后续保险(需分时,未纳入自动 CI)。
-- **显存约束(实测,学到的生产事实)**:inference(2×8B)占 4090 **33GB/48GB**,local Dense 也要 16GB → 双加载 **OOM**。
-  故等价性实测**分时**:remote 存档 → 停服务 → local 对比。这也印证"应用层脱 GPU"的价值:pharos 副本 0 GPU。
-- **护栏**:`_mrl_np` 下界断言(P1-1);`healthz` 暴露 `full_dim`/`model_dense`(D2/D6,预热探针取维度)。
-- **跑法**:CPU 部分 `pytest tests`(208 绿,含 remote/concurrency);GPU 部分 `pytest tests/engine/test_equivalence_gpu.py`
-  (navikb,自动 skip 无 GPU);端到端分时脚本 `scratchpad/equiv_{remote,local}.py`。
+- **修了 P1-2 真 bug**:`Dense._mrl` 原在 **bf16** 上 normalize → 转 fp32 后 norm≈**1.002**;统一 fp32(先 `.float()`
+  再截+normalize)后 norm=**1.000**,与 remote `_mrl_np` 对齐。**守护**:`test_remote.py::test_mrl_fp32_normalize_on_bf16_input`
+  (纯 CPU:bf16 张量进 `_mrl` → norm=1.0 + 反向守卫 bf16 normalize 会 >1.001;删 `.float()` 即红)。**旧库兼容**:截维前缀
+  bf16→fp32 无损、方向不变,旧 bf16 库仍可 COSINE 查;重建可获数值一致。
+- **⚠ E2 混建混查:未端到端验证的已知缺口**(审查 M2)。E1 逐元素等价(2.98e-8)**不能**逻辑推出 E2:默认 hybrid 走
+  HNSW 近似 + RRF **rank** 融合,近重复 chunk 的 cosine 分差可 < 2.98e-8 → local/remote 排序翻转、RRF 放大。**上生产前
+  须补实测**:~50 真实 query,local 建库后分别用 local/remote encode 查同 collection(hybrid),断言 top-k `chunk_id` 序完全一致。
+- **image 等价**(审查 S2):`encode_image` 与 text 共用 `_mrl`,截维等价随 text 成立(bf16 守护已覆盖);但 **image 路径
+  跨机一致性是独立未决项**(`remote.py` base64 TODO:建库机/查询机看同一路径可能解到不同图)。
+- **显存约束(实测)**:inference(2×8B)占 4090 **33GB/48GB**,local Dense 再要 16GB → 双加载 **OOM**,故等价性实测**分时**
+  (remote 存档 → 停服务 → local 对比)。这也印证"应用层脱 GPU":pharos 副本 0 GPU。
+- **护栏措辞诚实化**(审查 S1):`_mrl_np` 下界断言(P1-1)是**运行时**兜底(首次 encode 才触发、只覆盖 dense_dim > full_dim);
+  `healthz` 的 `full_dim`/`model_dense` 目前**仅暴露供人工排障,无客户端自动校验**(启动 fail-fast 的客户端 probe 是后续项)。
+- **跑法**:CPU `pytest tests`(210 绿,含 remote/concurrency/bf16 守护);GPU `pytest tests/engine/test_equivalence_gpu.py`
+  (navikb,自动 skip);端到端分时 **`python scripts/equiv_gpu.py --step remote|local`**(已入库,可复现审计)。
 
 ### 阶段 C —— CPU-mock 测试矩阵进 CI(仍单副本;常驻回归网)
 
@@ -371,7 +378,7 @@ docker compose exec pharos    python -c "import torch"        # 应 ModuleNotFou
 
 | 严重度 | 风险 | 缓解 |
 |---|---|---|
-| 最高 | 等价性未测:`_mrl`(torch) vs `_mrl_np`(numpy)dtype/舍入偏差 → 同库错位 | 阶段 B,E2 不过不上生产 |
+| 最高 | **E2 混建混查未端到端验证**:E1 逐元素等价**不蕴含** hybrid RRF+HNSW 下 top-k 不变 | 上生产前必补 E2 实测(§5-B);E1/E3/bf16 已实测 + CI 守护 |
 | 高 | dense 无重试(现状):任何抖动/预热/重启 → 查询被吞成无重试的 `backend_unavailable`,瞬态不吸收 | 阶段 A,先修(落点 toolcore) |
 | 高 | 嵌入式 Qdrant 文件锁:不迁 server,多副本根本起不来 | 阶段 D,多副本真 go/no-go |
 | 中 | server 模式 fusion filter ACL 语义变 → 越权泄漏 | 阶段 D **新增** server-mode 越权测试(非重跑嵌入式版) |

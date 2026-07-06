@@ -1,11 +1,11 @@
 """GPU 等价性测试(P1-2:local↔remote 检索向量数学等价的根据)。需真 GPU + Qwen3-VL 模型,CI 无 GPU 自动 skip。
 手动跑:conda activate navikb && pytest tests/engine/test_equivalence_gpu.py -v
 
-**为什么只需 local 模型、不起 inference 服务**:local 与 remote 用同一个 Qwen3-VL 权重,全维输出必然一致;
-唯一差异在**截维路径**——local 走 Dense._mrl(torch,fp32),remote 走 RemoteDense._mrl_np(numpy,fp32)。
-本测试对同一份真模型 bf16 全维输出跑两条截维路径,证明逐元素等价 => local 建库向量 == remote 查询向量。
-端到端(起服务、混建混查 E2)见 docs/SCALE_OUT.md §5-B 的手动脚本(分时避 OOM:remote 存档→停服务→local 对比,
-实测 encode cosine=1.0000000 / maxdiff 2.98e-08 / rerank maxdiff 0.00)。"""
+**这里只覆盖截维实现的一致性(torch vs numpy),不是完整 local↔remote 等价**(阶段B审查 M1 澄清):
+- `_mrl`(torch)与 `_mrl_np`(numpy)对同一份 fp32 全维截维,验证两实现逐元素一致;
+- **bf16→fp32 环节**(真实建库入口:model.process 出 bf16 → _mrl.float())的守护在 test_remote.py(纯 CPU);
+- **端到端**(起服务、bf16→JSON→fp32 传输、混建混查 E2)见 docs/SCALE_OUT.md §5-B 的 scripts/equiv_gpu.py 分时脚本
+  (实测 encode cosine=1.0000000 / maxdiff 2.98e-08 / rerank maxdiff 0.00)。"""
 import os
 
 import numpy as np
@@ -26,9 +26,11 @@ def _gpu_ready() -> bool:
 pytestmark = pytest.mark.skipif(not _gpu_ready(), reason="需真 GPU + Qwen3-VL 模型(navikb 环境);CI 跳过")
 
 
-def test_mrl_paths_equivalent_on_real_bf16_output():
-    """真模型 bf16 全维输出上,Dense._mrl(torch,fp32) 与 RemoteDense._mrl_np(numpy,fp32) 逐元素等价(P1-2)。
-    这是"同库 local 建、remote 查不错位"的数学根据。也守 fp32 修复:两路 norm 都 = 1(bf16 normalize 会 ≈1.002)。"""
+def test_mrl_torch_numpy_consistent_on_fp32_output():
+    """真模型输出(经 encode_text 已 .float() 成 fp32)上,Dense._mrl(torch) 与 RemoteDense._mrl_np(numpy) 逐元素一致。
+    ⚠ 诚实边界(阶段B审查 M1):本测试从**同一份 fp32** 出发,只验"fp32 截维 torch≈numpy",**不含 bf16→fp32 环节**。
+    - 真实建库入口(bf16 张量进 _mrl)的守护 -> test_remote.py::test_mrl_fp32_normalize_on_bf16_input(纯 CPU);
+    - 端到端 local↔remote(含 bf16→JSON→fp32 传输)的实测 -> scripts/equiv_gpu.py 分时(cosine=1.0/maxdiff 2.98e-8,SCALE_OUT §5-B)。"""
     import torch
 
     from embedder.dense import Dense
