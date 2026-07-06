@@ -79,6 +79,7 @@ class PharosConfig:
     # 索引
     index_dir: str = ""
     qdrant_path: str = ""
+    qdrant_url: str = ""          # server 模式(PHAROS_QDRANT_URL);空=嵌入式(默认单进程)。多副本前置,见 docs/SCALE_OUT.md 阶段D
     sidecar_dir: str = ""
     collection: str = "real"
     dense_dim: int = 1024
@@ -118,6 +119,7 @@ def from_env() -> PharosConfig:
         principals=principals,
         index_dir=index_dir,
         qdrant_path=os.path.expanduser(qdrant) if qdrant else os.path.join(index_dir, "qdrant"),
+        qdrant_url=_ns("QDRANT_URL").strip(),            # PHAROS_QDRANT_URL;非空走 server 模式(store.py 三分支)
         sidecar_dir=os.path.expanduser(sidecar) if sidecar else os.path.join(index_dir, "sidecar"),
         collection=_ns("COLLECTION", "real"),
         dense_dim=_int_ns("DENSE_DIM", 1024),

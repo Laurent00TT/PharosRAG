@@ -23,6 +23,7 @@ class EmbedConfig:
 
     # --- Qdrant(嵌入式起步;规模大了换 server 模式)---
     qdrant_path: str = os.path.expanduser("~/qdrant_data")
+    qdrant_url: str = ""           # 非空 = server 模式(阶段D 多副本真开关;优先级高于 qdrant_path,见 store.py 三分支)
     collection: str = "rag_chunks"
 
     # --- sidecar:per doc_id 存 elements+sections+acl_index(retrieve 期 assemble_big small-to-big 必需,

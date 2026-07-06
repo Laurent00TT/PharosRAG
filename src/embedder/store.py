@@ -21,9 +21,14 @@ from .types import Hit, User
 class Store:
     def __init__(self, cfg: EmbedConfig):
         self.cfg = cfg
-        self.client = (QdrantClient(location=":memory:") if cfg.qdrant_path == ":memory:"
-                       else QdrantClient(path=cfg.qdrant_path))
-        self._lock = threading.Lock()   # 嵌入式单 client 串行(M1);仅 local+嵌入式需要,server 模式可删
+        # 三分支(优先级 url > :memory: > path):server(阶段D 多副本)> 内存(测试,须在 path 前——大量测试依赖 :memory:)> 嵌入式(默认单进程)
+        if cfg.qdrant_url:
+            self.client = QdrantClient(url=cfg.qdrant_url)
+        elif cfg.qdrant_path == ":memory:":
+            self.client = QdrantClient(location=":memory:")
+        else:
+            self.client = QdrantClient(path=cfg.qdrant_path)
+        self._lock = threading.Lock()   # 嵌入式单 client 串行(M1);server 模式 Qdrant 并发安全,此锁可放宽(留阶段F/Q3)
 
     def ensure_collection(self) -> None:
         with self._lock:
