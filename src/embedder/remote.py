@@ -18,6 +18,7 @@ MRL 截维 / query LRU 缓存 / 排序写回 Hit 这些**业务逻辑全部继�
 from __future__ import annotations
 
 import atexit
+import contextlib
 import time
 
 import numpy as np
@@ -92,6 +93,9 @@ class RemoteDense(Dense):
     def __init__(self, cfg: EmbedConfig):
         super().__init__(cfg)
         self._client = _get_client(cfg)         # 共享连接池(按 url);测试可替换 self._client 注入 mock
+        # M1:remote 走 HTTP,无本地 GPU 前向/加载 -> 前向&加载锁置空,退避/HTTP 不持任何锁(_cache_lock 仍继承生效)
+        self._fwd_lock = contextlib.nullcontext()
+        self._load_lock = contextlib.nullcontext()
 
     def _load(self) -> None:                    # 远程后端本进程不加载模型、不碰 GPU
         return
@@ -130,6 +134,8 @@ class RemoteReranker(Reranker):
     def __init__(self, cfg: EmbedConfig):
         super().__init__(cfg)
         self._client = _get_client(cfg)
+        self._fwd_lock = contextlib.nullcontext()      # M1:remote rerank 走 HTTP,前向&加载锁置空
+        self._load_lock = contextlib.nullcontext()
 
     def _load(self) -> None:
         return

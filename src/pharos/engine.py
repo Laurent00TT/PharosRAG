@@ -3,60 +3,24 @@
 引擎三包(chunker/embedder/generator)已折入本仓 `src/`,与 pharos 同为可安装包 —— 直接 import,
 不再有跨仓 sys.path 注入 / 文件路径加载 toolcore 那套 path-dep(历史 D12 边界已解除,见 docs/PROVENANCE.md)。
 
-并发:嵌入式 Qdrant 单客户端 + GPU 模型前向非线程安全,FastAPI 会用线程池并发跑 sync 端点,
-故所有 retriever 调用经 `LockedRetriever` 串行化;LLM 网络调用不在锁内(见 service.py)。
+并发(M1 锁下沉,docs/SCALE_OUT.md 阶段B):**不再用一把 LockedRetriever 大锁串行所有检索** —— 那把大锁会让
+remote 后端的 dense HTTP 重试退避(预热/滚动重启期)持锁阻塞整副本查询(整副本雪崩)。改为**锁下沉到资源类**:
+  - Qdrant 单 client 段 -> `Store._lock`(local+remote 都要;嵌入式单 client 非线程安全);
+  - GPU 模型前向 -> `Dense`/`Reranker._fwd_lock`(仅 local;remote override 成 nullcontext,HTTP 天然并发);
+  - query LRU / lazy load -> `Dense._cache_lock` / `_load_lock`。
+remote encode 的 HTTP + 退避因此落在所有锁外,不阻塞其他查询。LLM 网络调用不在任何锁内(见 service.py)。
+换 Qdrant server 模式后 `Store._lock` 可整体删除(阶段 F/Q3),那时 remote `Retriever` 真正无锁、可多副本。
 """
 from __future__ import annotations
 
 import os
-import threading
 
 from embedder import EmbedConfig, Retriever, User, acl_admits
 from generator import Generator, OpenAICompatibleLLM
 
 
-class _LockedStore:
-    """retriever.store 的加锁代理(toolcore._list_impl 走 store.list_documents)。"""
-
-    def __init__(self, store, lock: threading.Lock):
-        self._store, self._lock = store, lock
-
-    def list_documents(self, user):
-        with self._lock:
-            return self._store.list_documents(user)
-
-
-class LockedRetriever:
-    """检索器加锁代理:嵌入式 Qdrant/GPU 前向按调用串行化。只代理 toolcore + Generator 用到的方法面。"""
-
-    def __init__(self, inner):
-        self._inner = inner
-        self._lock = threading.Lock()
-        self.store = _LockedStore(inner.store, self._lock)
-
-    def search_with_context(self, *a, **kw):
-        with self._lock:
-            return self._inner.search_with_context(*a, **kw)
-
-    def get_document(self, *a, **kw):
-        with self._lock:
-            return self._inner.get_document(*a, **kw)
-
-    def get_outline(self, *a, **kw):
-        with self._lock:
-            return self._inner.get_outline(*a, **kw)
-
-    def expand(self, *a, **kw):
-        with self._lock:
-            return self._inner.expand(*a, **kw)
-
-    def search_grouped(self, *a, **kw):
-        with self._lock:
-            return self._inner.search_grouped(*a, **kw)
-
-
-def build_retriever(cfg) -> LockedRetriever:
-    """建真检索器(打开嵌入式 Qdrant = 取得单客户端锁;dense 模型首查 lazy 加载)。"""
+def build_retriever(cfg) -> Retriever:
+    """建真检索器(打开嵌入式 Qdrant;dense 模型首查 lazy 加载)。锁下沉到各资源类,不再包 LockedRetriever。"""
     # 仅 **local 后端** 需要本地模型:dense/rerank 的官方 scripts/ 是运行时刚需(dense.py/rerank.py sys.path
     # 注入 qwen3_vl_*),缺则早报清晰错、而非首查深处 ModuleNotFoundError。**remote 后端(inference_url 非空)
     # 本进程不加载模型、不需要模型文件在本地** —— 跳过检查,这正是"应用层脱 GPU/脱模型"的体现。
@@ -71,7 +35,7 @@ def build_retriever(cfg) -> LockedRetriever:
                        collection=cfg.collection, dense_dim=cfg.dense_dim,
                        dense_model_path=cfg.dense_model_path, rerank_model_path=cfg.rerank_model_path,
                        gpu_name_must_contain=cfg.gpu_name, inference_url=cfg.inference_url)
-    return LockedRetriever(Retriever(ecfg))
+    return Retriever(ecfg)
 
 
 def build_user(cfg):

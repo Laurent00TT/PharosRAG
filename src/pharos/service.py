@@ -277,7 +277,7 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         if cfg.smart_ask:
             numeric = looks_numeric(q.query)
         try:
-            # 检索在 LockedRetriever 锁内、LLM 网络调用在锁外(不阻塞其他检索请求)
+            # 检索的 Qdrant/GPU 段在资源类锁内(Store._lock / Dense._fwd_lock,M1 锁下沉)、LLM 网络调用在锁外(不阻塞其他检索请求)
             ans = gen.answer(q.query, req_user, top_k=q.top_k, rerank=q.rerank,
                              doc_ids=q.doc_ids, doc_type=q.doc_type, kind=q.kind, strategy=q.strategy)
             if cfg.smart_ask and numeric and q.kind is None and smart.is_refusal(ans.text):

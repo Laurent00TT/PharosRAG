@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 
 from .acl import acl_admits
 from .config import SIDECAR_VERSION, EmbedConfig
@@ -40,11 +41,14 @@ class Retriever:
         self.dense = dense or make_dense(self.cfg)   # 工厂:cfg.inference_url 空=local(默认),非空=远程推理服务
         self.store = store or Store(self.cfg)
         self._reranker = reranker          # 可选 cross-encoder 精排;首次开 rerank 时 lazy 建
+        self._reranker_lock = threading.Lock()   # M1:lazy 建 reranker 的 single-flight(并发首查不重复 load 第二个 8B)
 
     def _get_reranker(self):
-        if self._reranker is None:
-            from .remote import make_reranker   # lazy:local 才 load 第二个 8B 模型(+16G 显存);remote 则走 HTTP
-            self._reranker = make_reranker(self.cfg)
+        if self._reranker is None:                 # 快路径免锁
+            with self._reranker_lock:
+                if self._reranker is None:         # double-check:并发首查只建一次
+                    from .remote import make_reranker   # lazy:local 才 load 第二个 8B(+16G);remote 走 HTTP
+                    self._reranker = make_reranker(self.cfg)
         return self._reranker
 
     def _load_sidecar(self, doc_id: str, cache: dict | None = None, user: User | None = None):

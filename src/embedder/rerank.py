@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 from dataclasses import replace
 
 from .config import EmbedConfig
@@ -21,6 +22,9 @@ class Reranker:
     def __init__(self, cfg: EmbedConfig | None = None):
         self.cfg = cfg or EmbedConfig()
         self._model = None
+        # M1 锁下沉(RemoteReranker override 成 nullcontext -> HTTP 并发):
+        self._fwd_lock = threading.Lock()      # GPU 前向串行(仅 local)
+        self._load_lock = threading.Lock()     # lazy load single-flight(独立锁,防与 _fwd_lock 嵌套)
 
     def _assert_gpu(self) -> None:
         import torch
@@ -33,23 +37,27 @@ class Reranker:
                 f"FASTEST_FIRST 编号会漂移——拒绝在错卡上跑。")
 
     def _load(self) -> None:
-        if self._model is not None:
+        if self._model is not None:            # 快路径:已加载免锁
             return
-        self._assert_gpu()
-        import torch
-        scripts = os.path.join(self.cfg.rerank_model_path, "scripts")
-        if scripts not in sys.path:
-            sys.path.insert(0, scripts)        # 复用官方 Qwen3VLReranker(随模型下发)
-        from qwen3_vl_reranker import Qwen3VLReranker
-        self._model = Qwen3VLReranker(
-            model_name_or_path=self.cfg.rerank_model_path, torch_dtype=torch.bfloat16)
+        with self._load_lock:                  # single-flight(独立锁,不与 _fwd_lock 嵌套)
+            if self._model is not None:        # double-check
+                return
+            self._assert_gpu()
+            import torch
+            scripts = os.path.join(self.cfg.rerank_model_path, "scripts")
+            if scripts not in sys.path:
+                sys.path.insert(0, scripts)    # 复用官方 Qwen3VLReranker(随模型下发)
+            from qwen3_vl_reranker import Qwen3VLReranker
+            self._model = Qwen3VLReranker(
+                model_name_or_path=self.cfg.rerank_model_path, torch_dtype=torch.bfloat16)
 
     def score(self, query: str, docs_text: list[str]) -> list[float]:
         """对 (query, 每个 doc text) 打 cross-encoder 相关性分(0~1),顺序对应 docs_text。"""
         self._load()
         inputs = {"instruction": self.cfg.rerank_instruction, "query": {"text": query},
                   "documents": [{"text": t or ""} for t in docs_text], "fps": 1.0}
-        scores = self._model.process(inputs)
+        with self._fwd_lock:                # local GPU 前向串行;RemoteReranker override score 走 HTTP,不经此
+            scores = self._model.process(inputs)
         if len(scores) != len(docs_text):   # 官方 API 契约:分数与文档一一对应。破坏则 fail-loud,不静默错排/越界
             raise RuntimeError(f"reranker 返回 {len(scores)} 分 != {len(docs_text)} 文档,API 契约破坏")
         return scores
