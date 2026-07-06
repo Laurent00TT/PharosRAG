@@ -87,6 +87,8 @@ class PharosConfig:
     dense_model_path: str = os.path.expanduser("~/models/Qwen3-VL-Embedding-8B")
     rerank_model_path: str = os.path.expanduser("~/models/Qwen3-VL-Reranker-8B")
     gpu_name: str = "4090"       # torch device 0 卡名须含此串(防 FASTEST_FIRST 漂到错卡);置空=不校验
+    # 模型推理后端:空=local(进程内加载 GPU 模型);非空=远程推理服务 URL —— 应用层脱 GPU、可多副本
+    inference_url: str = ""
     # 服务
     host: str = "127.0.0.1"
     port: int = 8787
@@ -123,6 +125,7 @@ def from_env() -> PharosConfig:
         dense_model_path=os.path.expanduser(os.environ.get("PHAROS_DENSE_MODEL_PATH", "~/models/Qwen3-VL-Embedding-8B")),
         rerank_model_path=os.path.expanduser(os.environ.get("PHAROS_RERANK_MODEL_PATH", "~/models/Qwen3-VL-Reranker-8B")),
         gpu_name=os.environ.get("PHAROS_GPU_NAME", "4090"),
+        inference_url=os.environ.get("PHAROS_INFERENCE_URL", "").strip(),
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
         port=_int_env("PHAROS_PORT", 8787),
         api_key=os.environ.get("PHAROS_API_KEY", "").strip(),

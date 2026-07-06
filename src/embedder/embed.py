@@ -18,6 +18,7 @@ from qdrant_client import models
 from .acl import acl_split
 from .config import SIDECAR_VERSION, EmbedConfig
 from .dense import Dense
+from .remote import make_dense
 from .sparse import doc_sparse
 from .store import Store
 
@@ -41,7 +42,7 @@ class Embedder:
         # store/dense 可共享:嵌入式 Qdrant 同一 path 只允许一个 client(单进程内 embed+retrieve 必须共用),
         # 且复用 dense 避免重复 load 8B 模型(省 ~2min + 显存)。生产 server 模式无此 client 约束。
         self.cfg = cfg or EmbedConfig()
-        self.dense = dense or Dense(self.cfg)
+        self.dense = dense or make_dense(self.cfg)   # 工厂:cfg.inference_url 空=local(默认),非空=远程推理服务
         self.store = store or Store(self.cfg)
         self.store.ensure_collection()
         os.makedirs(self.cfg.sidecar_dir, exist_ok=True)

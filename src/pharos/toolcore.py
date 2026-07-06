@@ -35,7 +35,8 @@ section_window=token 受限的窗口/截断片(**非完整小节**:可能漏了�
 asset_no_prose=资产页无散文上下文(数据看本块 content_raw,非完整段);single_chunk_*=只拿到命中块、
 上下文不全(需要更全可对其 chunk_id 调 expand);already_returned=本会话已返回过同段(引用 chunk_id 即可、无需再要);
 omitted_budget=因 token 预算省略正文(需要全文可对 chunk_id 调 expand 或减小 top_k)。meta.rerank_degraded=true=精排不可用已回退 hybrid。
-status=no_access=无权或不存在;config_error=该文档 sidecar 需重建;backend_unavailable=后端暂不可用、可重试。
+status=no_access=无权或不存在;config_error=该文档 sidecar 需重建;backend_unavailable=后端暂不可用、可重试;
+inference_unavailable=推理服务预热中/暂不可用、可重试(稍候重试即可,非查询本身有问题)。
 
 [工具] retrieve(混合检索,可 doc_ids/doc_type/kind 过滤、strategy=hybrid|dense|sparse 选路、mode=concise 先扫)、
 list_documents(库存+覆盖)、get_outline(某文档目录)、get_document(通读整篇,适合总结/通读核对)、
@@ -213,7 +214,11 @@ def _retrieve_impl(retriever, user, query: str, top_k, rerank: bool,
         return _build_retrieve_result(retriever, user, query, top_k, rerank, doc_ids=doc_ids, doc_type=doc_type,
                                       kind=kind, concise=(mode == "concise"), strategy=strategy,
                                       rerank_top_n=rerank_top_n, returned_keys=returned_keys)
-    except Exception:
+    except Exception as e:
+        # P0-1:远程推理不可用(预热/滚动重启的可重试瞬态)从通用后端故障里**分流**,给 agent 更准的 retriable 语义。
+        # duck-typing(不 import embedder.errors,保持本层 stdlib-only):InferenceUnavailable 带 marker 属性。
+        if getattr(e, "inference_unavailable", False):
+            return _err("inference_unavailable", "推理服务预热中或暂不可用,请稍后重试。", retriable=True)
         return _err("backend_unavailable", "检索后端暂不可用,请稍后重试。", retriable=True)
 
 
@@ -275,7 +280,9 @@ def _grouped_impl(retriever, user, query: str, doc_ids, top_k, rerank: bool) -> 
         return _err("bad_arg", f"top_k 必须 >=1(收到 {top_k})。")
     try:                                                 # B3 review:grouped 此前无 try,运行期异常会裸抛给 agent
         groups = retriever.search_grouped(query, user, list(doc_ids), top_k=top_k, rerank=rerank)
-    except Exception:
+    except Exception as e:
+        if getattr(e, "inference_unavailable", False):   # P0-1:同 _retrieve_impl,推理不可用分流出可重试语义
+            return _err("inference_unavailable", "推理服务预热中或暂不可用,请稍后重试。", retriable=True)
         return _err("backend_unavailable", "检索后端暂不可用,请稍后重试。", retriable=True)
     out = {d: [_hit_dict(i, {"hit": h, "context": None, "context_status": "concise"})
                for i, h in enumerate(hits, 1)] for d, hits in groups.items()}

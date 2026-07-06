@@ -57,18 +57,20 @@ class LockedRetriever:
 
 def build_retriever(cfg) -> LockedRetriever:
     """建真检索器(打开嵌入式 Qdrant = 取得单客户端锁;dense 模型首查 lazy 加载)。"""
-    # dense/rerank 的官方 scripts/ 是运行时刚需(dense.py/rerank.py sys.path 注入 qwen3_vl_*);缺则早报清晰错,
-    # 而非首查深处 ModuleNotFoundError。模型路径/GPU 名由 pharos 配置注入(PHAROS_*),不再埋在 embedder 默认。
-    scripts = os.path.join(cfg.dense_model_path, "scripts")
-    if not os.path.isdir(scripts):
-        raise SystemExit(
-            f"dense 模型 scripts 目录缺失:{scripts}\n"
-            f"模型(含官方 scripts/)需在 PHAROS_DENSE_MODEL_PATH(现 {cfg.dense_model_path});"
-            f"用 modelscope 下 Qwen3-VL-Embedding-8B 会带 scripts/。")
+    # 仅 **local 后端** 需要本地模型:dense/rerank 的官方 scripts/ 是运行时刚需(dense.py/rerank.py sys.path
+    # 注入 qwen3_vl_*),缺则早报清晰错、而非首查深处 ModuleNotFoundError。**remote 后端(inference_url 非空)
+    # 本进程不加载模型、不需要模型文件在本地** —— 跳过检查,这正是"应用层脱 GPU/脱模型"的体现。
+    if not cfg.inference_url:
+        scripts = os.path.join(cfg.dense_model_path, "scripts")
+        if not os.path.isdir(scripts):
+            raise SystemExit(
+                f"dense 模型 scripts 目录缺失:{scripts}\n"
+                f"模型(含官方 scripts/)需在 PHAROS_DENSE_MODEL_PATH(现 {cfg.dense_model_path});"
+                f"用 modelscope 下 Qwen3-VL-Embedding-8B 会带 scripts/。或配 PHAROS_INFERENCE_URL 用远程推理服务。")
     ecfg = EmbedConfig(qdrant_path=cfg.qdrant_path, sidecar_dir=cfg.sidecar_dir,
                        collection=cfg.collection, dense_dim=cfg.dense_dim,
                        dense_model_path=cfg.dense_model_path, rerank_model_path=cfg.rerank_model_path,
-                       gpu_name_must_contain=cfg.gpu_name)
+                       gpu_name_must_contain=cfg.gpu_name, inference_url=cfg.inference_url)
     return LockedRetriever(Retriever(ecfg))
 
 

@@ -8,6 +8,7 @@ import os
 from .acl import acl_admits
 from .config import SIDECAR_VERSION, EmbedConfig
 from .dense import Dense
+from .remote import make_dense
 from .sparse import query_sparse
 from .store import Store
 from .types import User
@@ -36,14 +37,14 @@ class Retriever:
                  dense: Dense | None = None, reranker=None):
         # 同进程内与 Embedder 共享 store(嵌入式 Qdrant 单 client 约束)+ dense(避免重复 load 8B)。
         self.cfg = cfg or EmbedConfig()
-        self.dense = dense or Dense(self.cfg)
+        self.dense = dense or make_dense(self.cfg)   # 工厂:cfg.inference_url 空=local(默认),非空=远程推理服务
         self.store = store or Store(self.cfg)
-        self._reranker = reranker          # 可选 cross-encoder 精排(Reranker);首次开 rerank 时 lazy 建
+        self._reranker = reranker          # 可选 cross-encoder 精排;首次开 rerank 时 lazy 建
 
     def _get_reranker(self):
         if self._reranker is None:
-            from .rerank import Reranker   # lazy:只有真开 rerank 才 load 第二个 8B 模型(+16G 显存)
-            self._reranker = Reranker(self.cfg)
+            from .remote import make_reranker   # lazy:local 才 load 第二个 8B 模型(+16G 显存);remote 则走 HTTP
+            self._reranker = make_reranker(self.cfg)
         return self._reranker
 
     def _load_sidecar(self, doc_id: str, cache: dict | None = None, user: User | None = None):
