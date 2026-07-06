@@ -55,7 +55,7 @@ def _pcfg():
 
 def _config() -> EmbedConfig:
     cfg = _pcfg()
-    return EmbedConfig(qdrant_path=cfg.qdrant_path, sidecar_dir=cfg.sidecar_dir,
+    return EmbedConfig(qdrant_path=cfg.qdrant_path, qdrant_url=cfg.qdrant_url, sidecar_dir=cfg.sidecar_dir,
                        collection=cfg.collection, dense_dim=cfg.dense_dim)
 
 

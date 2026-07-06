@@ -48,9 +48,9 @@ def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | N
     if not os.path.isdir(corpus):
         raise SystemExit(f"语料目录不存在:{corpus}")
 
-    ecfg = EmbedConfig(qdrant_path=os.path.join(dest, "qdrant"),
+    ecfg = EmbedConfig(qdrant_path=os.path.join(dest, "qdrant"), qdrant_url=cfg.qdrant_url,
                        sidecar_dir=os.path.join(dest, "sidecar"),
-                       dense_dim=cfg.dense_dim, collection=collection)
+                       dense_dim=cfg.dense_dim, collection=collection)   # server 模式(qdrant_url非空)写 server;dest/qdrant 被 store 三分支忽略
     try:
         emb = Embedder(ecfg)
     except Exception as e:

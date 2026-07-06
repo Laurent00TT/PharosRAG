@@ -31,7 +31,7 @@ def build_retriever(cfg) -> Retriever:
                 f"dense 模型 scripts 目录缺失:{scripts}\n"
                 f"模型(含官方 scripts/)需在 PHAROS_DENSE_MODEL_PATH(现 {cfg.dense_model_path});"
                 f"用 modelscope 下 Qwen3-VL-Embedding-8B 会带 scripts/。或配 PHAROS_INFERENCE_URL 用远程推理服务。")
-    ecfg = EmbedConfig(qdrant_path=cfg.qdrant_path, sidecar_dir=cfg.sidecar_dir,
+    ecfg = EmbedConfig(qdrant_path=cfg.qdrant_path, qdrant_url=cfg.qdrant_url, sidecar_dir=cfg.sidecar_dir,
                        collection=cfg.collection, dense_dim=cfg.dense_dim,
                        dense_model_path=cfg.dense_model_path, rerank_model_path=cfg.rerank_model_path,
                        gpu_name_must_contain=cfg.gpu_name, inference_url=cfg.inference_url)

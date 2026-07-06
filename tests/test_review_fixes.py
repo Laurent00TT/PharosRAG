@@ -44,6 +44,20 @@ def test_build_retriever_asserts_model_scripts(tmp_path):
         build_retriever(make_cfg(dense_model_path=str(tmp_path / "no-such-model")))
 
 
+# ---------- 阶段D 审查 M1:PHAROS_QDRANT_URL 必须真传到 Store(QdrantClient(url=)),否则 server 链不通(我曾宣称透传却漏改 engine)----------
+def test_qdrant_url_reaches_store_via_engine():
+    """守护 engine.build_retriever 透传 qdrant_url。mock QdrantClient 避免真连,纯 CPU;删 engine 的 qdrant_url= 即红。"""
+    from unittest import mock
+
+    from pharos.engine import build_retriever
+    cfg = make_cfg(qdrant_url="http://fake:6333", inference_url="http://fake:8900")   # inference_url 非空 -> 跳 scripts 检查
+    with mock.patch("embedder.store.QdrantClient") as MockQC:
+        build_retriever(cfg)
+    MockQC.assert_called_once()
+    assert MockQC.call_args.kwargs.get("url") == "http://fake:6333", \
+        f"engine 未透传 qdrant_url 到 Store(QdrantClient 调用={MockQC.call_args})"
+
+
 # ---------- pharos parse:manifest 缺失时清晰报错(不静默/不裸抛)----------
 def test_pharos_parse_missing_manifest(tmp_path):
     from pharos.parser import run_parse

@@ -327,18 +327,23 @@ PHAROS_QDRANT_URL=http://localhost:6333 pytest tests/engine/test_store.py -k acl
 **里程碑**:两个 `pharos serve` 进程同时连同一个 Qdrant server 成功启动(嵌入式下第二个必报锁);
 新增的 server-mode ACL 越权测试全绿(fail-closed 保持)。
 
-**阶段 D 完成状态(2026-07)**:✅ 两个 go/no-go 都过,server 模式代码 + 回归测试落地。
-- **代码(三分支透传)**:`store.py` `__init__` 改 **url > :memory: > path** 三分支(`:memory:` 优先级保住,大量测试依赖);
-  `EmbedConfig.qdrant_url` + `PharosConfig.qdrant_url`(`PHAROS_QDRANT_URL`);`engine.py:build_retriever` 显式透传
-  `qdrant_url=cfg.qdrant_url`(否则 pharos 侧配了静默丢失,同当初 `inference_url` 坑)。**向后兼容**:不设 `qdrant_url`
-  走嵌入式,全量 211 passed 零破坏。
-- **⭐ Q2 ACL 越权重测(安全 go/no-go)= GO**:Qdrant server v1.18.0(与 client 1.18 匹配)实测,**hybrid(RRF)/dense/
-  sparse 三路都 fail-closed** —— 只回 public+有权(c1/c2),无权/跨租户/unset(c3/c4/c5)绝不召回。**嵌入式 RRF 丢顶层
-  should 的铁律在 server 模式未复发**(store.py 的"ACL 下推每个 prefetch"在 server fusion 下同样生效)。
-- **⭐ 多副本锁 = GO**:嵌入式同 path 第二个 client 报 `already accessed by another instance`(单进程独占,多副本
-  起不来);server 模式两个 client 同开一库都成功。**server 解开了嵌入式文件锁,多副本前置成立**。
-- **回归测试**:`tests/engine/test_store_server.py`(skipif server 不可达,CI 自动跳过;手动:起 `~/qdrant/qdrant` 后
-  `pytest tests/engine/test_store_server.py`)——`test_server_mode_acl_fail_closed_all_strategies` + `test_server_unlocks_multi_client`。
+**阶段 D 完成状态(2026-07;经阶段D对抗审查修订)**:server 模式代码 + 回归测试落地,两个 go/no-go 过。
+⚠ **首版有一处我漏改的透传缺口 + 两处测试假绿,审查抓出后已修**(诚实留档):
+- **代码(三分支 + 透传三出口)**:`store.py` `__init__` 改 **url > :memory: > path** 三分支(`:memory:` 优先级保住);
+  `EmbedConfig/PharosConfig.qdrant_url`(`PHAROS_QDRANT_URL`)。**透传必须覆盖全部生产出口**——审查 M1/M2/M3:字段加了
+  但首版**三个出口都没消费**(engine 查询 / indexer 建库 / mcp_stdio agentic,我曾宣称改了 engine 却漏改),server 链从未通;
+  已补 `engine.build_retriever` / `indexer.run_index` / `mcp_stdio._config` 三处 `qdrant_url=cfg.qdrant_url`,**实测**
+  `build_retriever(server cfg).store.client._client == QdrantRemote`;CPU 守护 `test_review_fixes::test_qdrant_url_reaches_store_via_engine`
+  (mock QdrantClient,删 engine 透传即红)。向后兼容:不设 qdrant_url 走嵌入式,全量零破坏。
+- **⭐ Q2 ACL 越权重测(安全 go/no-go)= GO**:Qdrant server v1.18.0 实测,**两层**:①管道级 hybrid/dense/sparse 三路
+  最终交付 fail-closed;②**fusion 层(审查 M4 真命题)** `test_server_fusion_no_should_leak_raw` **绕过出口 acl_admits**,
+  直接断言 server RRF 原始 `query_points` 输出不含越权点 —— 这才证"嵌入式丢顶层 should 铁律在 server 未复发"(store.py
+  prefetch 下推在 server fusion 真生效),而非靠 mode 无关的出口复核兜底。list_documents(scroll)同款原始探针(S1)。
+- **⭐ 多副本锁 = GO(有局限)**:嵌入式同 path 第二个 client 报 `already accessed`(单进程独占);server 两 client 同开一库。
+  ⚠ 审查 S2:这是**同进程**两个 Store,验的是"文件锁天花板已在 client 层移除",**非两个独立 pharos serve 进程**的真
+  多副本(那含 sidecar 共享 S3)——真两进程副本应答留 **阶段 E**(compose)。
+- **回归测试**:`tests/engine/test_store_server.py`(skipif server 不可达;`PHAROS_REQUIRE_QDRANT_SERVER=1` 强制不许静默
+  skip=假绿,审查 M5)——4 测试:管道三路 / fusion 原始探针 / list_documents / 多副本锁。健康探针改真连(`get_collections`)。
 - **数据迁移(真部署时)**:现有嵌入式 `~/rag_real` → server 用 `scroll`+`upsert`(或 Qdrant snapshot);**未迁真库**
   (D 用假向量小库验语义);迁移 + 真两进程 pharos serve 应答留 **阶段 E**(compose 起 inference + 多副本时端到端)。
 - **Store._lock 现状**:仍保留(M1);server 模式 Qdrant 并发安全,此锁"保护嵌入式单 client"的理由消失,**放宽/删除
