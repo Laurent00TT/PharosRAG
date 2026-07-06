@@ -73,6 +73,7 @@ def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
     state.ready = False
     state.err: str | None = None
     state.gpu_lock = threading.Lock()    # 单卡 GPU 前向串行化
+    state.full_dim: int | None = None    # 模型全维(预热探针取);healthz 暴露 -> 客户端可断言 dense_dim <= full_dim(D2/D6)
 
     @app.on_event("startup")
     def _warmup():
@@ -80,6 +81,8 @@ def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
             try:
                 dense._load()            # 各 1-2 分钟(8B),后台预热;热完前 /readyz 返 503
                 reranker._load()
+                probe = dense._model.process([{"text": "dim-probe", "instruction": None}], normalize=True)
+                state.full_dim = int(probe.shape[-1])   # 全维(如 4096);此处 dense_dim=_FULL_DIM 故 _mrl 不截
                 state.ready = True
             except Exception as e:       # 加载失败(缺卡/错卡/模型缺):readyz 暴露,编排不导流量
                 state.err = f"{type(e).__name__}: {e}"
@@ -87,8 +90,9 @@ def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
 
     @app.get("/healthz")                 # liveness:进程活着(不代表模型热)。**加载永久失败也仍报 ok** ——
     def healthz():                       # liveness=进程活着;配置错(错卡/缺模型)重启也修不好,报不健康只会 crashloop。
-        return {"status": "ok", "service": "inference", "ready": state.ready, "error": state.err}
-        # ↑ err 仅作字段**暴露供排障**,不改 liveness 判定;导流量判据必须用 /readyz(readiness),不是 /healthz。
+        return {"status": "ok", "service": "inference", "ready": state.ready, "error": state.err,
+                "full_dim": state.full_dim, "model_dense": os.path.basename(cfg.dense_model_path)}
+        # ↑ err/full_dim 作字段**暴露供排障 + 客户端 dense_dim 校验**;liveness 判定不变;导流量判据必须用 /readyz。
 
     @app.get("/readyz")                  # readiness:模型热了、能服务了 —— 编排据此导流量
     def readyz():

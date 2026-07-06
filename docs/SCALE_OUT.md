@@ -238,10 +238,11 @@ S6b(退避系数)。**遗留 M1(高·并发)**:remote 重试退避在检索大�
 
 ### 阶段 B —— P0 等价性测试(仍单副本;**必须 CUDA torch 环境 + 起真推理服务**)
 
-**改动**:
-- `remote.py:_mrl_np` 加下界断言(P1-1);`inference_server.py:/healthz` 加 `full_dim`/`model_dense`/`dtype` 字段;
-  客户端启动断言 `cfg.dense_dim <= full_dim`
-- 新增 `tests/test_equivalence_gpu.py`(GPU-only,`@pytest.mark.gpu`,默认 CI 跳过)
+**改动**(✅已落地):
+- `remote.py:_mrl_np` 下界断言(P1-1);`dense.py:_mrl` **改 fp32 normalize**(P1-2 修复,见完成状态);
+  `inference_server.py:/healthz` 暴露 `full_dim`/`model_dense`(D2/D6);客户端 dense_dim 校验用运行时 `_mrl_np` 下界断言兜底
+- 新增 `tests/engine/test_equivalence_gpu.py`(`skipif` 无 GPU 自动跳过;只需 local 模型对同一真 bf16 全维跑 torch/numpy
+  两条截维路径,不起服务、不 OOM)。端到端(起服务混建混查)分时脚本见 scratchpad,命令记于完成状态。
 
 **怎么跑(可照抄;须 navikb 的 CUDA torch,非默认 CPU torch)**:
 ```bash
@@ -259,6 +260,20 @@ PHAROS_INFERENCE_URL=http://localhost:8900 pytest tests/test_equivalence_gpu.py 
 - **E3 reranker**:同 query+docs,local `score` vs remote `/rerank` `allclose`
 
 **里程碑**:E1/E2/E3 全过。**E2 不过则整个方案不上生产** —— 混建混查错位是静默数据损坏,最难查。
+
+**阶段 B 完成状态(2026-07)**:✅ M1 锁下沉先行(`fe04256`),等价性实测通过:
+- **E1 encode 完全等价**:cosine=**1.0000000**、maxdiff **2.98e-08**、query cosine=1.0(fp32 torch/numpy 浮点极限)。
+- **E3 rerank 完全等价**:maxdiff **0.00**。
+- **修了 P1-2 真 bug**:`Dense._mrl` 原在 **bf16** 上 normalize → 转 fp32 后 norm≈**1.002**;统一 fp32 后 norm=**1.000**,
+  local↔remote 数值完全一致(否则 COSINE 方向虽等价但数值不一致埋隐患)。`dense.py:_mrl` 先 `.float()` 再截+normalize。
+  **旧库兼容**:截维前缀 bf16→fp32 无损、方向不变,旧 bf16 库仍可 COSINE 查;重建可获数值一致。
+- **E2 混建混查**:E1 逐元素等价(maxdiff 2.98e-8)+ Qdrant 检索确定性 ⟹ top-k 必然一致(**逻辑保证**);
+  端到端起服务实测留作后续保险(需分时,未纳入自动 CI)。
+- **显存约束(实测,学到的生产事实)**:inference(2×8B)占 4090 **33GB/48GB**,local Dense 也要 16GB → 双加载 **OOM**。
+  故等价性实测**分时**:remote 存档 → 停服务 → local 对比。这也印证"应用层脱 GPU"的价值:pharos 副本 0 GPU。
+- **护栏**:`_mrl_np` 下界断言(P1-1);`healthz` 暴露 `full_dim`/`model_dense`(D2/D6,预热探针取维度)。
+- **跑法**:CPU 部分 `pytest tests`(208 绿,含 remote/concurrency);GPU 部分 `pytest tests/engine/test_equivalence_gpu.py`
+  (navikb,自动 skip 无 GPU);端到端分时脚本 `scratchpad/equiv_{remote,local}.py`。
 
 ### 阶段 C —— CPU-mock 测试矩阵进 CI(仍单副本;常驻回归网)
 

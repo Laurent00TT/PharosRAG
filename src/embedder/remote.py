@@ -115,15 +115,18 @@ class RemoteDense(Dense):
 
     def _mrl_np(self, full: np.ndarray) -> np.ndarray:
         """对全维 numpy 向量做 MRL 截维 + L2 renorm(纯 numpy,与 Dense._mrl 的 torch 版数学等价)。
-        用 numpy 而非 torch:远程后端不该为了截维引入 torch 依赖(应用层要能无 GPU/无 torch 跑)。
-        (P1-1 下界断言留阶段 B 补 —— SCALE_OUT.md §5-B。)"""
+        用 numpy 而非 torch:远程后端不该为了截维引入 torch 依赖(应用层要能无 GPU/无 torch 跑)。"""
         d = self.cfg.dense_dim
+        if full.shape[-1] < d:              # P1-1:客户端 dense_dim > 服务端全维 = 配置错位,fail-loud(不静默返回过短向量灌进库)
+            raise RuntimeError(
+                f"dense_dim={d} > 推理服务返回的全维={full.shape[-1]},配置错位 —— "
+                f"检查 PHAROS_DENSE_DIM 与推理服务模型是否匹配。")
         if full.shape[-1] > d:
             v = full[:, :d]
             norm = np.linalg.norm(v, axis=-1, keepdims=True)
             v = v / np.clip(norm, 1e-12, None)
             return v.astype(np.float32)
-        return full.astype(np.float32)
+        return full.astype(np.float32)      # == d:全维即目标维,已 normalized,直接返回
 
 
 class RemoteReranker(Reranker):

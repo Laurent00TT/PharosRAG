@@ -63,11 +63,15 @@ class Dense:
                 model_name_or_path=self.cfg.dense_model_path, torch_dtype=torch.bfloat16)
 
     def _mrl(self, emb) -> np.ndarray:
-        """Matryoshka:截前 dense_dim 维 + 重 L2 normalize(dense_dim≥全维则不截)。"""
+        """Matryoshka:截前 dense_dim 维 + 重 L2 normalize(dense_dim≥全维则不截)。
+        **在 fp32 上截+normalize**(先 .float()):与远程后端 _mrl_np(numpy fp32)对齐,消除 bf16 normalize 的 norm 偏差
+        (阶段B等价性实测:bf16 上 normalize 转 fp32 后 norm≈1.002,fp32 上则 =1.0 —— 否则 local 建库向量与 remote
+        查询向量数值不一致,虽 COSINE 方向等价但埋隐患)。截维前缀 bf16→fp32 无损,方向不变,旧库仍兼容。"""
         import torch.nn.functional as F
+        emb = emb.float()                                    # bf16 -> fp32,与 remote 的 fp32 路径对齐
         if emb.shape[-1] > self.cfg.dense_dim:
             emb = F.normalize(emb[:, :self.cfg.dense_dim], p=2, dim=-1)
-        return emb.cpu().float().numpy()
+        return emb.cpu().numpy()
 
     def encode_text(self, texts: list[str], instruction: str | None = None) -> np.ndarray:
         self._load()
