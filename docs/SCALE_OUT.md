@@ -228,6 +228,10 @@
 **换 vLLM 的唯一正当触发**:查询 QPS 上升到 GPU 前向排队明显(`/embed` 队列深度持续 >1),需要
 continuous batching —— 不是"vLLM 更潮"。触发时迁移成本极低(端点契约不含业务概念)。
 
+> **vLLM 具体方案见 [VLLM_PLAN.md](VLLM_PLAN.md)**(2026-07 起草):不替换、先并存(同契约适配器 + compose profile),
+> vLLM 官方支持 Qwen3-VL-Embedding pooling 已 grounded;等价性/吞吐 go/no-go 门 + Phase 0 探针脚本
+> `scripts/vllm_equiv_probe.py` 已就位,**过门才升 Plan A**。
+
 ---
 
 ## 4. 对抗审视发现的缺口清单(P0/P1/P2/P3)
@@ -572,8 +576,9 @@ docker kill $(docker compose ps -q pharos | head -1)
 **结论**:`--scale pharos=N` 扩的是**应用层非 GPU 并发**(检索编排、ACL、组装)+ **崩溃隔离/滚动升级**(kill 一个
 其余无感),**不是** GPU 前向吞吐(那被单卡串行钉死)。QPS 上界看 inference,不看 pharos 副本数。
 
-**Open(规模再做):** session 粘滞/共享去重;inference 换 vLLM(GPU 排队明显时);inference 加 `INFERENCE_API_KEY`
-(现内网 `pharos-net` 隔离 + 不发布 8900 宿主端口即够);K8s(当前 nginx+compose 是学习载体)。
+**Open(规模再做):** session 粘滞/共享去重;**inference 换 vLLM(GPU 排队明显时)—— 方案已起草见 [VLLM_PLAN.md](VLLM_PLAN.md),
+Plan B 并存 + go/no-go 探针就位,等价/吞吐过门才升 Plan A**;inference 加 `INFERENCE_API_KEY`(现内网 `pharos-net`
+隔离 + 不发布 8900 宿主端口即够);K8s(当前 nginx+compose 是学习载体)。
 
 ---
 
