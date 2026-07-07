@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import threading
 import time
 from collections import defaultdict, deque
+
+log = logging.getLogger("pharos")
 
 
 class Stats:
@@ -87,9 +90,24 @@ class RequestLog:
                 self._q.task_done()
 
     def flush(self, timeout: float | None = None) -> None:
-        """等待队列中已入队记录全部落盘(测试/优雅停机用;生产热路径不调)。无队列(关闭)则 no-op。"""
-        if self._q is not None:
+        """等待队列中已入队记录全部落盘(测试/优雅停机用;生产热路径不调)。无队列(关闭)则 no-op。
+        timeout=None 无限等(测试同步用法);给定时带 deadline 等待 —— stdlib queue.join() 不支持超时,
+        写线程卡在 open/write(正是本类注释承认的 bind-mount IO 挂起场景)时无限 join 会把优雅停机
+        冻死到 stop_grace_period 被 SIGKILL。超时则 warning 后放弃返回(挂死的盘那批日志本来也写不出去)。"""
+        if self._q is None:
+            return
+        if timeout is None:
             self._q.join()
+            return
+        deadline = time.monotonic() + timeout
+        with self._q.all_tasks_done:              # queue.join() 的同款条件变量,只是 wait 带剩余 deadline
+            while self._q.unfinished_tasks:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    log.warning("reqlog flush 超时(%.1fs)放弃,%d 条记录未落盘",
+                                timeout, self._q.unfinished_tasks)
+                    return
+                self._q.all_tasks_done.wait(remaining)
 
     def write(self, rec: dict, stats: Stats | None = None) -> None:
         if not self.enabled:

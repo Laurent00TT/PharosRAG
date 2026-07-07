@@ -86,6 +86,27 @@ def test_refusal_hints_present_and_no_duplicate_suggestion():
     assert any("英文" in h or "文档语言" in h for h in r["hints"])
 
 
+def test_discarded_retry_keeps_first_round_finish_reason():
+    # 修复:重试被弃用时返回第一轮答案,finish_reason 必须也是第一轮的(随 Answer 快照)——
+    # 此前读 gen.llm.last_finish_reason,拿到的是被丢弃的第二轮的值,截断诊断信号与答案错位
+    class _TwoRoundRefusalLLM:
+        """两轮都拒答但 finish_reason 不同:第一轮 length(截断致拒答),第二轮 stop。"""
+        def __init__(self):
+            self.n = 0
+            self.last_finish_reason = None
+        def complete(self, messages):
+            self.n += 1
+            self.last_finish_reason = "length" if self.n == 1 else "stop"
+            return "I don't have enough information to answer."
+
+    ret = FakeRetriever(results_factory=lambda: [make_res(make_hit(), ctx_text="散文,不含数字")])
+    app = make_app(retriever=ret, generator_factory=lambda r, c: Generator(r, _TwoRoundRefusalLLM()))
+    with TestClient(app) as c:
+        r = c.post("/v1/ask", json={"query": "2015 年净利润多少?"}).json()
+    assert r["auto"] == ["table_leg_retry_discarded"]        # 走的确实是弃用分支
+    assert r["finish_reason"] == "length"                    # 第一轮的值(旧实现返回第二轮的 "stop")
+
+
 def test_is_refusal_patterns():
     assert smart.is_refusal("对于 2011 年,我没有足够的信息。")
     assert smart.is_refusal("I don't have enough information to answer.")

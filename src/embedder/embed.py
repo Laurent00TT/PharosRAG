@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import uuid
 from dataclasses import asdict
 
@@ -58,8 +59,11 @@ class Embedder:
 
         **契约:doc_id 必须全局唯一且稳定**。point_id = uuid5(chunk_id),chunk_id = f"{doc_id}#{n}";
         同 doc_id 重索引是幂等覆盖(feature),但**不同内容复用同 doc_id 会静默覆盖前者的向量+payload+ACL+sidecar**
-        (seal#3)。多源 ingest 须各自保证 doc_id 命名空间不撞(如加源前缀)。"""
-        self.store.delete_by_doc(doc_id)   # 先删该 doc 旧 point:重索引若变短,旧高编号 point 不会被覆盖 -> 删旧防孤儿(review#4)
+        (seal#3)。多源 ingest 须各自保证 doc_id 命名空间不撞(如加源前缀)。
+
+        失败面(评审修):编码 + sidecar tmp 都是**纯准备**,失败无副作用(旧索引原样可用);
+        delete->upsert->replace 收尾段毫秒级,该窗口内失败=该 doc 脱库(旧向量已删、新数据未落),
+        响亮告警后 raise,必须重跑本方法恢复 —— 不再是旧实现"先删后逐 chunk 编码"的分钟级脱库窗口。"""
         points, n_img, n_txt, n_skip = [], 0, 0, 0
         for ch in chunk_result.chunks:
             af = acl_split(ch.acl)
@@ -79,12 +83,31 @@ class Embedder:
             if svec is not None:
                 vec["sparse"] = svec
             points.append(models.PointStruct(id=self._pid(ch.chunk_id), vector=vec, payload=_payload(ch, af)))
-        if points:
-            self.store.upsert(points)
-        self._write_sidecar(doc_id, elements, chunk_result)
+        # sidecar tmp 也在 delete 前备好(json.dump+fsync 是磁盘满等失败的主要发生点),delete 后只剩原子改名
+        tmp, path = self._prepare_sidecar(doc_id, elements, chunk_result)
+        deleted = False
+        try:
+            # 删旧仍在 upsert 前:重索引若变短,旧高编号 point 不会被覆盖 -> 删旧防孤儿(review#4 动机不变)
+            self.store.delete_by_doc(doc_id)
+            deleted = True
+            if points:
+                self.store.upsert(points)
+            os.replace(tmp, path)          # 同盘原子改名:新向量与新 sidecar 同代落地(seal#9)
+        except Exception as e:
+            try:
+                os.remove(tmp)             # 清理准备产物;失败不掩盖主异常
+            except OSError:
+                pass
+            if deleted:                    # 旧向量已删、新数据未写全 —— 静默 raise 会让"跳过"掩盖脱库事实
+                print(f"[embedder] FATAL: doc {doc_id} 已脱库(旧向量已删,新向量/sidecar 未落库):"
+                      f"{type(e).__name__}: {e} —— 必须重新 index_document 恢复。", file=sys.stderr, flush=True)
+            raise
         return {"images": n_img, "texts": n_txt, "skipped": n_skip, "indexed": len(points)}
 
-    def _write_sidecar(self, doc_id: str, elements: list, chunk_result) -> None:
+    def _prepare_sidecar(self, doc_id: str, elements: list, chunk_result) -> tuple[str, str]:
+        """把 sidecar 全量写到 .tmp + fsync,返回 (tmp, path)。**不落正式文件**:调用方在库写成功后
+        os.replace 收尾。准备/收尾拆开是 index_document 失败面收窄的一半 —— 写盘失败发生在 delete 之前
+        (无副作用),delete 之后只剩同盘原子改名(seal#9:防写一半截断 JSON 让 small-to-big 永久崩)。"""
         data = {
             "version": SIDECAR_VERSION,        # 读侧校验:不符即拒,提示重建(schema 漂移防静默错)
             "elements": [asdict(e) for e in elements],
@@ -93,14 +116,16 @@ class Embedder:
             # acl_index: {element_idx: acl} —— assemble_big 用它保证 small-to-big 不跨 ACL 取材
             "acl_index": {str(k): v for k, v in chunk_result.acl_index().items()},
         }
-        # 原子写:写 .tmp + fsync + os.replace(同盘原子)。否则写一半崩 -> 截断 JSON -> 该 doc 的
-        # small-to-big 永久崩(向量已入库可召回,assemble 却 load 失败,不一致窗口真实存在)(seal#9)。
         path = os.path.join(self.cfg.sidecar_dir, f"{doc_id}.json")
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
+        return tmp, path
+
+    def _write_sidecar(self, doc_id: str, elements: list, chunk_result) -> None:
+        tmp, path = self._prepare_sidecar(doc_id, elements, chunk_result)
         os.replace(tmp, path)
 
     def delete_document(self, doc_id: str) -> None:

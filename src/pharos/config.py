@@ -114,6 +114,9 @@ class PharosConfig:
     log_dir: str = ""            # 请求日志目录(D11);空=关
     log_queries: bool = True     # 日志是否含 query 文本(截断;内网默认开)
     max_context_tokens: int = 12000
+    # /v1/ask 闭管道喂 LLM 的 context 总量软预算(est-token,超预算整条截尾);0=不限(默认)。
+    # 与 max_context_tokens(工具面检索**交付**预算)语义不同,分开命名 —— 换小上下文 LLM 后端时才需设。
+    ask_max_context_tokens: int = 0
     # smart-ask(/v1/ask 的产品层智能:数值题表格补检 + 拒答 hints;off=纯净模式)
     smart_ask: bool = True
     # LLM(闭管道 /v1/ask)
@@ -156,6 +159,7 @@ def from_env() -> PharosConfig:
         log_queries=os.environ.get("PHAROS_LOG_QUERIES", "on").strip().lower() not in ("off", "0", "false"),
         smart_ask=os.environ.get("PHAROS_SMART_ASK", "on").strip().lower() not in ("off", "0", "false"),
         max_context_tokens=_int_ns("MAX_CONTEXT_TOKENS", 12000),
+        ask_max_context_tokens=_int_env("PHAROS_ASK_MAX_CONTEXT_TOKENS", 0),
         llm_base_url=os.environ.get("PHAROS_LLM_BASE_URL", "https://api.deepseek.com"),
         llm_model=os.environ.get("PHAROS_LLM_MODEL", "deepseek-v4-flash"),
         llm_api_key_env=os.environ.get("PHAROS_LLM_API_KEY_ENV", "DEEPSEEK_API_KEY"),

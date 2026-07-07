@@ -126,6 +126,10 @@ def _build_retrieve_result(retriever, user, query: str, top_k, rerank: bool,
                                             assemble=not concise, strategy=strategy, rerank_top_n=rerank_top_n)
     hits = [_hit_dict(i, r) for i, r in enumerate(results, 1)]
     deduped = sum(1 for r in results if r.get("context_status") == "deduped")
+    # 同节折叠计数(retriever 的 SearchResults list 子类属性;mock/裸 list 无该属性 -> 0):
+    # deduped 是"折叠但仍占位交付裸 hit",section_folded 是"彻底不进返回"—— 后者让 agent 区分
+    # returned_n < requested_k 时到底是"库存尽"还是"命中被同节折叠掉了"。
+    section_folded = int(getattr(results, "section_folded_n", 0))
     rerank_degraded = bool(rerank and hits and all(h["score_kind"] != "rerank" for h in hits))  # 4.B
     # 5.A 跨调用去重:本会话先前已交付的 (doc_id, anchor/chunk) 退化为指针,省 context(保留地址供 agent 引用)
     already = 0
@@ -164,7 +168,8 @@ def _build_retrieve_result(retriever, user, query: str, top_k, rerank: bool,
     return {
         "status": "ok" if hits else "empty", "retriable": not hits,
         "hint": hint, "warning": _UNTRUSTED_WARNING,
-        "meta": {"requested_k": top_k, "returned_n": len(hits), "deduped_n": deduped, "rerank": rerank,
+        "meta": {"requested_k": top_k, "returned_n": len(hits), "deduped_n": deduped,
+                 "section_folded_n": section_folded, "rerank": rerank,
                  "rerank_degraded": rerank_degraded, "already_returned_n": already,
                  "budget_truncated": budget_truncated, "context_tokens": acc,
                  "mode": "concise" if concise else "full", "strategy": strategy,
@@ -174,13 +179,20 @@ def _build_retrieve_result(retriever, user, query: str, top_k, rerank: bool,
 
 
 def _build_list_result(retriever, user) -> dict:
-    docs = retriever.store.list_documents(user)
+    res = retriever.store.list_documents(user)
+    # store 真实现返回 (docs, truncated)(评审修:limit 是 chunk 扫描上限,超限静默截断清单无信号);
+    # 容忍裸 list:测试替身/旧 duck-typing 实现按无截断处理,不因形状升级连坐。
+    docs, truncated = res if isinstance(res, tuple) else (res, False)
     coverage: dict = {}                                  # B6.B:各 doc_type 篇数,给 agent 判断"问题是否在本库覆盖范围"
     for d in docs:
         dt = d.get("doc_type") or "unknown"
         coverage[dt] = coverage.get(dt, 0) + 1
-    return {"status": "ok" if docs else "empty", "retriable": False,
-            "hint": "" if docs else "当前身份下无可见文档。", "coverage": coverage, "documents": docs}
+    if truncated:
+        hint = "文档清单不完整(库规模超出单次扫描上限):coverage 摘要仅基于已扫描部分,勿据此断言覆盖范围。"
+    else:
+        hint = "" if docs else "当前身份下无可见文档。"
+    return {"status": "ok" if docs else "empty", "retriable": False, "hint": hint,
+            "truncated": truncated, "coverage": coverage, "documents": docs}
 
 
 def _safe_doc_call(fn, ref: str):

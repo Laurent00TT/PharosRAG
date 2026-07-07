@@ -56,4 +56,6 @@ def build_generator(retriever, cfg):
     llm = OpenAICompatibleLLM(model=cfg.llm_model, base_url=cfg.llm_base_url,
                               api_key_env=cfg.llm_api_key_env, thinking=False,
                               max_tokens=cfg.llm_max_tokens)
-    return Generator(retriever, llm, acl_check=acl_admits)
+    # PHAROS_ASK_MAX_CONTEXT_TOKENS(0=不限)→ 闭管道 context 总量软预算(换小上下文 LLM 后端时防超窗 400)
+    return Generator(retriever, llm, acl_check=acl_admits,
+                     max_context_tokens=cfg.ask_max_context_tokens or None)

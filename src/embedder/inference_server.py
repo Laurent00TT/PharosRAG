@@ -65,7 +65,7 @@ class EmbedImageReq(BaseModel):
 class RerankReq(BaseModel):
     query: str = ""
     documents: list[str] = []
-    instruction: str | None = None       # 冗余:rerank instruction 由服务端 cfg 定(约定两端一致,默认天然一致)
+    instruction: str | None = None       # P2-3 后被消费(客户端唯一真相):非 None 用客户端值,None 回落服务端 cfg 默认
 
 
 def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
@@ -79,7 +79,7 @@ def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
     state.ready = False
     state.err: str | None = None
     state.gpu_lock = threading.Lock()    # 单卡 GPU 前向串行化
-    state.full_dim: int | None = None    # 模型全维(预热探针取);healthz 暴露供排障(客户端自动校验待做,当前靠 remote._mrl_np 运行时下界断言兜底)
+    state.full_dim: int | None = None    # 模型全维(预热探针取);healthz 暴露:供排障 + 客户端首查握手校验(remote._verify_server)
     # 有界准入(阶段F 审查·背压):GPU 前向串行,过载时无上限排队 = 客户端 read-timeout 放弃后请求仍在队里
     # 烧 GPU + 重试再入队 = 3× 无效功 + 拥塞正反馈。信号量把在途(执行中 + 等锁)钉在 _MAX_INFLIGHT,
     # 满则立即 503 overloaded;客户端把 5xx 当 InferenceUnavailable 退避重试,天然兼容,队列长度有界。
@@ -116,7 +116,8 @@ def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
     async def healthz():                 # async:纯内存读,不进 40-线程池 -> 高负载下探针不饥饿(阶段F 审查)。
         return {"status": "ok", "service": "inference", "ready": state.ready, "error": state.err,
                 "full_dim": state.full_dim, "model_dense": os.path.basename(cfg.dense_model_path)}
-        # ↑ err/full_dim 仅**暴露供人工排障**(暂无客户端自动读取校验;dense_dim 错配靠 remote._mrl_np 运行时下界断言);liveness 判定不变,导流量用 /readyz。
+        # ↑ err 供人工排障;full_dim/model_dense 被 remote._verify_server 首查握手消费(模型身份/维度错配 fail-loud,
+        #   预热期 full_dim=None 时客户端不阻断、下查重试)。liveness 判定不变,导流量用 /readyz。
 
     @app.get("/readyz")                  # readiness:模型热了、能服务了 —— 编排据此导流量
     async def readyz():                  # async:纯内存读 state.ready/err,不进线程池(阶段F 审查:探针与 GPU 业务共池会饥饿假 unhealthy)

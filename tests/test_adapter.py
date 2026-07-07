@@ -78,6 +78,23 @@ def test_5xx_maps_backend_unavailable(stub):
     assert out["status"] == "backend_unavailable" and out["retriable"] is True
 
 
+def test_422_maps_contract_mismatch_not_retriable(stub):
+    # 修复:非 401 的 4xx(422 版本漂移致字段契约不匹配)是永久性错误 —— 不可标 retriable=True,
+    # 否则 toolcore 契约会教 agent 对同一请求无效循环重试;hint 指向版本/URL 排障而非"稍后重试"
+    stub(lambda m, p, j, q: httpx.Response(422, json={"detail": "field type error"}))
+    out = A.retrieve("q")
+    assert out["status"] == "contract_mismatch" and out["retriable"] is False
+    assert "PHAROS_URL" in out["hint"] and "版本" in out["hint"]
+    assert "稍后重试" not in out["hint"]
+
+
+def test_404_maps_contract_mismatch_not_retriable(stub):
+    # PHAROS_URL 误指他服的 404 同样不可重试(3xx 分支评审后已指向 PHAROS_URL,404 此前漏了同等处理)
+    stub(lambda m, p, j, q: httpx.Response(404, text="not found"))
+    out = A.get_document("d1")
+    assert out["status"] == "contract_mismatch" and out["retriable"] is False
+
+
 def test_non_json_maps_backend_unavailable(stub):
     stub(lambda m, p, j, q: httpx.Response(200, text="<html>not json</html>"))
     assert A.get_outline("d1")["status"] == "backend_unavailable"

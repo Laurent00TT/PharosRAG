@@ -107,8 +107,10 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
             log.warning("PHAROS_TENANT 未设 —— 一切检索将 fail-closed 返回空(no_identity)。")
         yield
         # 优雅停机(阶段F):drain 期把后台写线程队列里的请求日志落盘,别丢最后一批(观测完整性)。
+        # 带超时:磁盘挂起(bind-mount IO 卡死)时放弃而非冻死事件循环 —— 无限 join 会吃满
+        # stop_grace_period 30s 被 SIGKILL(uvicorn 25s drain + 5s flush ≤ 30s,预算自洽)。
         try:
-            state.reqlog.flush()
+            state.reqlog.flush(timeout=5.0)
         except Exception:
             log.warning("shutdown: reqlog flush 失败", exc_info=True)
 
@@ -180,7 +182,13 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
                 # errors 计入 http 4xx/5xx **或**结构化业务失败(no_access/bad_arg/ask_failed…);
                 # ok/empty 算成功。此前只看 http>=400,漏计一切返回 200 的结构化失败(评审)
                 err = code >= 400 or (biz is not None and biz not in ("ok", "empty"))
-                state.stats.record(ep, ms, err)
+                # stats 键用**路由模板**(/v1/documents/{doc_id})而非原始路径:原始路径下枚举 doc_id 会让
+                # 键基数无界(Stats 的 defaultdict 每新键建一个 deque,长期守护进程=慢性泄漏/低速 DoS)。
+                # 无 route(404 未匹配路由、被 _auth 401 短路 —— _observe 在最外层,二者都会到这)归并固定桶,
+                # 键集合 = 已注册路由数 + 1,天然有界。JSONL 的 rec["ep"] 保留原始路径(调试价值,在磁盘不在内存)。
+                route = request.scope.get("route")
+                stat_ep = getattr(route, "path", None) or ("/v1/_unmatched" if ep.startswith("/v1/") else ep)
+                state.stats.record(stat_ep, ms, err)
                 rec = {"ts": round(time.time(), 3), "ep": ep, "user": _iden_name(request),
                        "http": code, "ms": round(ms, 1)}
                 if response is None:
@@ -205,10 +213,12 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         """liveness:进程活着。**async**(纯内存读)—— 阶段F 审查:探针若与 /v1/ask(LLM 数十秒)、
         /v1/retrieve(inference hang 时单请求最长 ~361s 重试)共享 anyio 默认 40 线程池,高负载/下游故障下
         探针在池里排队饥饿 → docker healthcheck / K8s liveness 假 unhealthy → crashloop。async 端点在事件
-        循环里直接跑、不进线程池,彻底隔离。"""
+        循环里直接跑、不进线程池,彻底隔离。
+        信息边界与 /readyz 对齐(sec):本端点未鉴权,不回 collection/llm_model/identity_mode 这类
+        侦察信息(readyz 为同一评审结论刻意不回集合名,healthz 回了等于架空它)—— 详细字段挪到
+        admin-gated 的 /v1/stats。"""
         return {"status": "ok", "service": "pharos", "version": __version__,
-                "collection": cfg.collection, "tenant_bound": bool(cfg.tenant) or mode == "keys",
-                "llm_model": cfg.llm_model, "identity_mode": mode,
+                "tenant_bound": bool(cfg.tenant) or mode == "keys",
                 "uptime_s": round(time.time() - state.stats.started, 1)}
 
     @app.get("/readyz")
@@ -253,6 +263,7 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
             return JSONResponse({"status": "forbidden", "hint": "stats 需要 admin key。"}, status_code=403)
         snap = state.stats.snapshot()
         snap.update({"status": "ok", "identity_mode": mode, "sessions": len(state.sessions),
+                     "collection": cfg.collection, "llm_model": cfg.llm_model,   # 从 /healthz 挪入(未鉴权探针不该见)
                      "log_path": state.reqlog.path if state.reqlog.enabled else ""})
         return snap
 
@@ -355,9 +366,11 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         hints = (smart.build_hints(q.query, auto=auto, req_kind=q.kind, req_rerank=q.rerank,
                                    numeric=numeric)
                  if cfg.smart_ask and smart.is_refusal(ans.text) else [])
+        # finish_reason 读 Answer 快照而非 gen.llm 实例属性:重试被弃用时实例上残留第二轮的值(与返回的
+        # 第一轮答案错位),零召回时残留同线程上一请求的值 —— 快照随答案走,天然对齐。
         return _log(request, {"status": "ok", "answer": ans.text, "citations": citations,
                               "n_contexts": ans.n_contexts, "model": cfg.llm_model,
-                              "finish_reason": getattr(gen.llm, "last_finish_reason", None),
+                              "finish_reason": ans.finish_reason,
                               "auto": auto, "hints": hints},
                     query=q.query, auto=auto or None, n_citations=len(citations), refusal=bool(hints))
 

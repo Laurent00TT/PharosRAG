@@ -79,6 +79,7 @@ def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | N
     print(f"{corpus} 下 {len(dirs)} 篇,建库 -> {dest} (collection={collection}, "
           f"acl tenant={acl['tenant']}/{acl['visibility']})", flush=True)
     ok = total = 0
+    failed: list[str] = []
     for d in dirs:
         ddir = os.path.join(corpus, d)
         doc_type = d.split("__")[0] if "__" in d else "unknown"
@@ -95,7 +96,13 @@ def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | N
             total += len(res.chunks)
             print(f"  [{ok:2d}] {doc_type:20s} {lang} {len(res.chunks):4d} chunk  {d[:44]}", flush=True)
         except Exception as e:
-            print(f"  跳过 {d}: {type(e).__name__}: {e}", flush=True)
-    print(f"\nDONE -> {dest}  {ok} 篇 / {total} chunk;collection={collection} dense_dim={cfg.dense_dim}",
-          flush=True)
+            # 评审修(embedder 修复1):不再静默"跳过"——失败 doc 记清单、DONE 汇总、退出非零。
+            # index_document 若在 delete 后失败会自带"已脱库"FATAL 告警,此处清单让批量跑完后有据可重跑。
+            failed.append(d)
+            print(f"  失败 {d}: {type(e).__name__}: {e}", flush=True)
+    print(f"\nDONE -> {dest}  {ok} 篇 / {total} chunk;失败 {len(failed)} 篇;"
+          f"collection={collection} dense_dim={cfg.dense_dim}", flush=True)
+    if failed:
+        raise SystemExit(f"建库有失败文档(不可当成功交付):{', '.join(failed)}\n"
+                         f"用 --only <doc_id 前缀> 重跑;若日志含\"已脱库\"FATAL,该 doc 旧索引也已删,必须重跑。")
     return ok

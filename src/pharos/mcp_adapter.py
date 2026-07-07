@@ -49,7 +49,14 @@ def _call(method: str, path: str, json: dict | None = None, params: dict | None 
     if 300 <= r.status_code < 400:         # 评审修:httpx 默认不跟随重定向,3xx 落进 r.json() 会误报"非 JSON"
         return _tc._err("backend_unavailable", f"守护进程返回意外重定向(HTTP {r.status_code}),请检查 PHAROS_URL。",
                         retriable=True)
-    if r.status_code >= 400:
+    if 400 <= r.status_code < 500:
+        # 非 401 的 4xx = 永久性错误(422 版本漂移致字段契约不匹配、404 URL 指错服务、413 body 超限…),
+        # 重试永不修复 —— 不能标 retriable=True(toolcore 契约教 agent "retriable=稍候重试即可",会驱动无效循环)。
+        # 与本仓 SCALE_OUT 确立的"4xx 立即抛零重试、仅 5xx/瞬态重试"原则对齐。
+        return _tc._err("contract_mismatch",
+                        f"守护进程返回 HTTP {r.status_code}:请求契约不匹配 —— 请核对适配器与 pharos 服务版本"
+                        f"是否一致、PHAROS_URL 是否指向 pharos;重试无益。", retriable=False)
+    if r.status_code >= 500:
         return _tc._err("backend_unavailable", f"守护进程返回 HTTP {r.status_code},请稍后重试。", retriable=True)
     try:
         return r.json()

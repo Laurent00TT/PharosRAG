@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 
-from _common import EVAL_COLLECTION, EVAL_SRC, scroll_chunks
+from _common import EVAL_COLLECTION, EVAL_SRC, copy_demo, scroll_chunks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 UNITS = os.path.join(HERE, "_units")
@@ -38,7 +39,9 @@ def pick_evenly(items: list, k: int) -> list:
 
 
 def main():
-    qpath = os.path.join(os.path.expanduser(EVAL_SRC), "qdrant")
+    # 与 gen_gold/run_eval 同款锁规避:copytree 到临时副本再开,不抢 live 锁、不污染原库
+    work = os.path.join(tempfile.gettempdir(), "rag_eval_dump")
+    qpath, _ = copy_demo(work)
     payloads = scroll_chunks(qpath, EVAL_COLLECTION)
     print(f"扫到 {len(payloads)} 个 point(库={EVAL_SRC} coll={EVAL_COLLECTION})", flush=True)
 

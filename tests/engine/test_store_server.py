@@ -118,14 +118,38 @@ def test_server_list_documents_acl_scoped():
     try:
         _seed_acl_data(s)
         user = User(tenant="t1", principals=["g_hr"])
-        ids = {d["doc_id"] for d in s.list_documents(user)}
+        docs, truncated = s.list_documents(user)
+        ids = {d["doc_id"] for d in docs}
         assert ids == {"d1", "d2"}, f"t1/g_hr 只该见 public(d1)+有权(d2),实得 {sorted(ids)}"
+        assert truncated is False, "个位数 point 不该报截断"
         # 原始 scroll 探针:绕过出口 acl_admits,断言 server scroll filter 层不放行越权
         raw, _ = s.client.scroll("test_list_server", scroll_filter=s.acl_filter(user), limit=100, with_payload=True)
         raw_ids = {p.payload["chunk_id"] for p in raw}
         assert not (raw_ids & {"c3", "c4", "c5"}), f"server scroll 层泄漏 should! 原始={sorted(raw_ids)}"
     finally:
         s.client.delete_collection("test_list_server")
+
+
+def test_server_ensure_collection_heals_missing_payload_indexes():
+    """评审修(修复4):手工 create_collection(不建索引)模拟"建库中途崩溃的半初始化 collection"——
+    ensure_collection 存在分支须幂等补齐全部 7 个 payload index(否则 acl_*/doc_* 过滤在 server 退化全扫且永不自愈)。"""
+    coll = "test_index_heal"
+    raw = QdrantClient(url=URL)
+    try:
+        raw.delete_collection(coll)
+    except Exception:
+        pass
+    raw.create_collection(coll,
+        vectors_config={"dense": models.VectorParams(size=DIM, distance=models.Distance.COSINE)},
+        sparse_vectors_config={"sparse": models.SparseVectorParams(modifier=models.Modifier.IDF)})
+    try:
+        assert not raw.get_collection(coll).payload_schema, "前置:半初始化 collection 应无任何索引"
+        Store(EmbedConfig(qdrant_url=URL, dense_dim=DIM, collection=coll)).ensure_collection()
+        schema = set(raw.get_collection(coll).payload_schema)
+        expected = {"acl_tenant", "acl_visibility", "acl_allow", "acl_unset", "doc_id", "doc_type", "kind"}
+        assert expected <= schema, f"存在分支未补建索引,缺 {expected - schema}"
+    finally:
+        raw.delete_collection(coll)
 
 
 def test_server_unlocks_multi_client():

@@ -88,12 +88,41 @@ def test_list_documents_acl_scoped():
         _pt_doc(4, "dT2", "他司文档", A("t2", ["g_hr"], "restricted")),       # 跨租户
         _pt_doc(5, "dUnset", "未授权", A("t1", [], "restricted", unset=True)),  # fail-closed
     ])
-    ids = lambda u: {d["doc_id"] for d in s.list_documents(u)}
+    ids = lambda u: {d["doc_id"] for d in s.list_documents(u)[0]}    # 返回 (docs, truncated)
     assert ids(User("t1", ["g_hr"])) == {"dPub", "dHr"}, "t1/g_hr 只该见 public + 有权"
     assert ids(User("t1", ["g_fin"])) == {"dPub", "dFin"}, "t1/g_fin 见 public + 财务"
     assert ids(User("t2", ["g_hr"])) == {"dT2"}, "t2 只见自己租户"
-    docs = s.list_documents(User("t1", ["g_hr"]))
+    docs, truncated = s.list_documents(User("t1", ["g_hr"]))
     assert {d["doc_id"]: d["title"] for d in docs}["dHr"] == "HR文档", "title 应回填"
+    assert truncated is False, "5 个 point 远低于默认扫描上限,不该报截断"
+
+
+def test_list_documents_truncated_signal():
+    # 评审修(修复2):limit 是**可见 chunk 扫描上限**而非文档数 —— 撞上限提前停必须外露 truncated=True,
+    # 否则大库(>1 万 chunk)清单静默缺文档,agent 的覆盖判断被误导且无从得知。
+    s = Store(EmbedConfig(qdrant_path=":memory:", dense_dim=DIM, collection="t"))
+    s.ensure_collection()
+    pub = _A("t1", [], "public")
+    s.upsert([_pt_doc(i, f"doc{i:02d}", f"标题{i}", pub) for i in range(1, 11)])   # 10 可见 point / 10 doc
+    u = User("t1", ["g_hr"])
+    docs, truncated = s.list_documents(u, limit=5)
+    assert truncated is True, "还有下页(next_page_offset 非 None)且撞 limit -> 必须报截断"
+    assert len(docs) <= 5
+    docs_all, truncated_all = s.list_documents(u)                     # 默认 limit 足够扫完
+    assert truncated_all is False and len(docs_all) == 10
+
+
+def test_ensure_collection_existing_branch_backfills_indexes():
+    # 评审修(修复4):collection 已存在时也幂等补建全部 payload index —— server 模式下建库中途崩的
+    # 半初始化 collection 才能在下次启动自愈;未来新增索引也自动补到存量 collection。
+    s = Store(EmbedConfig(qdrant_path=":memory:", dense_dim=DIM, collection="t"))
+    s.ensure_collection()                                             # 创建分支
+    created = []
+    s.client.create_payload_index = (
+        lambda coll, field_name, field_schema: created.append(field_name))   # 实例级 spy(local 索引本就 no-op)
+    s.ensure_collection()                                             # 存在分支:此前直接 return,索引永不补
+    assert set(created) == {"acl_tenant", "acl_visibility", "acl_allow", "acl_unset",
+                            "doc_id", "doc_type", "kind"}, f"存在分支未幂等补建索引:{created}"
 
 
 def test_doc_type_kind_filter():

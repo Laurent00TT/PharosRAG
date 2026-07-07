@@ -205,3 +205,133 @@ def test_looks_numeric():
     assert looks_numeric("How much were total revenues?")
     assert not looks_numeric("这篇论文的方法论核心思想是什么")
     assert not looks_numeric("What is the main contribution of this paper?")
+
+
+# ---------- 修复:finish_reason 快照进 Answer(不再事后读 llm 实例属性) ----------
+class _FRLLM:
+    """带 last_finish_reason 的假 LLM:每次调用换一个值(模拟实例属性被后续调用覆盖)。"""
+
+    def __init__(self, reasons=("length", "stop"), text="answer [cite:1]"):
+        self._reasons, self._text, self.n = list(reasons), text, 0
+        self.last_finish_reason = None
+
+    def complete(self, messages):
+        self.last_finish_reason = self._reasons[min(self.n, len(self._reasons) - 1)]
+        self.n += 1
+        return self._text
+
+
+def test_finish_reason_snapshot_into_answer():
+    results = [{"hit": _Hit("c1", "d1", "t", {}), "context": _Ctx("ctx")}]
+    llm = _FRLLM(reasons=("length", "stop"))
+    gen = Generator(_Ret(results), llm)
+    a1 = gen.answer("q", user=None)
+    a2 = gen.answer("q", user=None)
+    assert a1.finish_reason == "length" and a2.finish_reason == "stop"
+    assert a1.finish_reason == "length"          # 第二次调用不回写第一个 Answer(快照,非实例引用)
+
+
+def test_finish_reason_none_on_zero_recall_not_residual():
+    # 零召回早退不调 LLM:finish_reason 必须是 None,不能是同一 llm 实例上一请求的残留值
+    llm = _FRLLM()
+    llm.last_finish_reason = "length"            # 模拟上一请求残留
+    ans = Generator(_Ret([]), llm).answer("q", user=None)
+    assert ans.n_contexts == 0 and ans.finish_reason is None
+
+
+# ---------- 修复:引用解析与中和共用宽松 CITE_RE(容空白/大小写) ----------
+def test_citation_spacing_variants_parsed():
+    class _LooseLLM:
+        def complete(self, messages):
+            return "answer [cite: 1] and [Cite:2]"     # 非 DeepSeek 后端常见的格式漂移
+    results = [{"hit": _Hit("c1", "d1", "t1", {}), "context": _Ctx("x1")},
+               {"hit": _Hit("c2", "d2", "t2", {}), "context": _Ctx("x2")}]
+    ans = Generator(_Ret(results), _LooseLLM()).answer("q", user=None)
+    assert [c.marker for c in ans.citations] == [1, 2]   # 此前严格正则下 citations=[](静默全丢)
+
+
+# ---------- 修复:context 总量 token 软预算(超预算整条截尾,meta 同步) ----------
+def test_context_token_budget_truncates_tail():
+    # est_tokens("x"*400, "")=100/条;预算 250 -> 保留前 2 条(主命中在前,截的是尾部)
+    results = [{"hit": _Hit(f"c{i}", "d1", f"t{i}", {}), "context": _Ctx("x" * 400)} for i in range(5)]
+    ans = Generator(_Ret(results), MockLLM()).answer("q", user=None, max_context_tokens=250)
+    assert ans.n_contexts == 2
+    assert [c.chunk_id for c in ans.citations] == ["c0", "c1"]   # meta 同步截,编号不错位
+    assert "x" * 400 in ans.raw_messages[1].content
+
+
+def test_context_budget_keeps_first_even_if_over():
+    # 单条即超预算不清空:退化成零 context 拒答的信息损失大于超预算(单条自身有 chunker BUDGETS 上界)
+    results = [{"hit": _Hit("c1", "d1", "t", {}), "context": _Ctx("y" * 4000)}]
+    gen = Generator(_Ret(results), MockLLM(), max_context_tokens=100)
+    ans = gen.answer("q", user=None)
+    assert ans.n_contexts == 1
+
+
+def test_context_budget_default_off():
+    # 默认 None:行为完全不变(所有 context 全进 prompt)
+    results = [{"hit": _Hit(f"c{i}", "d1", f"t{i}", {}), "context": _Ctx("x" * 400)} for i in range(5)]
+    ans = Generator(_Ret(results), MockLLM()).answer("q", user=None)
+    assert ans.n_contexts == 5
+
+
+# ---------- 修复:OpenAICompatibleLLM 空 content + 非正常 finish_reason -> 报错(不当合法空答案) ----------
+def _openai_llm_with_stub(content, finish_reason, reasoning=None):
+    import pytest
+    pytest.importorskip("openai")
+    from types import SimpleNamespace
+
+    from generator.llm import OpenAICompatibleLLM
+    llm = OpenAICompatibleLLM(model="m", api_key="test-key")
+    msg = SimpleNamespace(content=content, reasoning_content=reasoning)
+    resp = SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason=finish_reason)])
+    llm._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kw: resp)))
+    return llm
+
+
+def _msgs():
+    from generator.types import Message
+    return [Message(role="user", content="q")]
+
+
+def test_empty_content_content_filter_raises():
+    import pytest
+    llm = _openai_llm_with_stub("", "content_filter")
+    with pytest.raises(RuntimeError, match="content_filter"):
+        llm.complete(_msgs())
+
+
+def test_empty_content_length_with_reasoning_raises():
+    # thinking 把 max_tokens 耗尽在 reasoning_content、content 置空 -> 报错(不返回 status=ok 空答案)
+    import pytest
+    llm = _openai_llm_with_stub("", "length", reasoning="很长的思考链……")
+    with pytest.raises(RuntimeError, match="length"):
+        llm.complete(_msgs())
+
+
+def test_empty_content_stop_passes_through():
+    # 保守放行:finish_reason=stop(模型正常答空)不误伤
+    assert _openai_llm_with_stub("", "stop").complete(_msgs()) == ""
+
+
+def test_nonempty_content_length_returns():
+    # 截断但有内容:照常返回(截断信号走 finish_reason,由调用方处置)
+    llm = _openai_llm_with_stub("partial answer", "length")
+    assert llm.complete(_msgs()) == "partial answer"
+    assert llm.last_finish_reason == "length"
+
+
+# ---------- 修复:send_thinking 自动判定放宽到 base_url 或 model 名(网关/代理场景) ----------
+def test_send_thinking_gateway_by_model_name():
+    import pytest
+    pytest.importorskip("openai")
+    from generator.llm import OpenAICompatibleLLM
+    gw = "https://llm-gw.corp/v1"                # 网关 URL 无 "deepseek" 子串
+    assert OpenAICompatibleLLM(model="deepseek-v4-flash", base_url=gw, api_key="k").send_thinking is True
+    assert OpenAICompatibleLLM(model="qwen3-32b", base_url=gw, api_key="k").send_thinking is False
+    assert OpenAICompatibleLLM(model="qwen3-32b", base_url="https://api.deepseek.com",
+                               api_key="k").send_thinking is True
+    # 显式覆盖永远优先于自动判定
+    assert OpenAICompatibleLLM(model="deepseek-v4-flash", base_url=gw, api_key="k",
+                               send_thinking=False).send_thinking is False

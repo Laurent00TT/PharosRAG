@@ -5,7 +5,8 @@ ACL 兑现 chunker INTEGRATION §6 契约:fail-closed + 租户隔离 + (allow AN
 数组/_update_point 原地写)。删掉 LockedRetriever 大锁后,碰 self.client 的方法各自套 `self._lock` 串行。
 `acl_filter` 是纯构造(不碰 client),不加锁。换 Qdrant server 模式后此锁可整体删除(阶段 F/Q3)。
 注:`self._lock` 只保证**单方法**原子;`embed.py:index_document` 的 delete_by_doc+upsert 跨两次锁,重索引期间
-有该 doc 短暂召回不到的窗口(既有性质,非 M1 引入 —— 旧大锁也不裹建库路径)。同进程并发建库+查询不在当前契约内。"""
+有该 doc 短暂召回不到的窗口(既有性质,非 M1 引入 —— 旧大锁也不裹建库路径;delete 已排在全部编码完成后,
+窗口毫秒级;窗口内失败=该 doc 脱库,embed.py 会响亮告警要求重跑)。同进程并发建库+查询不在当前契约内。"""
 from __future__ import annotations
 
 import threading
@@ -41,12 +42,16 @@ class Store:
                     raise ValueError(
                         f"collection {c.collection!r} 已存在且 dense size={size} != cfg.dense_dim={c.dense_dim};"
                         f"改维度需重建 collection(删 {c.qdrant_path})或把 dense_dim 对齐回 {size}。")
-                return
-            self.client.create_collection(
-                c.collection,
-                vectors_config={"dense": models.VectorParams(size=c.dense_dim, distance=models.Distance.COSINE)},
-                sparse_vectors_config={"sparse": models.SparseVectorParams(modifier=models.Modifier.IDF)},
-            )
+            else:
+                self.client.create_collection(
+                    c.collection,
+                    vectors_config={"dense": models.VectorParams(size=c.dense_dim, distance=models.Distance.COSINE)},
+                    sparse_vectors_config={"sparse": models.SparseVectorParams(modifier=models.Modifier.IDF)},
+                )
+            # payload index 在**两个分支**都幂等补建(同 schema 重复 create 是覆盖,无需先 get 再补):
+            # 只在创建分支建的话,server 模式下 create_collection 成功后、索引建完前崩溃的半初始化 collection
+            # 会永久缺索引(含 acl_*,过滤退化全扫)且无自愈;未来新增索引也不会补到存量 collection。
+            # ensure_collection 每次 Embedder/Store 初始化都跑 -> 下次启动即自愈,成本仅 7 个幂等 RPC。
             for fld, schema in [("acl_tenant", "keyword"), ("acl_visibility", "keyword"),
                                 ("acl_allow", "keyword"), ("acl_unset", "bool"), ("doc_id", "keyword"),
                                 ("doc_type", "keyword"), ("kind", "keyword")]:   # 3.F:doc_type/kind 过滤索引(local 无效但 server 需要)
@@ -123,10 +128,12 @@ class Store:
                     score=p.score, payload=dict(p.payload), score_kind=score_kind)
                 for p in res if acl_admits(p.payload.get("acl") or {}, user)]
 
-    def list_documents(self, user: User, limit: int = 10000) -> list[dict]:
+    def list_documents(self, user: User, limit: int = 10000) -> tuple[list[dict], bool]:
         """列出 user 可见的文档(doc_id + title),ACL 作用域 —— 给 agentic RAG 的 list_documents 工具用。
         scroll 用 acl_filter 下推,且**逐条 acl_admits 复核**(双保险:嵌入式 QdrantLocal 对嵌套 should 的处理
-        在 fusion 下已知会丢[见 hybrid_search],scroll 下未单独验证,fail-closed 不赌——宁可多校验一次)。"""
+        在 fusion 下已知会丢[见 hybrid_search],scroll 下未单独验证,fail-closed 不赌——宁可多校验一次)。
+        ⚠ limit 语义是**可见 chunk 扫描上限**而非文档数(生产语料轻松超默认 1 万 chunk),故返回
+        (docs, truncated):truncated=True 表示因扫描上限提前停、清单可能不完整,消费方(toolcore)须透传给 agent。"""
         docs: dict[str, tuple] = {}
         flt = self.acl_filter(user)
         with self._lock:                                 # M1:整段 scroll 循环共用一个 client,串行
@@ -146,7 +153,9 @@ class Store:
                 seen += len(points)
                 if offset is None:
                     break
-        return [{"doc_id": k, "title": t, "doc_type": dt} for k, (t, dt) in sorted(docs.items())]
+        # scroll 的 next_page_offset 语义:还有下页才非 None —— 天然区分"扫完全库"与"撞扫描上限提前停"。
+        truncated = offset is not None and seen >= limit
+        return [{"doc_id": k, "title": t, "doc_type": dt} for k, (t, dt) in sorted(docs.items())], truncated
 
     def get_by_chunk_id(self, chunk_id: str, user: User) -> dict | None:
         """凭 chunk_id 取回该 point 的 payload(给 expand 用)。point_id=uuid5(chunk_id) 确定性正算 -> O(1) 直取,

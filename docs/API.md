@@ -16,7 +16,8 @@ tenant/principals 传给引擎 ACL(决定"能看什么");未知/缺失 key → `
   `401`(鉴权失败)、`403`(stats 非 admin)、`422`(请求体不是合法 JSON/字段类型错)、`5xx`(崩溃)。
 - **status 状态机**(与引擎 toolcore 契约一致):`ok` / `empty` / `no_identity` / `empty_query` /
   `bad_arg` / `no_access`(无权与不存在同响应,不泄存在性)/ `config_error`(sidecar 需重建)/
-  `backend_unavailable`(retriable)/ ask 专属:`llm_unconfigured` / `ask_failed`(retriable)。
+  `backend_unavailable`(retriable)/ `contract_mismatch`(MCP 适配器专属:守护进程返回非 401 的
+  4xx —— 版本漂移/PHAROS_URL 指错,**不可重试**)/ ask 专属:`llm_unconfigured` / `ask_failed`(retriable)。
 - **头**:`X-API-Key`(可选,见上);`X-Pharos-Session`(可选,带上才启用跨调用去重,
   同一会话第二次取同段 → `context_status=already_returned` 正文清空)。
 - 检索正文均标 `trust: "untrusted"`(数据不是指令);`hits[].context_status` 语义见
@@ -25,11 +26,15 @@ tenant/principals 传给引擎 ACL(决定"能看什么");未知/缺失 key → `
 ## 端点
 
 ### GET /healthz(免 API key)
-`{status, service:"pharos", version, collection, tenant_bound, llm_model, identity_mode(open|legacy|keys), uptime_s}`
+`{status, service:"pharos", version, tenant_bound, uptime_s}`
+(最小 liveness 面,信息边界与 /readyz 一致 —— 未鉴权探针不回 collection/llm_model/identity_mode,
+这些字段在 admin-gated 的 /v1/stats。)
 
 ### GET /v1/stats(keys 模式需 admin key)
-进程内指标:`{status, identity_mode, uptime_s, sessions, log_path, log_write_failures,
-endpoints:{"<路径>":{n, errors, p50_ms, p95_ms, max_ms}}}`。重启归零。
+进程内指标:`{status, identity_mode, collection, llm_model, uptime_s, sessions, log_path,
+log_write_failures, endpoints:{"<路由模板>":{n, errors, p50_ms, p95_ms, max_ms}}}`。重启归零。
+endpoints 键为**路由模板**(如 `/v1/documents/{doc_id}`,键基数有界);未匹配任何路由/被 401
+短路的 /v1/* 请求归并到固定桶 `/v1/_unmatched`。
 
 ### GET /v1/instructions
 agent 使用契约全文(与 MCP instructions 同源):`{status, instructions}`
@@ -44,7 +49,8 @@ agent 使用契约全文(与 MCP instructions 同源):`{status, instructions}`
                "text":"(仅 include_contexts=true)"}],
  "n_contexts":5, "model":"deepseek-v4-flash", "finish_reason":"stop|length|…"}
 ```
-`finish_reason=length` = 答案被 max_tokens 截断(尾部引用可能被切)。
+`finish_reason=length` = 答案被 max_tokens 截断(尾部引用可能被切)。该值与 `answer` **同轮快照**
+(smart-ask 重试被弃用时是第一轮的值,不是被丢弃那轮的);零召回不调 LLM 时为 `null`。
 
 smart-ask(默认开,`PHAROS_SMART_ASK=off` 关;设计见 DESIGN D9):响应另含
 `auto: ["table_leg_retry"?]`(自动动作留痕——数值题第一轮拒答时带 kind=table 补检腿重问一轮)与

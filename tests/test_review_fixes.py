@@ -301,6 +301,24 @@ def test_inference_failure_fields_env_to_embedconfig(monkeypatch):
     assert ecfg.inference_retries == 5 and ecfg.inference_backoff == 1.5
 
 
+# ---------- 修复:PHAROS_ASK_MAX_CONTEXT_TOKENS 经 config → engine 透传到 Generator(闭管道 context 预算)----------
+def test_ask_max_context_tokens_env_to_generator(monkeypatch):
+    """守护透传链:env → PharosConfig.ask_max_context_tokens → build_generator(max_context_tokens=)。
+    删 engine 的 max_context_tokens= 透传即红 —— 配了 env 却静默不生效(D 阶段"漏改出口"同款坑)。"""
+    from unittest import mock
+
+    from pharos.engine import build_generator
+    monkeypatch.setenv("PHAROS_ASK_MAX_CONTEXT_TOKENS", "6000")
+    cfg = pconfig.from_env()
+    assert cfg.ask_max_context_tokens == 6000
+    with mock.patch("pharos.engine.OpenAICompatibleLLM"), \
+         mock.patch("pharos.engine.Generator") as MockGen:
+        build_generator(None, make_cfg(ask_max_context_tokens=6000))
+        build_generator(None, make_cfg())                      # 默认 0 -> None(行为完全不变)
+    assert MockGen.call_args_list[0].kwargs.get("max_context_tokens") == 6000
+    assert MockGen.call_args_list[1].kwargs.get("max_context_tokens") is None
+
+
 # ---------- 阶段F 审查:P2-3 服务端 /rerank 消费客户端 instruction(收敛"客户端唯一真相")----------
 def test_reranker_score_consumes_client_instruction():
     """Reranker.score(instruction=) 非 None 时用调用方值、None 时回落服务端 cfg。inference_server /rerank 据此
@@ -319,3 +337,150 @@ def test_reranker_score_consumes_client_instruction():
     assert captured["instruction"] == "CLIENT_WINS"       # 客户端值优先(收敛唯一真相)
     rr.score("q", ["a", "b"], instruction=None)
     assert captured["instruction"] == "SERVER_DEFAULT"     # None 回落服务端默认(向后兼容)
+
+
+# ========== embedder 簇对抗验证修复(2026-07-07)==========
+# 修复1:index_document 删旧时机重排(编码/sidecar tmp 为纯准备 -> delete->upsert->replace 毫秒级收尾)
+from dataclasses import dataclass, field
+
+
+@dataclass
+class _Chunk:
+    """最小 chunk 替身:覆盖 embed._payload 读取的全部字段。"""
+    chunk_id: str
+    doc_id: str
+    text: str
+    kind: str = "text"
+    content_raw: str = ""
+    breadcrumb: list = field(default_factory=list)
+    section_path: str = ""
+    section_id: str = "s1"
+    section_anchor: str | None = None
+    page_start: int = 0
+    page_end: int = 0
+    source_indices: list = field(default_factory=list)
+    flags: list = field(default_factory=list)
+    lang: str = "en"
+    doc_type: str = "unknown"
+    image_path: str | None = None
+    doc_meta: dict = field(default_factory=dict)
+    acl: dict = field(default_factory=lambda: {"tenant": "t1", "allow": [], "visibility": "public", "unset": False})
+
+
+@dataclass
+class _El:
+    idx: int
+    text: str
+
+
+class _ChunkResult:
+    def __init__(self, chunks):
+        self.chunks = chunks
+        self.sections = []
+        self.banners = frozenset()
+
+    def acl_index(self):
+        return {0: {"tenant": "t1", "allow": [], "visibility": "public", "unset": False}}
+
+
+class _FakeDense:
+    """假 dense:fail_at=N 表示第 N 次 encode_text 起抛 exc(模拟 remote 重试耗尽 / GPU 断言快失败)。"""
+    def __init__(self, dim=8, fail_at=None, exc=None):
+        self.dim, self.fail_at, self.exc = dim, fail_at, exc
+        self.n = 0
+
+    def encode_text(self, texts, instruction=None):
+        import numpy as np
+        self.n += 1
+        if self.fail_at is not None and self.n >= self.fail_at:
+            raise self.exc or RuntimeError("boom")
+        return np.array([[0.1] * self.dim] * len(texts), dtype="float32")
+
+
+def _mk_embedder(tmp_path, dense):
+    from embedder import EmbedConfig, Embedder
+    cfg = EmbedConfig(qdrant_path=":memory:", dense_dim=8, collection="t", sidecar_dir=str(tmp_path))
+    return Embedder(cfg, dense=dense)
+
+
+def test_index_document_encode_failure_keeps_old_index(tmp_path):
+    """修复1核心回归:重索引在编码期失败(旧实现已先 delete_by_doc)-> 旧 point/旧 sidecar 必须原样可用。
+    修复前:旧向量全灭、该 doc 从库中持久消失直到人工重跑;修复后:编码是纯准备,失败零副作用。"""
+    from embedder.errors import InferenceUnavailable
+    emb = _mk_embedder(tmp_path, _FakeDense())
+    chunks = [_Chunk("doc#0", "doc", "第一段"), _Chunk("doc#1", "doc", "第二段")]
+    emb.index_document("doc", [_El(0, "x")], _ChunkResult(chunks), image_root=".")
+    assert emb.store.client.count("t").count == 2
+    sidecar_v1 = open(os.path.join(str(tmp_path), "doc.json"), encoding="utf-8").read()
+    emb.dense = _FakeDense(fail_at=2, exc=InferenceUnavailable("重试耗尽"))   # 第 2 个 chunk 编码时炸
+    with pytest.raises(InferenceUnavailable):
+        emb.index_document("doc", [_El(0, "x")], _ChunkResult(chunks), image_root=".")
+    assert emb.store.client.count("t").count == 2, "编码失败是纯准备阶段,旧向量必须仍可检索(修复前=0)"
+    assert open(os.path.join(str(tmp_path), "doc.json"), encoding="utf-8").read() == sidecar_v1, "旧 sidecar 不得被动"
+    assert not os.path.exists(os.path.join(str(tmp_path), "doc.json.tmp")), "无 tmp 残留"
+
+
+def test_index_document_post_delete_failure_loud(tmp_path, capsys):
+    """修复1:delete 之后失败(upsert 炸)-> 该 doc 真脱库,必须响亮告警"已脱库需重跑"再 raise,
+    且 sidecar 不得半更新(replace 未执行,tmp 清理)。"""
+    emb = _mk_embedder(tmp_path, _FakeDense())
+    chunks = [_Chunk("doc#0", "doc", "第一段")]
+    emb.index_document("doc", [_El(0, "x")], _ChunkResult(chunks), image_root=".")
+
+    def boom(points):
+        raise RuntimeError("qdrant write failed")
+    emb.store.upsert = boom
+    with pytest.raises(RuntimeError, match="qdrant write failed"):
+        emb.index_document("doc", [_El(0, "x")], _ChunkResult(chunks), image_root=".")
+    err = capsys.readouterr().err
+    assert "已脱库" in err and "doc" in err, "post-delete 失败必须响亮告警,不许静默 raise 被上游'跳过'吞掉"
+    assert os.path.exists(os.path.join(str(tmp_path), "doc.json")), "旧 sidecar 保留(与新向量未落一致)"
+    assert not os.path.exists(os.path.join(str(tmp_path), "doc.json.tmp")), "tmp 清理"
+
+
+def test_run_index_collects_failures_and_exits_nonzero(tmp_path, monkeypatch, capsys):
+    """修复1配套:indexer 不再静默"跳过"失败 doc —— 收集清单、DONE 行汇总、SystemExit 非零退出。"""
+    import pharos.indexer as IX
+    corpus = tmp_path / "corpus"
+    (corpus / "typeA__doc_bad").mkdir(parents=True)
+    (corpus / "typeA__doc_ok").mkdir()
+    monkeypatch.setattr(IX, "from_mineru_dir", lambda d: [SimpleNamespace(text="正文")])
+    monkeypatch.setattr(IX, "Chunker", lambda: SimpleNamespace(chunk=lambda els, **kw: SimpleNamespace(chunks=[1, 2])))
+
+    class _FakeEmb:
+        def __init__(self, cfg):
+            pass
+
+        def index_document(self, d, els, res, image_root):
+            if "bad" in d:
+                raise RuntimeError("推理服务不可用")
+            return {}
+    monkeypatch.setattr(IX, "Embedder", _FakeEmb)
+    with pytest.raises(SystemExit) as ei:
+        IX.run_index(make_cfg(), corpus=str(corpus), dest=str(tmp_path / "idx"))
+    out = capsys.readouterr().out
+    assert "失败 typeA__doc_bad" in out                       # 逐条失败行
+    assert "失败 1 篇" in out                                  # DONE 汇总
+    assert "typeA__doc_bad" in str(ei.value), "退出消息须带失败清单供重跑"
+
+
+# 修复6(收窄版):search_with_context 同节折叠计数外露(SearchResults.section_folded_n)
+def test_search_with_context_counts_section_folds():
+    from embedder.retrieve import Retriever, SearchResults
+    from embedder.types import Hit, User
+
+    pub = {"tenant": "t", "visibility": "public", "allow": [], "unset": False}
+
+    def hit(cid, sid):
+        return Hit(chunk_id=cid, doc_id="d", kind="text", text="t", score=0.9, payload={"section_id": sid})
+
+    def mk(hits):
+        r = Retriever.__new__(Retriever)                     # 不走 __init__(不建 Store/Dense)
+        r.search = lambda q, u, top_k=None, **kw: hits
+        r._assemble = lambda h, u, cache=None: SimpleNamespace(acl=pub, text="ctx", anchor=None)
+        return r
+    out = mk([hit("c1", "s1"), hit("c2", "s1"), hit("c3", "s1"), hit("c4", "s2")]).search_with_context(
+        "q", User("t", []))
+    assert isinstance(out, SearchResults) and [o["hit"].chunk_id for o in out] == ["c1", "c4"]
+    assert out.section_folded_n == 2, "c2/c3 同 s1 折叠不进返回,计数必须外露(区分'库存尽'与'被折叠')"
+    assert mk([hit("c1", "s1")]).search_with_context("q", User("t", [])).section_folded_n == 0

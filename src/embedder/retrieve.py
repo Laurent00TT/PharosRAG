@@ -15,6 +15,12 @@ from .store import Store
 from .types import User
 
 
+class SearchResults(list):
+    """search_with_context 的返回:list[dict] + 同节折叠计数。用 list 子类而非改返回形状为 (list, stats):
+    generator/eval 等调用方按普通 list 消费零改动;toolcore 用 getattr 读计数(mock 返回裸 list 时默认 0)。"""
+    section_folded_n = 0   # 同节去重被 continue 掉的命中数(不进返回)—— 让 agent 区分"库存尽"与"被同节折叠"
+
+
 class _ChunkShim:
     """从 Qdrant payload 重建 assemble_big 需要读的那几个 hit_chunk 属性(不必造完整 Chunk)。"""
     __slots__ = ("acl", "lang", "doc_id", "section_id", "section_anchor",
@@ -121,8 +127,10 @@ class Retriever:
         asset_no_prose=资产页无散文 big-block(数据靠命中块 content_raw,非完整段);single_chunk_degraded=sidecar 丢损;
         single_chunk_acl=big-block 出口 ACL 未过;deduped=与前命中同段/同窗的重复 big-block 被折叠,只回本命中块;concise=未做 small-to-big)。
         assemble=False(3.E concise):跳过 small-to-big 只回裸命中块(省 token/不读盘),仍做 section 去重。
-        doc_ids/doc_type/kind(3.A/3.F):过滤透传。"""
-        out, seen, cache, seen_anchor = [], set(), {}, set()   # cache:查询作用域 sidecar 缓存;seen_anchor:big-block 去重
+        doc_ids/doc_type/kind(3.A/3.F):过滤透传。
+        返回 SearchResults(list 子类):.section_folded_n 记同节折叠掉的条数(评审修:折叠不回填,交付数可远低于
+        top_k 而 agent 无信号区分"库存尽"与"被折叠";超采回填涉及检索交付变化,需 GPU eval 验证,留作后续)。"""
+        out, seen, cache, seen_anchor = SearchResults(), set(), {}, set()   # cache:查询作用域 sidecar 缓存;seen_anchor:big-block 去重
         for h in self.search(query, user, top_k, rerank=rerank, doc_ids=doc_ids, doc_type=doc_type,
                              kind=kind, strategy=strategy, rerank_top_n=rerank_top_n):
             sid = h.payload.get("section_id")
@@ -133,6 +141,7 @@ class Retriever:
             kind = h.payload.get("kind")
             key = (h.doc_id, sid) if (sid is not None and kind not in ("chart", "table")) else ("__chunk__", h.chunk_id)
             if key in seen:                                  # dedup_by_section:同小节多 chunk 命中只留首个
+                out.section_folded_n += 1                    # 折叠不进返回,但计数外露(toolcore 放进 meta)
                 continue
             seen.add(key)
             if not assemble:                                 # 3.E concise:跳过 small-to-big,只回裸命中块(省 token/不读盘)

@@ -64,8 +64,11 @@ class OpenAICompatibleLLM:
         self.max_tokens = max_tokens
         self.temperature = temperature
         # R3.C:thinking 是 DeepSeek 专有 extra_body 字段;原生 OpenAI/多数 vLLM/其它兼容代理对未知 body 字段会 400。
-        # 故只对 DeepSeek 系后端注入(默认按 base_url 自动判定,可显式 send_thinking= 覆盖),保住"OpenAI 兼容通吃"契约。
-        self.send_thinking = send_thinking if send_thinking is not None else ("deepseek" in base_url.lower())
+        # 故只对 DeepSeek 系后端注入(可显式 send_thinking= 覆盖),保住"OpenAI 兼容通吃"契约。
+        # 自动判定看 base_url **或 model 名**:公司网关代理场景 URL 无 "deepseek" 子串但 model 名通常仍带
+        # —— 只看 URL 会静默不发 disabled,V4 Flash 思考默认开时轻则延迟/费用翻倍、重则 400(见类 docstring)。
+        self.send_thinking = send_thinking if send_thinking is not None else (
+            "deepseek" in base_url.lower() or "deepseek" in model.lower())
         self.last_reasoning: str | None = None      # 最近一次思考链(reasoning_content),分开存,不进答案
         self.last_finish_reason: str | None = None  # R3.B:最近一次结束原因;=='length' 表示答案被 max_tokens 截断(尾部 [cite:n] 可能被切)
 
@@ -84,4 +87,12 @@ class OpenAICompatibleLLM:
             raise RuntimeError("LLM 返回空 choices(可能内容审查命中或上游异常);无法作答")
         self.last_finish_reason = getattr(choice, "finish_reason", None)   # R3.B:透出截断信号供调用方/评估过滤
         self.last_reasoning = getattr(choice.message, "reasoning_content", None)   # 思考链分离,不混进 content
-        return choice.message.content or ""
+        content = choice.message.content or ""
+        # R3.F 补:content 空且 finish_reason 非正常(content_filter 置空 / thinking 把 max_tokens 耗尽在
+        # reasoning_content 等)-> 与空 choices 同路径报错。否则空串以"合法空答案"返回,is_refusal("")=False,
+        # hints/重试/观测计 error 全被旁路(status=ok + 空 answer 的假绿)。stop/None 保守放行(模型正常答空
+        # 或后端不回 finish_reason,不误伤)。
+        if not content.strip() and self.last_finish_reason not in ("stop", None):
+            raise RuntimeError(f"LLM 返回空 content(finish_reason={self.last_finish_reason};"
+                               f"可能内容审查命中或思考模式耗尽 max_tokens);无法作答")
+        return content

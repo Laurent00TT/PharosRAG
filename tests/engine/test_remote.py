@@ -34,10 +34,13 @@ class _Resp:
 
 
 class _ScriptClient:
-    """按脚本逐次响应:每项是 _Resp(返回)或 Exception 实例(抛出)。用尽后重复最后一项。记录 calls。"""
-    def __init__(self, *steps):
+    """按脚本逐次响应:每项是 _Resp(返回)或 Exception 实例(抛出)。用尽后重复最后一项。记录 calls。
+    get(健康握手 fix3):health 缺省返回 200 空 dict(字段缺失=不阻断);health_exc 模拟探活不可达。"""
+    def __init__(self, *steps, health=None, health_exc=None):
         self.steps = list(steps) or [_Resp(200, {})]
         self.calls = []
+        self.health, self.health_exc = health, health_exc
+        self.get_calls = 0
 
     def post(self, path, json=None):
         self.calls.append({"path": path, "json": json})
@@ -45,6 +48,12 @@ class _ScriptClient:
         if isinstance(step, Exception):
             raise step
         return step
+
+    def get(self, path):
+        self.get_calls += 1
+        if self.health_exc is not None:
+            raise self.health_exc
+        return _Resp(200, self.health or {})
 
 
 def _fast_cfg(**kw):
@@ -296,3 +305,59 @@ def test_retry_remote_protocol_error_then_exhaust():
     with pytest.raises(InferenceUnavailable):                     # 非裸 RemoteProtocolError 冒泡
         rd.encode_text(["x"])
     assert len(rd._client.calls) == 2                             # retries+1 都试过
+
+
+# ---------- 修复3:首查握手(healthz 的 model_dense/full_dim 校验,防换模型后向量空间静默错位) ----------
+_OK_VEC = _Resp(200, {"vectors": [[0.0] * 8]})
+
+
+def test_handshake_model_mismatch_fail_loud():
+    """服务端换了模型(model_dense 与客户端 dense_model_path basename 不符)-> 首查 RuntimeError,
+    不发业务 POST(否则错空间向量已经灌出去了)。此前仅 _mrl_np 下界断言,同维不同模型完全静默。"""
+    rd = RemoteDense(_fast_cfg(dense_dim=8, dense_model_path="/models/MyEmb"))
+    rd._client = _ScriptClient(_OK_VEC, health={"model_dense": "OtherModel", "full_dim": 4096})
+    with pytest.raises(RuntimeError, match="模型身份错配"):
+        rd.encode_text(["x"])
+    assert rd._client.calls == []                                 # 校验在业务请求之前
+
+
+def test_handshake_full_dim_below_dense_dim_fail_loud():
+    rd = RemoteDense(_fast_cfg(dense_dim=1024, dense_model_path="/models/MyEmb"))
+    rd._client = _ScriptClient(_OK_VEC, health={"model_dense": "MyEmb", "full_dim": 512})
+    with pytest.raises(RuntimeError, match="full_dim"):
+        rd.encode_text(["x"])
+
+
+def test_handshake_ok_verifies_once():
+    """两字段都校验通过 -> 置标志位,后续查询零 GET 开销。"""
+    rd = RemoteDense(_fast_cfg(dense_dim=8, dense_model_path="/models/MyEmb"))
+    rd._client = _ScriptClient(_OK_VEC, health={"model_dense": "MyEmb", "full_dim": 4096})
+    rd.encode_text(["a"])
+    rd.encode_text(["b"])
+    assert rd._client.get_calls == 1                              # 只握手一次
+    assert len(rd._client.calls) == 2                             # 业务照常
+
+
+def test_handshake_unreachable_or_warming_not_blocking():
+    """预热边界:healthz 不可达 / full_dim 尚为 None(预热中)都不阻断业务(瞬态留给 _post_retry 重试链),
+    且不算握手完成 —— 下次查询继续尝试,直到验上为止。"""
+    rd = RemoteDense(_fast_cfg(dense_dim=8, dense_model_path="/models/MyEmb"))
+    rd._client = _ScriptClient(_OK_VEC, health_exc=httpx.ConnectError("refused"))
+    assert rd.encode_text(["a"]).shape == (1, 8)                  # 探活失败不挡业务
+    rd2 = RemoteDense(_fast_cfg(dense_dim=8, dense_model_path="/models/MyEmb"))
+    rd2._client = _ScriptClient(_OK_VEC, health={"model_dense": "MyEmb", "full_dim": None})   # 预热中
+    rd2.encode_text(["a"])
+    rd2.encode_text(["b"])
+    assert rd2._client.get_calls == 2                             # 没验上 -> 每查重试握手(验上即停,见上一测试)
+
+
+# ---------- 修复5:RemoteReranker.score 签名与基类对齐(instruction 形参 + 透传 payload) ----------
+def test_remote_reranker_score_instruction_passthrough():
+    """显式 instruction 进 payload(基类契约:per-call 覆盖);不传时回落 cfg.rerank_instruction(旧行为不变)。
+    删 remote.py score 的 instruction 形参即红 —— LSP 收窄输入域回归。"""
+    rr = RemoteReranker(_fast_cfg(rerank_instruction="CFG_DEFAULT"))
+    rr._client = _ScriptClient(_Resp(200, {"scores": [0.5]}))
+    rr.score("q", ["a"], instruction="PER_CALL")
+    assert rr._client.calls[0]["json"]["instruction"] == "PER_CALL"
+    rr.score("q", ["a"])
+    assert rr._client.calls[1]["json"]["instruction"] == "CFG_DEFAULT"

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import os
 import threading
 import time
 
@@ -105,11 +106,45 @@ class RemoteDense(Dense):
         # M1:remote 走 HTTP,无本地 GPU 前向/加载 -> 前向&加载锁置空,退避/HTTP 不持任何锁(_cache_lock 仍继承生效)
         self._fwd_lock = contextlib.nullcontext()
         self._load_lock = contextlib.nullcontext()
+        self._handshake_done = False            # 一次性模型/维度握手(_verify_server);成功校验后不再发 GET
+        self._handshake_lock = threading.Lock()
 
     def _load(self) -> None:                    # 远程后端本进程不加载模型、不碰 GPU
         return
 
+    def _verify_server(self) -> None:
+        """首查前的一次性握手:GET /healthz,比对服务端模型身份与全维(评审修:换服务端模型不重建库时,
+        _mrl_np 只有 full_dim<dense_dim 的下界断言,同维不同语义空间会静默错位,召回崩塌只能靠 eval 事后发现)。
+        边界:探活不可达/字段缺失或 None(预热中 full_dim=None,见 inference_server.py)**不阻断**——瞬态留给
+        _post_retry 既有重试链;只有拿到字段且不符才 RuntimeError fail-loud(配置错配非瞬态,不该被重试吸收)。
+        两个字段都校验过才置 _handshake_done,预热期每查重试直到验上。"""
+        if self._handshake_done:
+            return
+        with self._handshake_lock:              # single-flight:并发首查只发一次 GET(重复也幂等,锁只省流量)
+            if self._handshake_done:
+                return
+            try:
+                r = self._client.get("/healthz")
+                if r.status_code != 200:
+                    return
+                data = r.json()
+            except Exception:                   # 不可达/非 JSON:不阻断,交给业务请求的重试链
+                return
+            model, full_dim = data.get("model_dense"), data.get("full_dim")
+            if model is not None and model != os.path.basename(self.cfg.dense_model_path):
+                raise RuntimeError(
+                    f"推理服务模型身份错配:服务端 model_dense={model!r} != 客户端 "
+                    f"{os.path.basename(self.cfg.dense_model_path)!r}(PHAROS_DENSE_MODEL_PATH)。"
+                    f"向量空间会静默错位 —— 对齐两端模型或重建库。")
+            if full_dim is not None and int(full_dim) < self.cfg.dense_dim:
+                raise RuntimeError(
+                    f"推理服务全维 full_dim={full_dim} < 客户端 dense_dim={self.cfg.dense_dim},配置错位 —— "
+                    f"检查 PHAROS_DENSE_DIM 与推理服务模型是否匹配。")
+            if model is not None and full_dim is not None:
+                self._handshake_done = True
+
     def _post_vectors(self, path: str, payload: dict) -> np.ndarray:
+        self._verify_server()                                       # lazy 握手:模型/维度错配 fail-loud(仅首次真发 GET)
         data = _post_retry(self._client, self.cfg, path, payload)   # 带重试;耗尽抛 InferenceUnavailable
         return np.asarray(data["vectors"], dtype=np.float32)        # 推理服务返回**全维** normalized 向量
 
@@ -152,10 +187,12 @@ class RemoteReranker(Reranker):
     def _load(self) -> None:
         return
 
-    def score(self, query: str, docs_text: list[str]) -> list[float]:
+    def score(self, query: str, docs_text: list[str], instruction: str | None = None) -> list[float]:
+        # instruction 形参与基类 Reranker.score 对齐(评审修:此前缺参,按基类契约传 instruction 直接 TypeError,
+        # 且 remote 永远只能用 cfg 默认 —— LSP 子类收窄输入域);None 回落 cfg 与旧行为完全一致。
         data = _post_retry(self._client, self.cfg, "/rerank",
                            {"query": query, "documents": list(docs_text),
-                            "instruction": self.cfg.rerank_instruction})
+                            "instruction": instruction or self.cfg.rerank_instruction})
         scores = data["scores"]
         if len(scores) != len(docs_text):       # 与 local 同款契约校验:分数与文档一一对应,破坏则 fail-loud
             raise RuntimeError(f"remote reranker 返回 {len(scores)} 分 != {len(docs_text)} 文档,API 契约破坏")

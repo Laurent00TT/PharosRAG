@@ -20,6 +20,23 @@ def test_healthz():
     with TestClient(make_app()) as c:
         r = c.get("/healthz").json()
     assert r["status"] == "ok" and r["service"] == "pharos" and r["tenant_bound"] is True
+    # 修复(sec):liveness 与 /readyz 同一信息边界 —— 未鉴权探针不回 collection/llm_model/identity_mode
+    # (这些侦察字段挪入 admin-gated /v1/stats);字段回流即红
+    assert "collection" not in r and "llm_model" not in r and "identity_mode" not in r
+
+
+def test_stats_keys_bounded_by_route_template():
+    # 修复:stats 键用路由模板 —— 枚举 doc_id 不再每个路径开一个键(defaultdict+deque 慢性泄漏);
+    # 未匹配任何路由的 /v1/* 归并固定桶,键集合有界
+    with TestClient(make_app()) as c:
+        for i in range(20):
+            c.get(f"/v1/documents/doc{i}")
+        c.get("/v1/does-not-exist")
+        c.get("/v1/also-bogus")
+        eps = c.get("/v1/stats").json()["endpoints"]
+    assert eps["/v1/documents/{doc_id}"]["n"] == 20          # 模板键,不是 20 个原始路径键
+    assert not any("doc0" in k or "doc19" in k for k in eps)
+    assert eps["/v1/_unmatched"]["n"] == 2                    # 404 未匹配 -> 固定桶
 
 
 def test_retrieve_ok():
@@ -138,6 +155,21 @@ def test_ask_llm_unconfigured():
     with TestClient(make_app(generator_factory=boom_factory)) as c:
         r = c.post("/v1/ask", json={"query": "q"}).json()
     assert r["status"] == "llm_unconfigured" and "DEEPSEEK_API_KEY" in r["hint"]
+
+
+def test_ask_zero_recall_finish_reason_none_not_residual():
+    # 修复:finish_reason 随 Answer 快照 —— 零召回不调 LLM,响应必须为 None,
+    # 不能读到同一 llm 实例(per-thread 复用)上一请求残留的值
+    class _ResidualLLM:
+        def __init__(self):
+            self.last_finish_reason = "length"       # 模拟上一请求残留
+        def complete(self, messages):
+            raise AssertionError("零召回不应调用 LLM")
+    with TestClient(make_app(retriever=FakeRetriever(results_factory=lambda: []),
+                             generator_factory=lambda r, c: Generator(r, _ResidualLLM()))) as c:
+        r = c.post("/v1/ask", json={"query": "这篇论文的核心方法思想是什么"}).json()   # 非数值题,不触发重试
+    assert r["status"] == "ok" and r["n_contexts"] == 0
+    assert r["finish_reason"] is None                # 残留值 "length" 不得泄出
 
 
 def test_ask_failure_degrades_structured():

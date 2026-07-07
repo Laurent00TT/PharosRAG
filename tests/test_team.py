@@ -92,6 +92,19 @@ def test_stats_open_mode_accessible_and_counts():
         snap = c.get("/v1/stats").json()
     assert snap["status"] == "ok" and snap["endpoints"]["/v1/retrieve"]["n"] == 1
     assert snap["endpoints"]["/v1/retrieve"]["p50_ms"] is not None
+    # 修复(healthz 收敛):collection/llm_model 从未鉴权 /healthz 挪到本端点(keys 模式 admin-gated)
+    assert snap["collection"] == "real" and snap["llm_model"] == "deepseek-v4-flash"
+
+
+def test_stats_unauthorized_requests_bounded():
+    # 修复(stats 键基数):keys 模式下无 key 的 401 请求(被 _auth 短路,无路由模板)归并固定桶,
+    # 网络客户端不能用随机 /v1/* 路径无限撑大 stats 键集合
+    with TestClient(make_app(keys=dict(KEYS))) as c:
+        for i in range(5):
+            c.post(f"/v1/bogus{i}", json={})
+        snap = c.get("/v1/stats", headers={"X-API-Key": "pk_alice_0123456789abcdef"}).json()
+    assert snap["endpoints"]["/v1/_unmatched"]["n"] == 5
+    assert not any("bogus" in k for k in snap["endpoints"])
 
 
 # ---------- 非回环启动守卫 ----------
@@ -150,6 +163,38 @@ def test_append_key_rejects_dup_name_and_corrupt(tmp_path):
     open(corrupt, "w").write("{not json")
     with pytest.raises(SystemExit, match="JSON"):        # 复用 load_keys 校验,不裸抛 traceback
         I.append_key(corrupt, name="bob", tenant="demo", principals=[])
+
+
+# ---------- 修复:RequestLog.flush 真 timeout(磁盘挂起时不冻死优雅停机) ----------
+def test_reqlog_flush_timeout_returns_and_warns(tmp_path, monkeypatch, caplog):
+    import logging
+    import threading
+    import time
+
+    from pharos import obs as obs_mod
+    never = threading.Event()
+
+    def stuck_open(*a, **kw):
+        never.wait(8)                          # 模拟 bind-mount IO 挂起(远超 flush 超时;daemon 线程不阻塞进程退出)
+        raise OSError("simulated stuck disk")
+
+    monkeypatch.setattr(obs_mod, "open", stuck_open, raising=False)   # 只影响 obs 模块内的 open(写线程)
+    rl = obs_mod.RequestLog(str(tmp_path))
+    rl.write({"ts": 1, "ep": "/v1/x"})
+    t0 = time.time()
+    with caplog.at_level(logging.WARNING, logger="pharos"):
+        rl.flush(timeout=0.5)                  # 此前 timeout 被静默忽略 -> 无限 join 卡死在这里
+    assert time.time() - t0 < 3                # 真超时返回,不吃满 stop_grace_period
+    assert any("flush 超时" in rec.getMessage() for rec in caplog.records)
+    never.set()                                # 放行写线程,别把挂起漏到后续测试
+
+
+def test_reqlog_flush_timeout_normal_drain(tmp_path):
+    from pharos.obs import RequestLog
+    rl = RequestLog(str(tmp_path))
+    rl.write({"ts": 1, "ep": "/v1/x"})
+    rl.flush(timeout=5.0)                      # 正常盘:排干后立即返回(不等满超时)
+    assert open(os.path.join(str(tmp_path), "requests.jsonl"), encoding="utf-8").read().strip()
 
 
 def test_structured_failure_counted_in_errors():

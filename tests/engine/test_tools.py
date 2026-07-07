@@ -203,6 +203,32 @@ def test_list_coverage():
     assert out["coverage"] == {"academic_paper": 2, "financial_research_zh": 1}
 
 
+def test_list_truncated_passthrough_and_hint():
+    # 评审修(修复2):store.list_documents 的 (docs, truncated) 形状 -> truncated 透传 + 截断 hint;
+    # 裸 list(测试替身/旧实现)按未截断兼容,不连坐。
+    docs = [{"doc_id": "d1", "title": "A", "doc_type": "x"}]
+    out = server._list_impl(_MockRet(docs=(docs, True)), User("t", ["g"]))
+    assert out["status"] == "ok" and out["truncated"] is True
+    assert "不完整" in out["hint"], "截断时必须提示 agent 清单/coverage 不完整"
+    out2 = server._list_impl(_MockRet(docs=(docs, False)), User("t", ["g"]))
+    assert out2["truncated"] is False and out2["hint"] == ""
+    out3 = server._list_impl(_MockRet(docs=docs), User("t", ["g"]))       # 裸 list 兼容
+    assert out3["truncated"] is False
+
+
+def test_section_folded_n_in_meta():
+    # 评审修(修复6):search_with_context 返回 SearchResults(list 子类)时,其 section_folded_n 进 meta
+    # (与 deduped_n 并列,agent 借此区分"库存尽"与"命中被同节折叠");裸 list(mock)默认 0。
+    from embedder.retrieve import SearchResults
+    results = SearchResults([_res(_hit(), ctx_text="a")])
+    results.section_folded_n = 3
+    out = server._build_retrieve_result(_MockRet(results=results), User("t", ["g"]), "q", 5, False)
+    assert out["meta"]["section_folded_n"] == 3
+    out2 = server._build_retrieve_result(_MockRet(results=[_res(_hit(cid="c9"), ctx_text="b")]),
+                                         User("t", ["g"]), "q", 5, False)
+    assert out2["meta"]["section_folded_n"] == 0                          # 裸 list 无属性 -> 0
+
+
 def test_recovery_hint():
     # 6.C:超预算时 hint 指向 expand(错误恢复闭环)
     os.environ["PHAROS_MAX_CONTEXT_TOKENS"] = "500"
@@ -271,7 +297,8 @@ if __name__ == "__main__":
                test_list_impl_and_fail_closed, test_retrieve_concise_and_filters, test_hit_dict_multimodal,
                test_get_document_impl, test_outline_impl, test_expand_impl, test_grouped_impl,
                test_strategy_validation_and_rerank_degraded, test_cross_call_dedup, test_budget_truncation,
-               test_list_coverage, test_recovery_hint,
+               test_list_coverage, test_list_truncated_passthrough_and_hint, test_section_folded_n_in_meta,
+               test_recovery_hint,
                test_asset_content_raw_demoted_and_budgeted, test_omitted_not_registered_returned_keys,
                test_section_window_cross_call_dedup_by_resolved_section, test_instructions_cover_contract]:
         fn()
