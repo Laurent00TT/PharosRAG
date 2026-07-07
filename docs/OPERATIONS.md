@@ -5,12 +5,26 @@
 
 ## 1. 部署拓扑
 
+**单节点(systemd,当前默认):**
 ```
 Windows 登录 ─► 启动文件夹 PharosWSL.vbs(静默保活 WSL,防空闲休眠)
                     └► WSL(Ubuntu)systemd ─► pharos.service(Restart=always)
                             └► pharos serve @ 127.0.0.1:8787(独占 ~/rag_real + GPU)
 消费方:pharos ask / curl /(每人自己的)MCP 薄适配器 —— 全部经 HTTP + X-API-Key
 ```
+
+**多副本(compose,阶段 A–F,见 [SCALE_OUT.md](SCALE_OUT.md)):** 三层独立扩缩 —— `inference`(GPU ×1,唯一吃卡)、
+`qdrant`(server ×1,持久卷)、`pharos`(slim ×N,无 torch)+ `nginx`(负载均衡入口 `:8080`)。
+- 起:`docker compose --env-file .env.compose up -d --build --scale pharos=3`;停:`docker compose down`(加 `-v` 删向量卷)。
+- **滚动重启(不断服)**:`docker compose up -d --scale pharos=N` 逐个重建;nginx `proxy_next_upstream` 把命中重启中副本的请求转到健康副本。
+- **单副本故障**:其余副本无感(nginx `proxy_next_upstream` 秒级绕过 —— 实测 `docker kill` 一个副本期间 50/50 请求全 200)。
+  ⚠ 恢复语义要分清:`restart:unless-stopped` 只自动拉起**真崩溃**(进程自己异常退出,如 OOM);**手动 `docker kill`
+  被 Docker 当"人为停止",不会自动拉起**(实测 restarts=0)——演示/维护后用 `docker compose up -d --scale pharos=N` 补回。
+  要"任何退出都自愈"改 `restart: always`(但它连人为停的也会在 daemon 重启后拉起)。
+- **inference 故障**:唯一 GPU 单点;**预热瞬态失败** `os._exit(1)` → 进程真退出 → `restart` 自愈(非人为 kill,会拉起);
+  永久配置错(错卡/缺模型)留 `err` 于 `/healthz`,不自杀(crashloop 无意义),需人工。
+- **运维必知的边界**:`--scale pharos=N` **不提升 QPS 上界**(GPU 前向单卡串行);扩的是非 GPU 并发 + 崩溃隔离 + 滚动升级。
+  跨副本状态(session 去重、`/v1/stats`)是每副本进程内,nginx 轮询下降级(见 SCALE_OUT §5-F F-3)。
 
 ## 2. 日常命令
 

@@ -266,3 +266,33 @@ def test_mrl_fp32_normalize_on_bf16_input():
     bad_dev = float(np.abs(np.linalg.norm(bad, axis=-1) - 1.0).max())
     assert bad_dev > 5e-4, \
         f"bf16 上 normalize 应产生明显 norm 偏差(证明 fp32 修复必要 + 本测试能抓回归),实测偏离 {bad_dev:.2e}"
+
+
+# ---------- P1-1 下界断言(纯 CPU;从 test_equivalence_gpu.py 移来,避免被 GPU skipif 吞成假绿) ----------
+def test_mrl_np_lower_bound_assertion():
+    """P1-1:客户端 dense_dim > 服务端全维 -> fail-loud(不静默返回过短向量灌进库)。纯 CPU,常驻回归网。"""
+    rd = RemoteDense.__new__(RemoteDense)                     # 不 __init__(不建 httpx client)
+    rd.cfg = EmbedConfig(dense_dim=8192)                      # > 4096 全维
+    with pytest.raises(RuntimeError, match="配置错位"):
+        rd._mrl_np(np.zeros((2, 4096), dtype=np.float32))
+
+
+# ---------- 阶段F 审查:TransportError 谱扩宽(docker kill/restart inference 的断连形态) ----------
+def test_retry_read_error_retried():
+    """ReadError(对端 RST)是 TransportError 但**非** ConnectError/TimeoutException —— 旧的窄捕获会绕过重试、
+    绕过 InferenceUnavailable 语义,被吞成无重试的 backend_unavailable。改 `except httpx.TransportError` 后应被吸收。"""
+    rd = RemoteDense(_fast_cfg(dense_dim=8, inference_retries=2))
+    rd._client = _ScriptClient(httpx.ReadError("connection reset"),
+                               _Resp(200, {"vectors": [[0.0] * 8]}))
+    out = rd.encode_text(["x"])
+    assert out.shape == (1, 8) and len(rd._client.calls) == 2      # 第一次 ReadError 被重试,第二次成功
+
+
+def test_retry_remote_protocol_error_then_exhaust():
+    """RemoteProtocolError("Server disconnected without sending a response")是 keep-alive 死连接被 docker
+    kill/restart 后复用的最典型异常。旧窄捕获漏它 -> "kill 无感"链条断。改 TransportError 后应重试到耗尽抛语义异常。"""
+    rd = RemoteDense(_fast_cfg(inference_retries=1))
+    rd._client = _ScriptClient(httpx.RemoteProtocolError("Server disconnected"))
+    with pytest.raises(InferenceUnavailable):                     # 非裸 RemoteProtocolError 冒泡
+        rd.encode_text(["x"])
+    assert len(rd._client.calls) == 2                             # retries+1 都试过

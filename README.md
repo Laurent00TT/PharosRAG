@@ -28,6 +28,13 @@
 agent 会话各开一个进程,既抢锁又重付加载;Pharos 让守护进程独占资源,MCP 变成毫秒级启动的 HTTP
 薄适配器,多会话共享同一个热后端。详见 [docs/DESIGN.md](docs/DESIGN.md)。
 
+**生产多副本形态(阶段 A–F,见 [docs/SCALE_OUT.md](docs/SCALE_OUT.md))**:上面单节点把 GPU 模型、嵌入式
+Qdrant、应用逻辑绑死在一个进程 = 水平扩展天花板。改造后拆成**三层可独立扩缩**——GPU 前向独立成 `inference`
+服务(FastAPI :8900,全维返回 + 客户端截维保等价);应用层 `pharos` **脱 torch**(配 `inference_url` 即不加载模型)
+可 `--scale pharos=N` 多副本;嵌入式 Qdrant 转 **server 模式**(多副本共享单一真源)。`nginx` 前置负载均衡 +
+`docker kill` 副本无感。`docker compose --env-file .env.compose up -d --scale pharos=3`,入口 `http://127.0.0.1:8080`。
+**吞吐上界 = 单卡 inference 前向(GPU 串行),不随副本数上升**;多副本扩的是非 GPU 并发 + 崩溃隔离/滚动升级。
+
 ## 快速开始(WSL `navikb` 环境)
 
 服务由 systemd 托管(开机自启 + 崩溃自愈):`systemctl status pharos` / `journalctl -u pharos -f`。

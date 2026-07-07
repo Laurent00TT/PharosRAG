@@ -212,3 +212,110 @@ def test_readyz_exempt_from_auth():
     with TestClient(app) as c:
         assert c.get("/readyz").status_code == 200                              # 无 key 也 200(豁免)
         assert c.post("/v1/retrieve", json={"query": "q"}).status_code == 401   # 无 key → 401(鉴权真在)
+
+
+# ---------- 阶段F 审查:/readyz 的 inference 探活分支(remote 模式;nginx 导流量正依赖它,原零测试覆盖)----------
+class _FakeAsyncClient:
+    """假 httpx.AsyncClient:async with 上下文 + get(status 或抛异常)。仿 service.readyz 的 AsyncClient 用法。"""
+    def __init__(self, status=None, exc=None):
+        self._status, self._exc = status, exc
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def get(self, url, timeout=None):
+        if self._exc is not None:
+            raise self._exc
+        return SimpleNamespace(status_code=self._status)
+
+
+def test_readyz_inference_ready(monkeypatch):
+    """remote 模式:qdrant 有集合 + inference /readyz 200 → 整体 ready 200。"""
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeAsyncClient(status=200))
+    app = make_app(retriever=_ret_with_qdrant(lambda name: True),
+                   cfg=make_cfg(inference_url="http://inf:8900"))
+    with TestClient(app) as c:
+        r = c.get("/readyz")
+    assert r.status_code == 200 and r.json()["status"] == "ready"
+
+
+def test_readyz_inference_not_ready(monkeypatch):
+    """inference 还在预热(/readyz 503)→ pharos /readyz 503 inference_not_ready(nginx 据此不导流量到本副本)。"""
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeAsyncClient(status=503))
+    app = make_app(retriever=_ret_with_qdrant(lambda name: True),
+                   cfg=make_cfg(inference_url="http://inf:8900"))
+    with TestClient(app) as c:
+        r = c.get("/readyz")
+    assert r.status_code == 503 and r.json()["status"] == "inference_not_ready"
+
+
+def test_readyz_inference_unavailable_no_leak(monkeypatch):
+    """inference 连不上(探活抛异常)→ 503 inference_unavailable,且响应体不泄内网 host:port(sec-2 同纪律)。"""
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient",
+                        lambda *a, **k: _FakeAsyncClient(exc=httpx.ConnectError("refused to http://inf:8900")))
+    app = make_app(retriever=_ret_with_qdrant(lambda name: True),
+                   cfg=make_cfg(inference_url="http://inf:8900"))
+    with TestClient(app) as c:
+        r = c.get("/readyz")
+    assert r.status_code == 503 and r.json()["status"] == "inference_unavailable"
+    assert "inf:8900" not in r.text and "refused" not in r.text
+
+
+# ---------- 阶段F 审查:mcp_stdio 出口透传 inference_url(D 阶段"漏改出口"同款坑在 remote 开关上复发)----------
+def test_mcp_stdio_config_passes_inference_url(monkeypatch):
+    """守护 mcp_stdio._config 透传 inference_url + 模型路径/gpu_name。删任一透传即红 —— agentic 出口静默退回 local。"""
+    from pharos import mcp_stdio as S
+    monkeypatch.setenv("PHAROS_INFERENCE_URL", "http://inf:8900")
+    monkeypatch.setenv("PHAROS_TENANT", "demo")
+    monkeypatch.setenv("PHAROS_DENSE_MODEL_PATH", "/custom/emb")
+    monkeypatch.setenv("PHAROS_GPU_NAME", "5090")
+    ec = S._config()
+    assert ec.inference_url == "http://inf:8900"        # 核心:remote 开关到位
+    assert ec.dense_model_path == "/custom/emb"          # 模型路径同源
+    assert ec.gpu_name_must_contain == "5090"            # gpu 名同源
+
+
+# ---------- 阶段F 审查:失败模式 4 字段 PHAROS_* → PharosConfig → engine 透传到 EmbedConfig ----------
+def test_inference_failure_fields_env_to_embedconfig(monkeypatch):
+    """PHAROS_INFERENCE_RETRIES/TIMEOUT/... 经 from_env 进 PharosConfig,再经 engine.build_retriever 透传到
+    EmbedConfig(否则重试/超时钉死默认值,阶段F 调参必须改码重建镜像)。"""
+    from unittest import mock
+
+    from pharos.engine import build_retriever
+    monkeypatch.setenv("PHAROS_INFERENCE_RETRIES", "5")
+    monkeypatch.setenv("PHAROS_INFERENCE_BACKOFF", "1.5")
+    monkeypatch.setenv("PHAROS_INFERENCE_TIMEOUT", "90")
+    cfg = pconfig.from_env()
+    assert cfg.inference_retries == 5 and cfg.inference_backoff == 1.5 and cfg.inference_timeout == 90.0
+    # 透传到 EmbedConfig:mock Retriever 截获 ecfg(避免真建 Store/Dense)
+    cfg2 = make_cfg(inference_url="http://inf:8900", inference_retries=5, inference_backoff=1.5)
+    with mock.patch("pharos.engine.Retriever") as MockRet:
+        build_retriever(cfg2)
+    ecfg = MockRet.call_args.args[0]
+    assert ecfg.inference_retries == 5 and ecfg.inference_backoff == 1.5
+
+
+# ---------- 阶段F 审查:P2-3 服务端 /rerank 消费客户端 instruction(收敛"客户端唯一真相")----------
+def test_reranker_score_consumes_client_instruction():
+    """Reranker.score(instruction=) 非 None 时用调用方值、None 时回落服务端 cfg。inference_server /rerank 据此
+    把 payload 的 q.instruction 送进模型(修 P2-3 双源 footgun)。删 rerank.py 的 instruction 形参即红。"""
+    import contextlib
+
+    from embedder.config import EmbedConfig
+    from embedder.rerank import Reranker
+    rr = Reranker.__new__(Reranker)
+    rr.cfg = EmbedConfig(rerank_instruction="SERVER_DEFAULT")
+    rr._load = lambda: None
+    rr._fwd_lock = contextlib.nullcontext()
+    captured = {}
+    rr._model = SimpleNamespace(process=lambda inp: (captured.update(inp), [0.5, 0.5])[1])
+    rr.score("q", ["a", "b"], instruction="CLIENT_WINS")
+    assert captured["instruction"] == "CLIENT_WINS"       # 客户端值优先(收敛唯一真相)
+    rr.score("q", ["a", "b"], instruction=None)
+    assert captured["instruction"] == "SERVER_DEFAULT"     # None 回落服务端默认(向后兼容)

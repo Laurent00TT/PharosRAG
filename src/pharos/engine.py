@@ -34,7 +34,13 @@ def build_retriever(cfg) -> Retriever:
     ecfg = EmbedConfig(qdrant_path=cfg.qdrant_path, qdrant_url=cfg.qdrant_url, sidecar_dir=cfg.sidecar_dir,
                        collection=cfg.collection, dense_dim=cfg.dense_dim,
                        dense_model_path=cfg.dense_model_path, rerank_model_path=cfg.rerank_model_path,
-                       gpu_name_must_contain=cfg.gpu_name, inference_url=cfg.inference_url)
+                       gpu_name_must_contain=cfg.gpu_name, inference_url=cfg.inference_url,
+                       # 失败模式 4 字段透传(阶段F 审查):生产副本全 env 驱动,不透传则重试/超时钉死默认值、
+                       # 调参必须改码重建镜像。PHAROS_INFERENCE_* → EmbedConfig,阶段F 压测据此调背压/退避。
+                       inference_timeout=cfg.inference_timeout,
+                       inference_connect_timeout=cfg.inference_connect_timeout,
+                       inference_retries=cfg.inference_retries,
+                       inference_backoff=cfg.inference_backoff)
     return Retriever(ecfg)
 
 

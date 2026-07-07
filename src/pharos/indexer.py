@@ -41,16 +41,28 @@ def run_index(cfg: config.PharosConfig, corpus: str | None = None, dest: str | N
     if not corpus:
         raise SystemExit("未指定语料目录:请用 --corpus 或设 PHAROS_CORPUS_DIR"
                          "(MinerU 解析产物目录;数据留仓外,不随迁移入库)。")
+    # 建库写路径 vs serve 读路径必须同源(阶段F 审查·S3 命门):serve 用 cfg.qdrant_path/cfg.sidecar_dir
+    # (from_env 已按 PHAROS_QDRANT_PATH/PHAROS_SIDECAR_DIR 或 index_dir 派生)。indexer 若自己从 dest 派生
+    # sidecar,遇到显式设了 PHAROS_SIDECAR_DIR 的部署就**写读分家** —— 建库写 dest/sidecar、serve 读
+    # cfg.sidecar_dir,命中却取空 → 静默降级(single_chunk_degraded)。故:未显式 --dest 时直接用 cfg 同源路径;
+    # 显式 --dest 才走 dest 派生(用户明确要建到别处,自负一致性)。
+    explicit_dest = dest is not None
     dest = os.path.expanduser(dest or cfg.index_dir)
+    qdrant_path = os.path.join(dest, "qdrant") if explicit_dest else cfg.qdrant_path
+    sidecar_dir = os.path.join(dest, "sidecar") if explicit_dest else cfg.sidecar_dir
     collection = collection or cfg.collection
     acl = {"tenant": (tenant or cfg.tenant or "demo"), "allow": allow_list,
            "visibility": visibility, "unset": False}
     if not os.path.isdir(corpus):
         raise SystemExit(f"语料目录不存在:{corpus}")
 
-    ecfg = EmbedConfig(qdrant_path=os.path.join(dest, "qdrant"), qdrant_url=cfg.qdrant_url,
-                       sidecar_dir=os.path.join(dest, "sidecar"),
-                       dense_dim=cfg.dense_dim, collection=collection)   # server 模式(qdrant_url非空)写 server;dest/qdrant 被 store 三分支忽略
+    # 模型路径/gpu_name 也从 cfg 透传(阶段F 审查):否则定制 PHAROS_DENSE_MODEL_PATH 时建库用默认路径,
+    # 与 serve 加载的模型不一致 —— 向量空间错位而无告警。
+    ecfg = EmbedConfig(qdrant_path=qdrant_path, qdrant_url=cfg.qdrant_url,
+                       sidecar_dir=sidecar_dir,
+                       dense_dim=cfg.dense_dim, collection=collection,
+                       dense_model_path=cfg.dense_model_path, rerank_model_path=cfg.rerank_model_path,
+                       gpu_name_must_contain=cfg.gpu_name)   # server 模式(qdrant_url非空)写 server;qdrant_path 被 store 三分支忽略
     try:
         emb = Embedder(ecfg)
     except Exception as e:

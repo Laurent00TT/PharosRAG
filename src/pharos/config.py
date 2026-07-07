@@ -50,6 +50,17 @@ def _int_env(name: str, default: int) -> int:
         raise SystemExit(f"环境变量 {name} 必须是整数(收到 {raw!r}),请检查 .env。")
 
 
+def _float_env(name: str, default: float) -> float:
+    """浮点配置错值指名报错(同 _int_env,给 inference 超时/退避用)。"""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        raise SystemExit(f"环境变量 {name} 必须是数字(收到 {raw!r}),请检查 .env。")
+
+
 def _ns(suffix: str, default: str = "") -> str:
     """PHAROS_<suffix> 优先,回退 RAG_<suffix>(引擎旧命名的一版弃用别名,保护旧部署 .env 不静默失效)。"""
     return os.environ.get("PHAROS_" + suffix) or os.environ.get("RAG_" + suffix) or default
@@ -90,6 +101,11 @@ class PharosConfig:
     gpu_name: str = "4090"       # torch device 0 卡名须含此串(防 FASTEST_FIRST 漂到错卡);置空=不校验
     # 模型推理后端:空=local(进程内加载 GPU 模型);非空=远程推理服务 URL —— 应用层脱 GPU、可多副本
     inference_url: str = ""
+    # remote 失败模式(与 EmbedConfig 同名同义;全 env 驱动,阶段F 压测据此调重试/退避/背压,免改码重建镜像)
+    inference_timeout: float = 120.0          # HTTP read 超时(首次含 lazy load)
+    inference_connect_timeout: float = 3.0    # connect 超时(短:服务端 hang 快速失败进重试)
+    inference_retries: int = 2                # 5xx/传输层异常的有限重试次数
+    inference_backoff: float = 0.5            # 指数退避基
     # 服务
     host: str = "127.0.0.1"
     port: int = 8787
@@ -128,6 +144,10 @@ def from_env() -> PharosConfig:
         rerank_model_path=os.path.expanduser(os.environ.get("PHAROS_RERANK_MODEL_PATH", "~/models/Qwen3-VL-Reranker-8B")),
         gpu_name=os.environ.get("PHAROS_GPU_NAME", "4090"),
         inference_url=os.environ.get("PHAROS_INFERENCE_URL", "").strip(),
+        inference_timeout=_float_env("PHAROS_INFERENCE_TIMEOUT", 120.0),
+        inference_connect_timeout=_float_env("PHAROS_INFERENCE_CONNECT_TIMEOUT", 3.0),
+        inference_retries=_int_env("PHAROS_INFERENCE_RETRIES", 2),
+        inference_backoff=_float_env("PHAROS_INFERENCE_BACKOFF", 0.5),
         host=os.environ.get("PHAROS_HOST", "127.0.0.1"),
         port=_int_env("PHAROS_PORT", 8787),
         api_key=os.environ.get("PHAROS_API_KEY", "").strip(),

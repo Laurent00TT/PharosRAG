@@ -47,6 +47,15 @@ def migrate(src_path: str, dst_url: str, collection: str, dense_dim: int) -> Non
     except RuntimeError as e:
         raise SystemExit(f"源库被占用(通常是 pharos serve/index 仍在跑);先停所有访问 {src_path} 的进程再迁移。原始错误:{e}")
 
+    # 1b) 校验源 collection 存在且**非空**——在对 dst 产生任何副作用【前】(阶段F 审查·migrate):否则源库没有
+    #     该 collection / 点数为 0 时,下一步仍会在 dst 建一个空 collection,恰好击穿 pharos /readyz 的
+    #     collection_missing 守卫(集合存在但 0 点 → readyz 报 ready → nginx 导流量到空库 → 全绿查空)。
+    if not src.collection_exists(collection):
+        raise SystemExit(f"源库无 collection {collection!r}(检查 --src {src_path} / --collection);未对 dst 做任何改动。")
+    src_count = src.count(collection).count
+    if src_count == 0:
+        raise SystemExit(f"源 collection {collection!r} 为空(0 点);拒绝迁移空库(会在 dst 建空集合、误导 /readyz 判就绪)。")
+
     # 2) 在 dst 建 collection —— 复用 Store.ensure_collection(dense/sparse + 7 payload index,绝不手抄)
     dst_cfg = EmbedConfig(qdrant_url=dst_url, collection=collection, dense_dim=dense_dim)
     print(f"[2/4] 在 server 建 collection {collection!r}(复用 ensure_collection:dense/sparse + 7 payload index)…", flush=True)
@@ -73,8 +82,8 @@ def migrate(src_path: str, dst_url: str, collection: str, dense_dim: int) -> Non
     sc = src.count(collection).count
     dc = dst.count(collection).count
     print(f"[4/4] count 校验:src={sc}  dst={dc}", flush=True)
-    if sc != dc:
-        raise SystemExit(f"count 不一致(src={sc} != dst={dc}),迁移未完成;可重跑(幂等)。")
+    if sc != dc or dc == 0:      # dc==0 也算失败(空迁移无意义,且会误导 /readyz 判就绪)
+        raise SystemExit(f"count 校验失败(src={sc}, dst={dc});迁移未完成或迁了空库,可重跑(幂等)。")
     # 评审 migrate-F1:退出语不得暗示"向量已验"——只验了点数,向量降级/payload 截断 count 仍相等(假迁完)。
     print(f"OK 点数迁移完成({dc} points);⚠ 仅验点数,向量/ACL【未校验】—— 必须继续跑 SCALE_OUT §7 三层校验"
           f"(向量真在 dense==dim/sparse 非空、sidecar 覆盖、ACL fail-closed)+ cp -a sidecar/。", flush=True)

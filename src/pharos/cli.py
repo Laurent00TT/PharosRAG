@@ -31,7 +31,10 @@ def cmd_serve(args) -> None:
     host, port = args.host or cfg.host, args.port or cfg.port
     print(f"Pharos v{__version__}  http://{host}:{port}  index={cfg.qdrant_path} "
           f"collection={cfg.collection} tenant={cfg.tenant or '(未设,fail-closed)'}", flush=True)
-    uvicorn.run(create_app(cfg), host=host, port=port, log_level="info")
+    # 优雅停机(阶段F):SIGTERM -> uvicorn 停止收新请求、drain 在途,最多等 25s 后强制退出。
+    # 25 < compose stop_grace_period 30s -> 在 docker SIGKILL 前干净退出(in-flight /v1/ask 不被截杀)。
+    uvicorn.run(create_app(cfg), host=host, port=port, log_level="info",
+                timeout_graceful_shutdown=25)
 
 
 def cmd_mcp(args) -> None:

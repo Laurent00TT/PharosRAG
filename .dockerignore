@@ -38,3 +38,4 @@ _xlsx_redteam/
 # 容器构建产物自身
 Dockerfile.*
 docker-compose.yml
+deploy/                 # nginx.conf 等经 bind mount 注入,不进镜像 build context

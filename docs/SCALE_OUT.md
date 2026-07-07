@@ -1,6 +1,7 @@
 # Pharos 水平扩展演化:拆 GPU 推理层 → 真多副本
 
-> 状态:**阶段 A–E 已落地实测 + 提交(2026-07),F(nginx 真多副本)待做**。设计经"侦察 → 六维度设计 → 对抗审视
+> 状态:**阶段 A–F 全部落地实测(2026-07)**。F = 先对 A–E 派 8 维度多智能体对抗审查(27 confirmed,修完)再上 nginx 真多副本;
+> `docker kill` 副本实测 50/50 无感、轮询 6/6/7 均匀。设计经"侦察 → 六维度设计 → 对抗审视
 > → 综合"产出,再经"四路对抗审查 → 主编修订"打磨;实施每阶段配对抗性 agent 审查 + 真跑验证。**实施回顾见下方总览**。
 > 所有 `file:line` 已逐行核对源码(2026-07)。v2 修正了 v1 的一个核心施工陷阱(P0-1 病灶定位错到 service 层,实为 toolcore 兜底)+ 7 处 MUST-FIX。
 >
@@ -37,7 +38,7 @@
 | **C** | CPU 测试进 CI(并入 B) | ✅ |
 | **D** | Qdrant **嵌入式→server**(多副本真开关):store 三分支 + `qdrant_url` 透传三出口 + ACL fail-closed 重验 | ✅ 提交 |
 | **E** | **容器化**:三 Dockerfile + compose + 数据迁移 + `/readyz`;committed 三容器原样 `up` 全 healthy | ✅ 提交 `93ae0ef` |
-| **F** | nginx 真多副本 + `docker kill` 无感 + 吞吐边界文档 | ⏸️ 待做 |
+| **F** | **nginx 真多副本 + `docker kill` 无感 + 优雅停机 + 背压 + 吞吐边界**;并做 A–E 全量对抗审查(27 confirmed)+ 修订 | ✅ 落地(见 §5-F) |
 
 ### 核心技术改动
 
@@ -463,18 +464,116 @@ docker compose exec pharos    python -c "import torch"        # 应 ModuleNotFou
 
 > pivot 用的临时 override(`/tmp/pharos-pivot.yml` inference→host、`/tmp/pharos-scale.yml` 清端口)不入库;committed compose 保持三容器形态。**注意**:committed 形态(`inference:8900` 服务名 DNS + `depends_on` 链 + GPU 直通块)**从未原样跑过**(见上表 ⏸️ 行)——网络就绪后须**先实测一遍**再当"能跑",不是"就差个 build 其余原样能跑"。
 
-### 阶段 F —— 真多副本落地验证 + 收尾(学习高潮)
+### 阶段 F —— 真多副本落地 + A–E 全量对抗审查修订(学习高潮)
 
-**改动/验证**:
-- `docker compose up --scale pharos=3` + nginx 轮询;**`docker kill` 一个副本,in-flight 之外的查询无感**(亲眼验证水平扩展)
-- **Q3 大锁边界**:多副本 v1 每副本内保留进程内大锁 → 单副本内检索仍串行(已知边界)。要兑现"多副本提升非 GPU
-  并发",需审 `retrieve.py` 查询作用域 `cache={}` / sidecar 读等共享可变状态 → 评估放宽锁粒度 + 并发压测。**先讲清
-  这个边界**,别默认"scale=3 就等于 3× 吞吐"(GPU 前向串行 + 进程内大锁是两重上限)。
-- 鉴权(可选):`inference_server.py` 加 `INFERENCE_API_KEY`(现状 `0.0.0.0` 裸奔;单机/内网可先靠网络隔离)
-- P3:`Reranker._load` 补 `_gpu_error` 缓存
-- 文档回填(见 §9)
+> 状态:**已落地(2026-07-07)**。F 分两部分:(1) 先对 A–E 派 8 维度多智能体对抗审查(Find + 双镜头 Verify),
+> 27 条双镜头确认 —— 抓出**文档声称"已修/已验" ≠ 代码真做了**的一批货不对板;(2) 修完 confirmed 才实现 nginx
+> 多副本(拒绝"在错误的单副本上水平复制")。
 
-**里程碑**:nginx 后 3 副本轮询应答;`docker kill` 一个副本,查询无感;整套一键起停。吞吐边界(GPU 串行 + 大锁)在文档写清。
+#### F-1 对抗审查抓到并修的(confirmed,按根因去重)
+
+**P1(阶段F 命门,不修则多副本必翻车):**
+1. **`remote.py:_post_retry` 异常谱漏断连**——只捕 `ConnectError+TimeoutException`,漏 `ReadError`/`RemoteProtocolError`
+   /`WriteError`。而 **docker kill/restart inference 的最典型断连正是 `RemoteProtocolError`(keep-alive 死连接复用)
+   /`ReadError`(对端 RST)**,漏它们则绕过重试、被吞成无重试的 `backend_unavailable`——"kill 无感"链条断。
+   改 `except httpx.TransportError`(含全部传输层 + 全部超时,且**不含** 4xx 的 `HTTPStatusError`,4xx 仍立即冒泡)。
+   守护:`test_remote.py::test_retry_read_error_retried` / `test_retry_remote_protocol_error_then_exhaust`。
+2. **探针与业务共享 40 线程池 → 饥饿假 unhealthy**——inference 与 pharos 的 `/readyz`/`/healthz` 都是 sync def,
+   与 GPU 前向(`/embed`/`/rerank`)、LLM(`/v1/ask`)、inference hang 时最长 ~361s 的 `/v1/retrieve` 共享 anyio
+   默认 40 线程池。高负载/下游故障下探针在池里排队饥饿 → healthcheck 超时判 unhealthy(负载越高就绪信号越假)
+   → nginx 把正在正常干活的健康副本全摘掉 = 全局 outage。修:**探针改 async def**(纯内存读不进线程池);pharos
+   `/readyz` 的 qdrant 阻塞调用 offload 到**专用 `_PROBE_LIMITER`(8 线程,与业务隔离)**、inference 探活用
+   `httpx.AsyncClient`。守护:`test_review_fixes.py::test_readyz_inference_*`(3 分支)。
+3. **`mcp_stdio._config` 漏透传 `inference_url`**——D 阶段"漏改出口"同款坑在 remote 开关上复发:agentic 出口配了
+   `PHAROS_INFERENCE_URL` 却静默丢失 → slim(无 torch)环境首查 `import torch` 崩、被吞成 `backend_unavailable`。
+   补透传 `inference_url` + 模型路径/gpu_name。守护:`test_mcp_stdio_config_passes_inference_url`。
+4. **compose `--scale pharos=2` 与固定发布 `127.0.0.1:8787` 冲突**——第二副本必因端口冲突起不来,S3 sidecar
+   验证在单副本上假通过。**F 的 nginx 前置直接解决**(pharos 改 `expose` 不 publish,入口走 nginx `:8080`)。
+5. **`start_period=300s` 零余量 + 注释因果搞反**——旧注释称"给短了无害",实为**超期后 3 次探针失败即判 unhealthy,
+   `depends_on:service_healthy` 令整个 `up` 中止、pharos 永不启动**。改 600s + 订正注释。
+
+**P2:** `/rerank` 服务端仍忽略客户端 `instruction`(SCALE_OUT §5-E 曾谎称"顺带修 P2-3",代码未改)→ 服务端改消费
+`q.instruction`,`Reranker.score(instruction=)` None 时回落 cfg;`indexer.run_index` 漏透传 `sidecar_dir`/模型路径 →
+写读分家触发 S3 静默降级 → 未显式 `--dest` 时用 cfg 同源路径 + 透传模型路径;inference `_warmup` 瞬态失败即永久 err
+无自愈 → **区分永久配置错(留 err)vs 瞬态(有限重试,耗尽 `os._exit(1)` 让 `restart` 拉起)**;客户端 read-timeout
+重试 × 服务端无背压 → GPU 3× 无效功 → inference 加 **`BoundedSemaphore` 有界准入,满则 503 overloaded**;migrate 先建 dst
+collection 后校验源 → 空库击穿 `/readyz` → **建 dst 前先校验源存在且非空**;`test_store_server` 默认全 skip(无 CI)、
+P1-1 守护测试埋在 GPU-skip 文件、`/readyz` inference 探活分支零测试 → 补测 + 移测。
+
+**P3:** `_get_client` 无锁 check-then-set → 加 `_CLIENTS_LOCK`;`_observe` 事件循环里同步文件 I/O(共享卷卡顿冻结
+整个 loop)→ **后台单写线程 + 有界队列**(`obs.py`);Dockerfile.pharos 无 pip 镜像源 → 与 inference 统一 `ARG PIP_INDEX_URL`;
+inference 失败模式 4 字段无 `PHAROS_*` env → PharosConfig 补 4 字段 + engine 透传;`Reranker._load` 补 `_gpu_error` 缓存(对称 Dense)。
+
+#### F-2 真多副本(nginx + kill 无感 + 优雅停机)
+
+**改动:**
+- **`deploy/nginx.conf`**(新增):`upstream pharos_pool { server pharos:8787 resolve; }` + `resolver 127.0.0.11`
+  —— 开源 nginx≥1.27.3 的 `server ... resolve` 按 Docker DNS 返回的**全部副本 IP 轮询**,`--scale` 增减副本在
+  `valid=10s` 内生效(规避"启动解析一次就固化"经典坑)。**`proxy_next_upstream error timeout http_50x non_idempotent`**
+  = docker kill 副本无感:命中死副本 connect 失败(`connect_timeout 2s` 快失败)→ 换下一个副本重发;`non_idempotent`
+  让 POST(retrieve/ask)也重试,连**被 kill 副本上的在途请求**都能落到健康副本。
+- **`docker-compose.yml`**:加 `nginx` 服务(`nginx:1.27-alpine`,唯一对外入口 `127.0.0.1:8080:80`);pharos 改
+  **`expose: 8787` 不发布宿主端口**(--scale 无冲突);pharos/inference 加 **`stop_grace_period: 30s`**。
+- **优雅停机**:`cli.py` uvicorn `timeout_graceful_shutdown=25`(< 30s 宽限 → docker SIGKILL 前干净 drain);
+  lifespan shutdown flush reqlog 队列(不丢最后一批日志)。
+- **背压/自愈**:见 F-1 P2(inference `BoundedSemaphore` + warmup `os._exit`)。
+
+**跑法:**
+```bash
+# ⚠ 必须从 WSL 内跑(bind mount 是 /home/tiantian 原生路径)+ Docker Desktop 对 Ubuntu 开 WSL Integration,
+#   否则 /home/tiantian/models 挂载解析错、inference warmup 报 ModuleNotFoundError(见附:环境前置)。
+docker compose --env-file .env.compose up -d --build --scale pharos=3   # 3 副本 + nginx
+# 入口是 nginx:8080(pharos 副本不发布宿主端口)
+curl -s -XPOST localhost:8080/v1/retrieve -H "X-API-Key: <key>" -d '{"query":"..."}'   # 轮询 3 副本
+# kill 无感:持续打 8080 的同时 kill 一个副本
+docker kill $(docker compose ps -q pharos | head -1)
+```
+
+**F-2 端到端实测(2026-07-07,3 副本 + nginx,本机 Docker Desktop + WSL2 + 4090):**
+
+| Gate | 结果 | 证据 |
+|---|---|---|
+| `--scale pharos=3` 无端口冲突 | ✅ | 3 副本各 `expose 8787` 无 publish,全 healthy;入口仅 nginx `127.0.0.1:8080` |
+| nginx 轮询分发 | ✅ | 18 请求经 :8080 → 三副本各自 requests.jsonl **6/6/7**(近均匀);全 `status:ok` 真命中(S3 共享 sidecar) |
+| **`docker kill` 无感** | ✅ **50/50** | 持续 50 请求打 :8080,中途 `docker kill pharos-2`(Exited 137)→ **50/50 全 200**,0 失败;killedwindow 后流量重分布到存活 2 副本(34/34) |
+| 端到端真链路 | ✅ | nginx → pharos(0 torch)→ inference(remote)+ qdrant(server),`returned_n mode:full` 真命中 |
+| nginx 自身 healthcheck | ✅(修一处) | 首版 `wget localhost` 假 unhealthy(只读配置挂载→入口脚本没加 ipv6 listen,容器内 localhost→::1→refused);改 `127.0.0.1` 后 healthy |
+
+**实测抓到并修的真 bug(计划外):**
+- **nginx healthcheck 假 unhealthy**:配置 `:ro` 挂载 → 入口 `10-listen-on-ipv6-by-default.sh` 无法追加 `listen [::]:80`
+  → nginx 只听 ipv4 → 容器内 `wget http://localhost`(先解析 ipv6 `::1`)connection refused。真服务正常(host `curl :8080` OK),
+  纯探针假阳。改 healthcheck 用 `127.0.0.1` 钉 ipv4。**又一例"探针把正常服务误报不健康"**,与 F-1 P1 探针饥饿同类。
+- **`restart: unless-stopped` 不自动拉起 `docker kill` 的副本**(实测 restarts=0/60s):Docker 把手动 `docker kill` 当
+  "人为停止",`unless-stopped` 只自愈**真崩溃**(进程自己异常退出)。诚实订正 OPERATIONS 的"自动拉起"措辞:
+  kill 无感靠 nginx failover(客户端 0 感知),被 kill 副本需 `up --scale` 补回;要"任何退出都自愈"用 `restart: always`。
+
+> **环境前置(踩了整整一轮)**:compose bind mount 源是 WSL ext4 原生路径(`/home/tiantian/models` 等)。**必须从 WSL 终端内
+> 跑 compose**,且 Docker Desktop 要对 Ubuntu 发行版**开 WSL Integration**(Settings→Resources→WSL Integration)。否则从 Windows
+> 跑,引擎把 `/home/tiantian/...` 解析到 docker-desktop 发行版(空)→ 容器看得到部分文件却缺 `scripts/` 子目录 → inference
+> warmup 报 `ModuleNotFoundError: No module named 'qwen3_vl_embedding'` → `depends_on:service_healthy` 令整个 up 卡死。
+> 排查特征:WSL 主机 `ls ~/models/.../scripts` 明明有,但容器内缺 → 挂载解析问题,非模型缺失。
+
+#### F-3 吞吐边界(必须讲清:scale=N ≠ N× 吞吐)
+
+多副本**真正能扩什么、不能扩什么**——三重上限,按主导顺序:
+
+1. **GPU 前向串行(最硬上限)**:唯一 inference 容器,`state.gpu_lock` 串行单卡前向 + `BoundedSemaphore(16)` 背压。
+   **无论多少 pharos 副本,dense/rerank 的 GPU 前向都排同一条队**。查询 QPS 的天花板 = 单卡前向吞吐,不随
+   `--scale pharos` 上升。这也是"换 vLLM(continuous batching)"的唯一正当触发(§3.4)。
+2. **进程内检索状态(已在 F 消除大部分)**:`Store._lock` 在 server 模式下 Qdrant 并发安全、可放宽(留 Q3);
+   `Dense._query_cache`/`_cache_lock`、`_reranker_lock` 都是副本内细粒度锁,不跨副本;`retrieve.py` 查询作用域
+   `cache={}` 是**每次调用新建的局部变量**(非共享)。故检索路径在**副本间**无共享可变状态 → **多副本能真扩非 GPU
+   段的并发**(ACL 过滤、RRF 融合、sidecar 读、small-to-big 组装、JSON 编解码)。
+3. **跨副本状态(nginx 轮询下的降级,已声明)**:`SessionRegistry`(X-Pharos-Session 去重)与 `Stats`(/v1/stats)
+   是**进程内**状态 → nginx 轮询下去重效果掉到 ~1/N、stats 只反映单副本。**这是有意接受的降级**(去重是 opt-in
+   的 curl/agent 便利,丢了不影响正确性;stats 是每副本自观测)。要精确需 session 粘滞(`ip_hash`)或共享存储(Redis)——
+   规模到了再做,当前不引。**sidecar 共享卷(S3 命门)是唯一跨副本必须一致的状态**,靠所有副本挂同一 `/index` 卷保证。
+
+**结论**:`--scale pharos=N` 扩的是**应用层非 GPU 并发**(检索编排、ACL、组装)+ **崩溃隔离/滚动升级**(kill 一个
+其余无感),**不是** GPU 前向吞吐(那被单卡串行钉死)。QPS 上界看 inference,不看 pharos 副本数。
+
+**Open(规模再做):** session 粘滞/共享去重;inference 换 vLLM(GPU 排队明显时);inference 加 `INFERENCE_API_KEY`
+(现内网 `pharos-net` 隔离 + 不发布 8900 宿主端口即够);K8s(当前 nginx+compose 是学习载体)。
 
 ---
 

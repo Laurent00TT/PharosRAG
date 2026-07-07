@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import threading
 import time
 
 import numpy as np
@@ -29,45 +30,53 @@ from .errors import InferenceUnavailable
 from .rerank import Reranker
 
 # 模块级 client 缓存:同一 inference_url 的 dense+reranker **共用一个连接池**(避免双连接池浪费)。
-# 进程级单例,atexit 统一 close。
+# 进程级单例,atexit 统一 close。审查 S3/P3:并发构造 Remote* 时 check-then-set 有竞态
+# (输家 client 脱挂、atexit 关不到 -> 连接泄漏),故 get-or-create 与 close 同一把锁串行。
 _CLIENTS: dict[str, "object"] = {}
+_CLIENTS_LOCK = threading.Lock()
 
 
 def _get_client(cfg: EmbedConfig):
     """按 inference_url 复用 httpx.Client(dense/reranker 共享);拆分超时:connect 短、read 长。
-    connect 短 -> 服务端 hang/宕机时快速失败进重试,不套用 read 的 120s;read 长 -> 容忍长文本前向。"""
+    connect 短 -> 服务端 hang/宕机时快速失败进重试,不套用 read 的 120s;read 长 -> 容忍长文本前向。
+    锁内 get-or-create(构造 httpx.Client 很轻,锁开销可忽略):消除并发下重复建池 + 脱挂泄漏。"""
     import httpx
     url = cfg.inference_url.rstrip("/")
-    c = _CLIENTS.get(url)
-    if c is None:
-        c = httpx.Client(base_url=url, timeout=httpx.Timeout(
-            connect=cfg.inference_connect_timeout, read=cfg.inference_timeout, write=10.0, pool=5.0))
-        _CLIENTS[url] = c
-    return c
+    with _CLIENTS_LOCK:
+        c = _CLIENTS.get(url)
+        if c is None:
+            c = httpx.Client(base_url=url, timeout=httpx.Timeout(
+                connect=cfg.inference_connect_timeout, read=cfg.inference_timeout, write=10.0, pool=5.0))
+            _CLIENTS[url] = c
+        return c
 
 
 @atexit.register
 def _close_clients() -> None:
     """进程退出统一关连接池(避免连接泄漏);幂等、吞异常(退出路径不应因关连接报错)。"""
-    for c in list(_CLIENTS.values()):
-        try:
-            c.close()
-        except Exception:
-            pass
-    _CLIENTS.clear()
+    with _CLIENTS_LOCK:
+        for c in list(_CLIENTS.values()):
+            try:
+                c.close()
+            except Exception:
+                pass
+        _CLIENTS.clear()
 
 
 def _post_retry(client, cfg: EmbedConfig, path: str, payload: dict) -> dict:
     """POST + 有限重试(P0-1)。可重试(指数退避):
       - **任意 5xx**(503 未就绪 / 502·504 网关无健康后端 / 500 推理崩一次自愈)—— 都是滚动重启期的瞬态;
-      - **任意 httpx 超时**(TimeoutException:connect/read/write/pool)+ ConnectError(连接被拒)。
-    不重试:4xx 客户端错 —— `raise_for_status()` 立即抛 httpx.HTTPStatusError(重试无益)。
+      - **任意 httpx 传输层异常**(`TransportError`:含 Connect/Read/Write/Close/RemoteProtocol + 全部 Timeout)。
+    不重试:4xx 客户端错 —— `raise_for_status()` 立即抛 httpx.HTTPStatusError(它**非** TransportError,继续冒泡,重试无益)。
     重试耗尽 -> 抛 InferenceUnavailable(语义异常,上层据此返回可重试 inference_unavailable)。
 
     刀刃说明:①`>= 500` 而非硬编码 `== 503` —— 审查 M3:K8s/Nginx 对被 kill 的后端返 502/504,硬编码 503 会
-    把它们当客户端错裸抛;②`httpx.TimeoutException` 而非 ReadTimeout/PoolTimeout —— 审查 M2:`ConnectTimeout`
-    是 TimeoutException 子类**不是 ConnectError 子类**,漏了它 connect 超时(config 明设 connect=3s)会绕过重试;
-    ③`max(0, retries)` clamp —— 审查 S1:负配置不至于空 range 后 `raise None` 掩盖真因。"""
+    把它们当客户端错裸抛;②`except httpx.TransportError` 而非只捕 `ConnectError+TimeoutException` —— 阶段F审查(高):
+    **docker kill/restart inference 的最常见断连形态是 `RemoteProtocolError`("Server disconnected without sending a
+    response",keep-alive 死连接复用)/ `ReadError`(对端 RST)**,二者既非 ConnectError 也非 TimeoutException,漏了它们
+    则"kill 无感"链条断——被吞成无重试的通用 backend_unavailable。TransportError 是它们与超时/连接错的共同父类,
+    且不含 `HTTPStatusError`(4xx 仍立即冒泡),一网打尽又不误吞客户端错;③`max(0, retries)` clamp —— 审查 S1:
+    负配置不至于空 range 后 `raise None` 掩盖真因。"""
     import httpx
     retries = max(0, cfg.inference_retries)
     last: Exception | None = None
@@ -79,7 +88,7 @@ def _post_retry(client, cfg: EmbedConfig, path: str, payload: dict) -> dict:
             else:
                 r.raise_for_status()                       # 4xx 客户端错 -> 立即抛,不重试
                 return r.json()
-        except (httpx.ConnectError, httpx.TimeoutException) as e:   # 连接被拒 + 全部超时(connect/read/write/pool)
+        except httpx.TransportError as e:                  # 连接被拒/断连(RST·keep-alive 复用死连接)+ 全部超时
             last = InferenceUnavailable(f"推理服务 {type(e).__name__} @ {path}")
         if attempt < retries:                              # 还有重试机会 -> 指数退避
             time.sleep(cfg.inference_backoff * (2 ** attempt))

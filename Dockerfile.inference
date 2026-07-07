@@ -5,14 +5,15 @@
 FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple   # 与 Dockerfile.pharos 统一(阶段F 审查);可 --build-arg 覆盖
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 代码 + [gpu] extra。torch>=2.8.0 已由 base 满足→不重装;只拉 transformers/qwen-vl-utils/accelerate + 核心依赖
-# (均 MB 级,走清华 PyPI 镜像稳)。
+# (均 MB 级,走 PyPI 镜像稳)。
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple ".[gpu]"
+RUN pip install -i ${PIP_INDEX_URL} ".[gpu]"
 
 # ⭐ EmbedConfig 硬编码 ~/models 且不读 env($HOME=/root)——compose 直挂 /root/models。软链兜底/文档一致。
 RUN mkdir -p /root && ln -sf /root/models /models 2>/dev/null || true

@@ -55,8 +55,15 @@ def _pcfg():
 
 def _config() -> EmbedConfig:
     cfg = _pcfg()
+    # 透传必须覆盖**全部生产开关**(阶段F 审查·高):首版漏了 inference_url —— agentic 出口配了
+    # PHAROS_INFERENCE_URL 却静默丢失,slim(无 torch)环境首查 import torch 崩、被吞成 backend_unavailable
+    # (D 阶段"漏改 engine 出口"同款坑在 remote 开关上复发)。一并对齐 engine.build_retriever,把模型路径 /
+    # gpu_name 也透传,消除"pharos 侧配了、embedder 用默认"的第二处漂移。
     return EmbedConfig(qdrant_path=cfg.qdrant_path, qdrant_url=cfg.qdrant_url, sidecar_dir=cfg.sidecar_dir,
-                       collection=cfg.collection, dense_dim=cfg.dense_dim)
+                       collection=cfg.collection, dense_dim=cfg.dense_dim,
+                       inference_url=cfg.inference_url,
+                       dense_model_path=cfg.dense_model_path, rerank_model_path=cfg.rerank_model_path,
+                       gpu_name_must_contain=cfg.gpu_name)
 
 
 def get_retriever() -> Retriever:

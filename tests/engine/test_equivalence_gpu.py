@@ -55,11 +55,5 @@ def test_mrl_torch_numpy_consistent_on_fp32_output():
     assert np.allclose(np.linalg.norm(v_torch, axis=-1), 1.0, atol=1e-5)
     assert np.allclose(np.linalg.norm(v_numpy, axis=-1), 1.0, atol=1e-5)
 
-
-def test_mrl_np_lower_bound_assertion():
-    """P1-1:客户端 dense_dim > 服务端全维 -> fail-loud(不静默返回过短向量)。纯 CPU,顺带在此文件归档。"""
-    from embedder.remote import RemoteDense
-    rd = RemoteDense.__new__(RemoteDense)
-    rd.cfg = EmbedConfig(dense_dim=8192)                      # > 4096 全维
-    with pytest.raises(RuntimeError, match="配置错位"):
-        rd._mrl_np(np.zeros((2, 4096), dtype=np.float32))
+# 注:P1-1 下界断言守护测试(纯 CPU)已移至 tests/engine/test_remote.py::test_mrl_np_lower_bound_assertion
+# —— 原放此处会被模块级 GPU skipif 吞掉(阶段F 审查:CPU/CI 删掉 fail-loud 也不红 = 假绿)。

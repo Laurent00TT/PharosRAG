@@ -105,9 +105,11 @@ def test_non_loopback_requires_keys():
 def test_request_log_written_no_key_material(tmp_path):
     ret = FakeRetriever(results_factory=lambda: [make_res(make_hit(), ctx_text="x")])
     cfg = make_cfg(log_dir=str(tmp_path))
-    with TestClient(make_app(retriever=ret, cfg=cfg, keys=dict(KEYS))) as c:
+    app = make_app(retriever=ret, cfg=cfg, keys=dict(KEYS))
+    with TestClient(app) as c:
         c.post("/v1/retrieve", json={"query": "秘密问题" * 40},
                headers={"X-API-Key": "pk_alice_0123456789abcdef"})
+    app.state.reqlog.flush()                                       # 落盘走后台写线程(阶段F 审查),读前等它排干
     lines = open(os.path.join(str(tmp_path), "requests.jsonl"), encoding="utf-8").read().strip().splitlines()
     rec = json.loads(lines[-1])
     assert rec["user"] == "alice" and rec["ep"] == "/v1/retrieve" and rec["http"] == 200
@@ -118,10 +120,12 @@ def test_request_log_written_no_key_material(tmp_path):
 def test_request_log_queries_off(tmp_path):
     ret = FakeRetriever(results_factory=lambda: [make_res(make_hit(), ctx_text="x")])
     cfg = make_cfg(log_dir=str(tmp_path), log_queries=False)
-    with TestClient(make_app(retriever=ret, cfg=cfg)) as c:
+    app = make_app(retriever=ret, cfg=cfg)
+    with TestClient(app) as c:
         c.post("/v1/retrieve", json={"query": "不该出现的问题文本"})
+    app.state.reqlog.flush()                                       # 同上:等后台写线程落盘再读
     rec = json.loads(open(os.path.join(str(tmp_path), "requests.jsonl"), encoding="utf-8").readline())
-    assert "query" not in rec
+    assert "query" not in rec                                      # 隐私边界在入队前执行(log_queries=off 删 query),异步不影响
 
 
 # ---------- 评审修:name 唯一/无 '|';keys new 不裸抛;观测崩溃安全 + 结构化 errors 计入 ----------

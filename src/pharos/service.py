@@ -22,6 +22,7 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -33,6 +34,10 @@ from embedder import User
 from generator import DEFAULT_TABLE_LEG, looks_numeric
 
 log = logging.getLogger("pharos")
+
+# 探针专用线程池(阶段F 审查):/readyz 的 qdrant 阻塞调用走这里,与 FastAPI 默认 40 线程业务池隔离
+# —— 满负载下业务打满默认池也不会让健康探针排队饥饿(否则 nginx 会摘掉正常干活的健康副本 = 全局 outage)。
+_PROBE_LIMITER = anyio.CapacityLimiter(8)
 
 
 # ---------- 请求模型(mode/strategy 等枚举校验留给 toolcore,返回结构化 bad_arg 而非 422)----------
@@ -101,6 +106,11 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
         if not cfg.tenant:
             log.warning("PHAROS_TENANT 未设 —— 一切检索将 fail-closed 返回空(no_identity)。")
         yield
+        # 优雅停机(阶段F):drain 期把后台写线程队列里的请求日志落盘,别丢最后一批(观测完整性)。
+        try:
+            state.reqlog.flush()
+        except Exception:
+            log.warning("shutdown: reqlog flush 失败", exc_info=True)
 
     app = FastAPI(title="Pharos", version=__version__, lifespan=_lifespan)
     state = app.state
@@ -191,33 +201,43 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
 
     # ---------- 健康 / 指标 ----------
     @app.get("/healthz")
-    def healthz():
+    async def healthz():
+        """liveness:进程活着。**async**(纯内存读)—— 阶段F 审查:探针若与 /v1/ask(LLM 数十秒)、
+        /v1/retrieve(inference hang 时单请求最长 ~361s 重试)共享 anyio 默认 40 线程池,高负载/下游故障下
+        探针在池里排队饥饿 → docker healthcheck / K8s liveness 假 unhealthy → crashloop。async 端点在事件
+        循环里直接跑、不进线程池,彻底隔离。"""
         return {"status": "ok", "service": "pharos", "version": __version__,
                 "collection": cfg.collection, "tenant_bound": bool(cfg.tenant) or mode == "keys",
                 "llm_model": cfg.llm_model, "identity_mode": mode,
                 "uptime_s": round(time.time() - state.stats.started, 1)}
 
     @app.get("/readyz")
-    def readyz():
+    async def readyz():
         """readiness:探下游可达【且集合已就绪】。F 的 nginx 据此导流量;与 /healthz(liveness)分离——
         下游抖动只让本副本暂时摘流量,不触发 crashloop(healthz 仍 200)。豁免鉴权(同 healthz),供编排探针无 key 调用。
+        **async + 专用 limiter**(阶段F 审查):端点本身 async(不占业务 40 池);qdrant 阻塞调用 offload 到
+        _PROBE_LIMITER(8 线程,与业务隔离)、inference 探活用 AsyncClient —— 二者都不与 /v1/* 争默认池,
+        故满负载下探针仍准时。否则探针饥饿会让 nginx 把正在正常干活的健康副本全摘掉(全局 outage)。
         安全(评审 sec-2):异常只记服务端日志,响应体**不回 str(e)**——否则未鉴权探针能读到内网 qdrant/inference host:port
-        (同 /v1/ask 的"细节只进服务端日志"纪律)。不进 _observe 计量白名单(service.py:166)——高频探针不污染业务指标。"""
+        (同 /v1/ask 的"细节只进服务端日志"纪律)。不进 _observe 计量白名单(service.py)——高频探针不污染业务指标。"""
         if state.retriever is None:                          # lifespan 未建完(极早期):未就绪
             return JSONResponse({"status": "starting"}, status_code=503)
         try:
-            exists = state.retriever.store.client.collection_exists(cfg.collection)   # qdrant 一次轻 HTTP
+            exists = await anyio.to_thread.run_sync(         # qdrant 阻塞 HTTP -> 专用 limiter 线程,不占业务池
+                lambda: state.retriever.store.client.collection_exists(cfg.collection),
+                limiter=_PROBE_LIMITER)
         except Exception:
             log.warning("readyz: qdrant 探活失败", exc_info=True)   # 细节只进服务端日志,不外泄内网拓扑
             return JSONResponse({"status": "qdrant_unavailable"}, status_code=503)
         if not exists:                                       # 评审 compose-B:collection 不存在(新起 server 未迁移)= 未就绪,别绿着查空库
-            return JSONResponse({"status": "collection_missing", "detail": cfg.collection}, status_code=503)
+            return JSONResponse({"status": "collection_missing"}, status_code=503)  # sec:不回集合名(未鉴权探针)
         if cfg.inference_url:                                 # remote 模式才探 inference /readyz
             try:
                 import httpx
                 # 显式短超时(评审 sec-3):httpx.Timeout(3) 每阶段各 3s,最坏 ~9s > healthcheck 5s → 会把本副本误判 unhealthy 重启
-                r = httpx.get(cfg.inference_url.rstrip("/") + "/readyz",
-                              timeout=httpx.Timeout(1.5, connect=1.0))
+                async with httpx.AsyncClient() as client:
+                    r = await client.get(cfg.inference_url.rstrip("/") + "/readyz",
+                                          timeout=httpx.Timeout(1.5, connect=1.0))
                 if r.status_code != 200:
                     return JSONResponse({"status": "inference_not_ready"}, status_code=503)
             except Exception:

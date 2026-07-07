@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from dataclasses import replace
 
 from fastapi import FastAPI
@@ -31,6 +32,11 @@ from .dense import Dense
 from .rerank import Reranker
 
 _FULL_DIM = 10 ** 9        # 极大 dense_dim -> _mrl 永不截,返回模型原始全维(客户端再按真实维度截)
+# 预热自愈:瞬态失败(非永久配置错)重试次数 + 退避基;耗尽仍失败则 os._exit(1) 让 restart 拉起(阶段F 审查)。
+_WARMUP_RETRIES = int(os.environ.get("INFERENCE_WARMUP_RETRIES", "3"))
+_WARMUP_BACKOFF = float(os.environ.get("INFERENCE_WARMUP_BACKOFF", "5.0"))
+# 背压:同时在途(执行 + 等 GPU 锁)上限。GPU 前向串行,深队列纯浪费 + 拥塞正反馈;满则 503 overloaded 快速失败。
+_MAX_INFLIGHT = int(os.environ.get("INFERENCE_MAX_INFLIGHT", "16"))
 
 
 def _readiness(ready: bool, err: str | None) -> tuple[dict, int]:
@@ -74,28 +80,46 @@ def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
     state.err: str | None = None
     state.gpu_lock = threading.Lock()    # 单卡 GPU 前向串行化
     state.full_dim: int | None = None    # 模型全维(预热探针取);healthz 暴露供排障(客户端自动校验待做,当前靠 remote._mrl_np 运行时下界断言兜底)
+    # 有界准入(阶段F 审查·背压):GPU 前向串行,过载时无上限排队 = 客户端 read-timeout 放弃后请求仍在队里
+    # 烧 GPU + 重试再入队 = 3× 无效功 + 拥塞正反馈。信号量把在途(执行中 + 等锁)钉在 _MAX_INFLIGHT,
+    # 满则立即 503 overloaded;客户端把 5xx 当 InferenceUnavailable 退避重试,天然兼容,队列长度有界。
+    state.inflight = threading.BoundedSemaphore(_MAX_INFLIGHT)
 
     @app.on_event("startup")
     def _warmup():
         def load():
-            try:
-                dense._load()            # 各 1-2 分钟(8B),后台预热;热完前 /readyz 返 503
-                reranker._load()
-                probe = dense._model.process([{"text": "dim-probe", "instruction": None}], normalize=True)
-                state.full_dim = int(probe.shape[-1])   # 全维(如 4096);此处 dense_dim=_FULL_DIM 故 _mrl 不截
-                state.ready = True
-            except Exception as e:       # 加载失败(缺卡/错卡/模型缺):readyz 暴露,编排不导流量
-                state.err = f"{type(e).__name__}: {e}"
+            for attempt in range(_WARMUP_RETRIES + 1):
+                try:
+                    dense._load()            # 各 1-2 分钟(8B),后台预热;热完前 /readyz 返 503
+                    reranker._load()
+                    probe = dense._model.process([{"text": "dim-probe", "instruction": None}], normalize=True)
+                    state.full_dim = int(probe.shape[-1])   # 全维(如 4096);此处 dense_dim=_FULL_DIM 故 _mrl 不截
+                    state.ready = True
+                    state.err = None
+                    return
+                except Exception as e:       # 加载失败:区分永久配置错 vs 瞬态
+                    state.err = f"{type(e).__name__}: {e}"
+                    # 永久配置错(错卡/缺 CUDA,Dense 已 _gpu_error 缓存)重试无益 -> 直接停,别空转烧日志。
+                    if getattr(dense, "_gpu_error", None) is not None:
+                        break
+                    if attempt < _WARMUP_RETRIES:   # 瞬态(如共享卷抖动/传递依赖偶发)-> 指数退避重试
+                        time.sleep(_WARMUP_BACKOFF * (2 ** attempt))
+            # 阶段F 审书·自愈:瞬态耗尽仍失败 -> 进程自杀,让 restart:unless-stopped 拉起重来
+            # (start_period 兜住重启预热窗口)。永久配置错不自杀(crashloop 无意义,留 err 供 /healthz 排障)。
+            if not state.ready and getattr(dense, "_gpu_error", None) is None:
+                import sys
+                print(f"FATAL inference 预热重试耗尽,退出让编排重启:{state.err}", file=sys.stderr, flush=True)
+                os._exit(1)
         threading.Thread(target=load, daemon=True).start()
 
     @app.get("/healthz")                 # liveness:进程活着(不代表模型热)。**加载永久失败也仍报 ok** ——
-    def healthz():                       # liveness=进程活着;配置错(错卡/缺模型)重启也修不好,报不健康只会 crashloop。
+    async def healthz():                 # async:纯内存读,不进 40-线程池 -> 高负载下探针不饥饿(阶段F 审查)。
         return {"status": "ok", "service": "inference", "ready": state.ready, "error": state.err,
                 "full_dim": state.full_dim, "model_dense": os.path.basename(cfg.dense_model_path)}
         # ↑ err/full_dim 仅**暴露供人工排障**(暂无客户端自动读取校验;dense_dim 错配靠 remote._mrl_np 运行时下界断言);liveness 判定不变,导流量用 /readyz。
 
     @app.get("/readyz")                  # readiness:模型热了、能服务了 —— 编排据此导流量
-    def readyz():
+    async def readyz():                  # async:纯内存读 state.ready/err,不进线程池(阶段F 审查:探针与 GPU 业务共池会饥饿假 unhealthy)
         body, code = _readiness(state.ready, state.err)
         return body if code == 200 else JSONResponse(body, status_code=code)
 
@@ -103,32 +127,57 @@ def create_app(cfg: EmbedConfig | None = None) -> FastAPI:
         body, code = _readiness(state.ready, state.err)
         return None if code == 200 else JSONResponse(body, status_code=code)
 
+    def _admit():                        # 背压守卫:在途满则立即 503 overloaded(非阻塞尝试);返回 token(release 用)或 None+503 响应
+        if not state.inflight.acquire(blocking=False):
+            return None, JSONResponse({"status": "overloaded",
+                                       "hint": "推理服务在途已满,请退避重试。"}, status_code=503)
+        return state.inflight, None
+
     @app.post("/embed")
     def embed(q: EmbedReq):
         g = _guard()
         if g is not None:
             return g
-        with state.gpu_lock:
-            vecs = dense.encode_text(q.texts, instruction=q.instruction)   # 全维(dense_dim=极大不截)
-        return {"vectors": vecs.tolist()}
+        tok, over = _admit()
+        if over is not None:
+            return over
+        try:
+            with state.gpu_lock:
+                vecs = dense.encode_text(q.texts, instruction=q.instruction)   # 全维(dense_dim=极大不截)
+            return {"vectors": vecs.tolist()}
+        finally:
+            tok.release()
 
     @app.post("/embed_image")
     def embed_image(q: EmbedImageReq):
         g = _guard()
         if g is not None:
             return g
-        with state.gpu_lock:
-            vecs = dense.encode_image(q.image_paths, instruction=q.instruction)
-        return {"vectors": vecs.tolist()}
+        tok, over = _admit()
+        if over is not None:
+            return over
+        try:
+            with state.gpu_lock:
+                vecs = dense.encode_image(q.image_paths, instruction=q.instruction)
+            return {"vectors": vecs.tolist()}
+        finally:
+            tok.release()
 
     @app.post("/rerank")
     def rerank(q: RerankReq):
         g = _guard()
         if g is not None:
             return g
-        with state.gpu_lock:
-            scores = reranker.score(q.query, q.documents)    # 原始 0~1 分,与文档一一对应
-        return {"scores": scores}
+        tok, over = _admit()
+        if over is not None:
+            return over
+        try:
+            with state.gpu_lock:
+                # P2-3:消费客户端 payload 的 instruction(客户端唯一真相);None 时 score 内回落服务端 cfg 默认。
+                scores = reranker.score(q.query, q.documents, instruction=q.instruction)
+            return {"scores": scores}
+        finally:
+            tok.release()
 
     return app
 

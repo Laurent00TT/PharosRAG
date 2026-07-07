@@ -1,6 +1,10 @@
-# docker-compose.yml — 阶段 E(docs/SCALE_OUT.md §5-E):inference(GPU,2×8B)/ pharos(×N slim 无 torch)/ qdrant(server)。
-# 起:   docker compose --env-file .env.compose up -d --build
-# 多副本:docker compose --env-file .env.compose up -d --scale pharos=2   # 验 S3 sidecar 共享(命门)
+# docker-compose.yml — 阶段 E+F(docs/SCALE_OUT.md §5-E/§5-F):
+#   inference(GPU,2×8B ×1)/ qdrant(server ×1)/ pharos(×N slim 无 torch)/ nginx(负载均衡 + kill 无感)。
+# 起(单副本):  docker compose --env-file .env.compose up -d --build
+# 起(多副本):  docker compose --env-file .env.compose up -d --build --scale pharos=3
+# 入口:        http://127.0.0.1:8080  (nginx;所有客户端走它。pharos 副本只在内网 expose 8787,不发布宿主端口
+#              -> --scale 无端口冲突。阶段F 审查:E 里 pharos 固定发布 8787 与 --scale 冲突,已改 nginx 前置)。
+# 验 kill 无感:docker kill $(docker compose ps -q pharos | head -1)   # 打 8080 持续查询,in-flight 之外无感
 # 停:   docker compose down            (加 -v 才删 qdrant 持久卷)
 # 注:全程在 WSL 终端跑(bind mount 是 Linux 路径);.env.compose 路径必须 WSL ext4,绝不 /mnt/c(§8-坑2)。
 services:
@@ -31,6 +35,8 @@ services:
     environment:
       INFERENCE_HOST: "0.0.0.0"
       INFERENCE_PORT: "8900"
+      INFERENCE_MAX_INFLIGHT: "${INFERENCE_MAX_INFLIGHT:-16}"   # 背压(阶段F):在途上限,满则 503 overloaded(GPU 前向串行,深队列纯浪费)
+      INFERENCE_WARMUP_RETRIES: "${INFERENCE_WARMUP_RETRIES:-3}"  # 预热瞬态失败重试;耗尽 os._exit(1) 让 restart 拉起(自愈)
       # ⭐ GPU 锁 4090 —— 三层,缺一不可(WSL2 实测教训):
       #  1) NVIDIA_VISIBLE_DEVICES/device_ids:toolkit 层选卡。**WSL2 下不硬隔离**(实测 device=UUID 仍见两卡),
       #     故不能只靠它;在真 Linux 主机上它才隔离。
@@ -53,15 +59,18 @@ services:
             - driver: nvidia
               device_ids: ["${GPU_UUID}"]             # 精确到 4090
               capabilities: [gpu]
+    stop_grace_period: 30s                            # 停机宽限(阶段F 审查):默认 10s 会 SIGKILL 截杀 in-flight 前向/预热
     healthcheck:
       # 真 readiness:两个 8B 串行热完前 /readyz 返 503。base 有 curl(Dockerfile 装了)
       test: ["CMD", "curl", "-sf", "http://localhost:8900/readyz"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 300s                              # 双 8B 串行预热 ~5min。注(评审A,因果别搞反):start_period 内探针失败
-                                                      # 不计数/不判 unhealthy(热完前恒 503,第一次 200 即转 healthy)——给短了无害,只是 pending 更久。
-                                                      # 真触发 unhealthy 的是【热完后】连续 3 次 503(掉卡/OOM);那时别调这个值,去查 GPU。
+      start_period: 600s                              # 双 8B 串行预热 ~5min,给 600s 余量(阶段F 审查订正):
+                                                      # ⚠ 更正旧注释——start_period **过后** 3 次探针失败即判 unhealthy,depends_on:service_healthy
+                                                      # 会令整个 up 中止、pharos 永不启动。故"给短了无害"是错的:预热慢于 start_period(冷盘/首次下载/
+                                                      # scipy 编译)时直接卡死编排。成本为零(第一次 200 立刻转 healthy,不会白等),故取宽松 600s。
+                                                      # 热完后连续 3 次 503(掉卡/OOM)才是真 unhealthy —— 那时去查 GPU,别调这个值。
     ports:
       - "127.0.0.1:8900:8900"                         # 可选暴露(排障/独立压测);多副本时 pharos 走内网 DNS
     networks: [pharos-net]
@@ -72,6 +81,8 @@ services:
     image: pharos-app:0.3.0
     # ⚠ 要 --scale pharos=N 就【不能】设 container_name(名字冲突);保持无 container_name
     restart: unless-stopped
+    stop_grace_period: 30s                            # 停机宽限(阶段F 审查):默认 10s 会 SIGKILL 截杀 in-flight 的
+    #   /v1/ask(LLM 生成常 30-120s)。给 30s + uvicorn timeout_graceful_shutdown=25(cli.py)-> 优雅 drain 后退出。
     environment:
       PHAROS_INFERENCE_URL: "http://inference:8900"   # 非空→RemoteDense/Reranker(不加载 GPU)
       PHAROS_QDRANT_URL: "http://qdrant:6333"         # 非空→store.py 三分支 server
@@ -114,8 +125,32 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s                                # slim 秒起(无模型加载)
+    expose:
+      - "8787"                                         # ⭐ 阶段F:只在 pharos-net 内暴露(不发布宿主端口)-> --scale 无端口冲突;入口走 nginx
+    networks: [pharos-net]
+
+  # ── nginx:多副本负载均衡 + docker kill 无感(阶段F,唯一对外入口)──
+  nginx:
+    image: nginx:1.27-alpine                           # server ... resolve 需 nginx≥1.27.3(开源);alpine 小
+    container_name: pharos-nginx
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ./deploy/nginx.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
     ports:
-      - "127.0.0.1:8787:8787"                          # 单副本直发布;F 上 nginx 后改只 expose 不 publish
+      - "127.0.0.1:8080:80"                            # ⭐ 唯一对外入口;客户端全走 http://127.0.0.1:8080
+    depends_on:
+      pharos: { condition: service_started }           # nginx 不等 pharos healthy(被动 max_fails 自适应);只需 DNS 名可解析
+    healthcheck:
+      # ⚠ 用 127.0.0.1 不用 localhost:配置只读挂载 -> 入口脚本无法追加 `listen [::]:80`,nginx 只听 ipv4;
+      #   容器内 localhost 先解析到 ipv6 ::1 -> wget 连 refused -> 假 unhealthy(真服务正常)。钉死 ipv4 探。
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/_nginx_health"]  # alpine busybox wget,无 curl
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks: [pharos-net]
 
 networks:

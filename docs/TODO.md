@@ -24,9 +24,10 @@
 
 ## v2 方向(规模驱动,不预支)
 
-- **Qdrant server 模式**:嵌入式单客户端锁是水平扩展/多副本/滚动升级的天花板;迁 server 模式后解锁
-  (EmbedConfig 换 url 即迁移)。这是超出小团队规模后的第一块骨牌。
-- **多副本 + 负载均衡**:守护进程当前单点;Qdrant server 化后才谈得上多 pharos 副本。
+- ✅ **Qdrant server 模式 + 多副本 + 负载均衡(已交付,阶段 A–F,见 [SCALE_OUT.md](SCALE_OUT.md))**:拆 GPU 推理层
+  → 应用脱 torch → 嵌入式 Qdrant 转 server → nginx 多副本 + `docker kill` 无感。⚠ 订正原措辞"EmbedConfig 换 url
+  即迁移"过度简化:实际还需 `store.py` 三分支 + 全出口透传 `qdrant_url` + 数据迁移 + **server-mode ACL 越权重测**。
+  剩余 open:session 粘滞/共享去重、inference 换 vLLM(GPU 排队明显时)、K8s。
 - SSE/streaming ask;简单 Web UI。
 
 ## 明确不做
