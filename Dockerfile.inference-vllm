@@ -1,0 +1,17 @@
+# vLLM 适配器镜像(Plan B/A,docs/VLLM_PLAN.md Phase 1)。slim、无 GPU、无 torch —— 只把 pharos 的
+# /embed 契约翻译成 vLLM /v1/embeddings(套 chat 模板),前向交给 inference-vllm-engine(vllm serve)。
+# GPU 全在 engine 容器(vllm/vllm-openai);本适配器只需 fastapi/uvicorn/httpx/transformers(取 tokenizer 套模板)。
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+# 适配器零 pharos/torch/qdrant 依赖:只装 fastapi/uvicorn/httpx/transformers(tokenizer 套 chat 模板,CPU)。
+RUN pip install -i ${PIP_INDEX_URL} "fastapi>=0.110" "uvicorn>=0.29" "httpx>=0.27" "transformers>=4.57.0"
+COPY src/inference_vllm_adapter.py ./inference_vllm_adapter.py
+# ⭐ 构建期断言脱 torch(与 slim pharos 同纪律:适配器不该拉 torch)
+RUN python -c "import importlib.util,sys; sys.exit('FATAL torch leaked' if importlib.util.find_spec('torch') else 0)"
+EXPOSE 8900
+# 模型仅取 tokenizer(chat 模板);compose 外挂 /root/models :ro(与 inference 同卷)
+CMD ["python", "inference_vllm_adapter.py"]

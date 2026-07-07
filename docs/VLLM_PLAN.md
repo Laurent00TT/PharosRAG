@@ -4,12 +4,11 @@
 > Plan B,**呈现完全相同的 `/embed`/`/rerank`/`/readyz` 契约** —— 应用层(pharos `remote.py`)一个字节都不改,
 > 只把 `PHAROS_INFERENCE_URL` 指向谁。**vLLM 只有连过等价性门 + 吞吐门才升 Plan A**,否则随时零成本回退。
 >
-> 状态:**G0 PASS / G1 边缘 / G2 基本通过(2026-07-07 实测);G4 吞吐待做**。本文所有判断都标注**依据**,不做幻觉宣告。
+> 状态:**四门全过实测(2026-07-07),vLLM 判定应升 Plan A;剩工程落地(Phase 1 适配器 + compose profile)**。
 >
-> **实测速览(见 §4.1)**:vLLM **成功**以 pooling 加载 Qwen3-VL-Embedding-8B 出归一向量(**G0 GO**);与官方向量
-> min cosine **0.99956**(**G1 边缘**);**关键 —— G2 混建混查:vLLM 查询打官方建的真库,top-1 一致 87/88 (98.9%)、
-> top-10 集合一致 97.7%、Jaccard@10 0.9959,分歧几乎全在 rank≥6 尾部近重复(无害)**。即 **G1 那点微漂不翻转有效召回**。
-> 结论:**vLLM 查现有库 = 生产可接受**;剩 **G4 吞吐门**(vLLM continuous batching vs FastAPI 串行)决定升不升 Plan A。
+> **实测速览(见 §4.1)**:G0 GO(vLLM 加载 pooling 出归一向量)/ G1 边缘(cosine 0.99956)/ **G2 基本通过**(vLLM 查
+> 官方真库 top-1 98.9%、Jaccard 0.9959、分歧全在尾部近重复无害)/ **G4 决定性胜**(vLLM continuous batching **297 QPS**
+> vs FastAPI 串行 **24 QPS** 封顶 = **~12×**,且零错误、p95 更低)。**综合:等价性可接受 + 吞吐 12× → vLLM 应升 Plan A。**
 
 ---
 
@@ -125,7 +124,28 @@ CUDA_VISIBLE_DEVICES=1`;②`max_position_embeddings=262144` 让 vLLM 要 36GB KV
 分歧几乎全是 rank 6-9 的近重复 chunk 换序(证据池不变、不改答案)。这是**混建混查最坏情形**(vLLM 查 × 官方建,
 跨实现);若 Plan A 落地**用 vLLM 全库重建**,则建/查同实现、自洽无漂,比这更干净。**唯一残留**:1/88 top-1 不同 +
 2/88 top-10 集合不同(纯 transformers 4.57↔5.10 数值差)。对"忠实度头牌"系统若零容忍,对齐 transformers 版本或
-全库 vLLM 重建可消除;否则 98.9% top-1 生产可接受。**结论:等价性侧 GO,vLLM 可查现有库;升 Plan A 只差 G4 吞吐门。**
+全库 vLLM 重建可消除;否则 98.9% top-1 生产可接受。
+
+| 门 | 结果 | 数据(`scripts/bench_embed.py`,88 题循环取满 120/档,单文本查询=1 向量,预套 chat 模板)|
+|---|---|---|
+| **G4 吞吐** | ✅ **决定性胜** | vLLM(continuous batching)vs FastAPI(串行 gpu_lock + 背压16),4090:|
+
+```
+        FastAPI QPS   vLLM QPS   倍数     (p50 ms: FastAPI→vLLM)
+conc 1     22.4         33.5     1.5×      44 → 28
+conc 8     23.7        169.3     7.1×     334 → 45
+conc 16    23.5        226.0     9.6×     680 → 72
+conc 32    22.2*       271.2    12.2×     428 → 93     *FastAPI 仅 17/120 成功,103 被背压 503 拒
+conc 64     —          297.3      —      (vLLM 全成,p95 264ms)
+峰值:FastAPI ~24 QPS 封顶(串行,不随并发升);vLLM 297 QPS(随并发线性 scale)
+```
+
+**G4 判读**:FastAPI 串行 gpu_lock 把吞吐钉死在 **~24 QPS**(并发只堆延迟 + 背压泄洪),vLLM continuous batching
+把并发请求拼批,**297 QPS ≈ 12×**,且零错误、p95 反而更低(93ms vs 428ms@conc32)。**这正是拆 GPU 推理层时预留
+的收益兑现**(端点契约无业务概念 → 换后端不碰应用层)。**四门综合:vLLM 应升 Plan A。**
+
+**总结论**:等价性可接受(G1/G2)+ 吞吐 12×(G4)→ **vLLM 升 Plan A 成立**。落地走 §5 Phase 1(embed 走 vLLM,
+reranker 降级安全暂留;compose profile 切换 + 秒级回退)。若追求零 top-1 漂移,配套 vLLM 全库重建(建查同实现自洽)。
 
 ---
 
@@ -134,11 +154,21 @@ CUDA_VISIBLE_DEVICES=1`;②`max_position_embeddings=262144` 让 vLLM 要 36GB KV
 **Phase 0 — go/no-go 探针(先跑,决定后面做不做)。** 仅 `scripts/vllm_equiv_probe.py`,不碰生产:测 G0 + G1。
 本阶段唯一产出是**一个数**(cosine)。cosine>0.9999 → 继续;否则先修 input 对齐或判定"需全库重建"。**成本最低、决定性最高,先做。**
 
-**Phase 1 — embed-only vLLM 后端(reranker 留 torch)。** G1 过后:
-- `Dockerfile.inference-vllm`(base `vllm/vllm-openai` 或 vllm env)+ 起 `vllm serve --runner pooling`;
-- `src/embedder/inference_vllm_adapter.py`(薄 FastAPI,无 GPU):`/embed` 套 §2-C chat 模板 → vLLM `/v1/embeddings` → `{"vectors"}`;`/readyz` 探 vLLM;`/rerank` **代理回 torch reranker 服务**(或本阶段 pharos 直接 rerank=False);
-- compose 加 `inference-vllm` 服务(`profiles: [vllm]`),pharos `PHAROS_INFERENCE_URL` 指它;
-- 跑 **G2 混建混查**(真库 + ~50 query)—— 过了才算 Phase 1 完成。
+**Phase 1 — embed-only vLLM 后端(reranker 留 torch)。✅ 核心已落地 + bare-metal 实测(2026-07-07):**
+- `src/inference_vllm_adapter.py`(薄 FastAPI,无 GPU、无 torch):`/embed` 套 §2-C chat 模板 → vLLM `/v1/embeddings`
+  → `{"vectors"}`(全维归一,契约同 inference_server);`/readyz` async 探 vLLM `/health`;`/embed_image` 501(建库专用
+  走 local);`/rerank` 配 `RERANK_PROXY_URL` 则代理 torch reranker,否则 503(pharos 降级 hybrid,安全)。
+  **⚠ 放 src/ 根不放 embedder/ 包内**:适配器要在 vllm 环境跑(无 qdrant_client),放包内会触发 `embedder/__init__`
+  的 qdrant_client import + 让 stdlib `import types` 被 `embedder/types.py` 遮蔽(两坑均实测踩到,已解)。
+- `Dockerfile.inference-vllm`:slim 适配器镜像(fastapi/uvicorn/httpx/transformers,build 期断言脱 torch)。
+- **端到端 bare-metal 实测(同阶段E pivot 方法)**:`vllm serve :8000` + 适配器 `:8900` + **pharos(RemoteDense,应用层
+  一字不改)经 PHAROS_INFERENCE_URL=适配器 打嵌入式真库** → `scripts/vllm_adapter_smoke.py` **3/3 查询出真命中**
+  (IBM 查询→IBM 报表 chunk、Netflix→Netflix 10K、cross-lingual→对口论文)。adapter /embed 出 1×4096 norm=1.0。
+  **证明"换 vLLM 后端不碰应用层"兑现。**
+- **⏸️ 待做(诚实,同阶段E 纪律)**:compose `vllm` profile 容器化(`inference-vllm-engine`=vllm/vllm-openai 起 `vllm serve` +
+  `inference-vllm`=适配器)**在容器内原样跑一遍**——vllm/vllm-openai 镜像 ~10GB,本机网络拉取有风险(同阶段E torch base
+  的 daocloud 坑),留作带自身校验的下一步,不提交"从未在容器跑过"的 profile(阶段E 盲区教训)。
+- G2 混建混查已在 Phase 0 提前跑过(§4.1,GO)。
 
 **Phase 2 — 吞吐门 + 决定 Plan A/B。** 跑 **G4** 并发基准(FastAPI vs vLLM),数字写进 SCALE_OUT。
 G4 赢 → vLLM 升 Plan A(默认 profile 切 vllm);否则留 Plan B。
