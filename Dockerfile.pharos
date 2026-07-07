@@ -1,0 +1,28 @@
+# pharos 应用镜像(阶段 E,docs/SCALE_OUT.md §5-E):slim、【不装 torch】、无状态(除 sidecar 共享卷)、可 ×N。
+# "脱 torch" 是 go/no-go:核心 dependencies(pyproject:13-22)不含 torch,[gpu] extra(:26)已隔离。
+# remote 后端(inference_url 非空)override _load 为 no-op,torch 永不触发 —— 应用层真无 GPU 依赖。
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install .          # ⬅ 不带 .[gpu] —— 这一行就是"脱 torch"的落地
+
+# ⭐ 构建期脱 torch 断言:把"slim 被 torch 污染"从运行时提前到 build(装错立即 build fail)。
+RUN python -c "import importlib.util, sys; \
+    sys.exit('FATAL: torch leaked into slim image' if importlib.util.find_spec('torch') else 0)"
+# ⭐ 构建期闭包断言:整条 import 链 + 构造 remote 后端不拉 torch(承 SCALE_OUT 阶段C 的 I2)。
+RUN python -c "import pharos.engine, pharos.service, sys; \
+    from embedder.remote import RemoteDense, RemoteReranker; \
+    from embedder.config import EmbedConfig; \
+    RemoteDense(EmbedConfig(inference_url='http://x:8900')); \
+    RemoteReranker(EmbedConfig(inference_url='http://x:8900')); \
+    assert 'torch' not in sys.modules, 'torch imported at closure'; print('slim closure OK')"
+
+EXPOSE 8787
+# 用 [project.scripts] 装出的 pharos 控制台命令(与 python -m pharos serve 等价——src/pharos/__main__.py 也在;
+# 控制台脚本更稳,不依赖 CWD/PYTHONPATH)。
+CMD ["pharos", "serve"]

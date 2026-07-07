@@ -1,0 +1,40 @@
+# docker build context 瘦身:只需 pyproject/README/src(+ scripts 供 migrate)。排大件/密钥/私产。
+.git
+.gitignore
+**/__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+*.egg-info
+build/
+dist/
+
+# 测试/评估/文档不进镜像(pip install . 只装 src/,这些只是拖慢 context 传输)
+tests/
+eval/
+docs/
+
+# 密钥与本地配置(绝不进镜像)
+.env
+.env.compose
+.env.compose.example
+*.keys.json
+.mcp.json
+pharos_logs/
+
+# 大型可再生数据(解析产物/语料/分块;均在仓外或 gitignore)
+corpus/
+corpus_multiformat/
+parsed/
+parsed_office/
+parsed_scanned/
+chunks/
+chunks_proto/
+chunks_realtok/
+unlimited-ocr-out/
+_xlsx_redteam/
+*.local/
+
+# 容器构建产物自身
+Dockerfile.*
+docker-compose.yml

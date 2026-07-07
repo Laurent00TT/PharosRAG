@@ -1,5 +1,6 @@
 # 密钥与本地配置(绝不提交)
 .env
+.env.compose
 
 # Python
 __pycache__/

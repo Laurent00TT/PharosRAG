@@ -1,0 +1,22 @@
+# GPU 推理服务镜像(阶段 E,docs/SCALE_OUT.md §5-E)。
+# 基于官方 pytorch 镜像:torch 2.8.0+cu128 已预装,与本机 navikb 同版本(等价性稳)。
+# 关键:免掉在 build 内从 download.pytorch.org 下 ~5GB torch —— 实测本机代理下仅 ~368KB/s(要数小时);
+#       base 经 daocloud 镜像拉(~2-3GB,分钟级)。大模型仍不进镜像,compose 外挂 /root/models。
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 代码 + [gpu] extra。torch>=2.8.0 已由 base 满足→不重装;只拉 transformers/qwen-vl-utils/accelerate + 核心依赖
+# (均 MB 级,走清华 PyPI 镜像稳)。
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple ".[gpu]"
+
+# ⭐ EmbedConfig 硬编码 ~/models 且不读 env($HOME=/root)——compose 直挂 /root/models。软链兜底/文档一致。
+RUN mkdir -p /root && ln -sf /root/models /models 2>/dev/null || true
+
+EXPOSE 8900
+# 模型 scripts/ 随模型下载在 /root/models/*/scripts,dense.py 运行时 sys.path.insert 加载(在外挂卷里,不进镜像)。
+CMD ["python", "-m", "embedder.inference_server"]

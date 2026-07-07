@@ -351,15 +351,16 @@ PHAROS_QDRANT_URL=http://localhost:6333 pytest tests/engine/test_store.py -k acl
 
 ### 阶段 E —— 容器化 / 编排(多副本真应答)
 
-**改动**:
-- `Dockerfile.inference`(`nvidia/cuda` base + `.[gpu]`)、`Dockerfile.pharos`(slim,**不装 torch**)、
-  `docker-compose.yml`(inference×1 GPU 直通 + qdrant server + pharos×N)
+**改动**(⚠ 计划两处被实测证伪,以「落地状态」为准):
+- `Dockerfile.inference`(~~`nvidia/cuda` base + `.[gpu]`~~ → **`pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime` base**,torch 预装,见落地状态坑③)、
+  `Dockerfile.pharos`(slim,**不装 torch**)、`docker-compose.yml`(inference×1 GPU 直通 + qdrant server + pharos×N)
 - 顺带修 P2-3(rerank instruction 收敛客户端)
 - compose 关键点(Windows/WSL2 特有坑):
-  - `CUDA_DEVICE_ORDER=PCI_BUS_ID` + `NVIDIA_VISIBLE_DEVICES=GPU-<4090-UUID>`(FASTEST_FIRST index 会漂,锁 UUID)
-  - 模型走 `-v ...:/models:ro`,放 WSL ext4(**别放 `/mnt/c`**,跨边界 IO 慢)
+  - ~~`CUDA_DEVICE_ORDER=PCI_BUS_ID`~~ → **`CUDA_VISIBLE_DEVICES=GPU-<4090-UUID>`**(PCI_BUS_ID 下 device0=5070→app 断言必失败→永不 ready;见落地状态坑④)
+  - 模型走 `-v ...:/root/models:ro`,放 WSL ext4(**别放 `/mnt/c`**,跨边界 IO 慢)
   - healthcheck `curl /readyz` + **`start_period: 300s`**(两个 8B 串行预热,给不够会无限重启)
   - pharos `depends_on: inference: condition: service_healthy`
+  - **`PHAROS_KEYS_FILE` 必配**(见落地状态坑⑤):绑 0.0.0.0 触发 fail-closed 守卫,必须 keys 模式
 
 **验证/里程碑**:
 ```bash
@@ -369,6 +370,43 @@ curl -s localhost:8787/v1/retrieve -d '{"query":"..."}'       # pharos remote �
 docker compose exec inference python -c "import torch; print(torch.cuda.get_device_name(0))"  # 含 "4090"
 docker compose exec pharos    python -c "import torch"        # 应 ModuleNotFoundError(证明真脱 torch)
 ```
+
+**落地状态(2026-07-06 实测,本机 Docker Desktop + WSL2 + 4090)**:
+
+> `pytorch/pytorch` base 的 4.25GB 层曾在代理下仅 ~70KB/s。先用 **bare-metal-inference pivot**(inference 裸机 navikb 跑,
+> 容器化 pharos 经 `host.docker.internal:8900` 连它)验证架构 + sidecar S3 命门;后 base 镜像拉全(累积重试)+ 补 `scipy/einops`(坑⑥),
+> **committed 三容器 compose 原样 `docker compose --env-file .env.compose up -d` 已端到端跑通,全 healthy**——全部 gate 实测通过,无遗留 ⏸️。
+
+| Gate | 结果 | 证据 |
+|---|---|---|
+| 脱 torch(build) | ✅ | `Dockerfile.pharos` build 期断言 `find_spec('torch')`=None + 闭包 `slim closure OK` |
+| 脱 torch(runtime) | ✅ | 容器内 `import torch`→`ModuleNotFoundError` + `'torch' not in sys.modules` |
+| GPU 直通 | ✅ | `--gpus` 下 4090 可用;`CUDA_VISIBLE_DEVICES=<4090UUID>`→device0=4090(三态实测,见坑④) |
+| readiness 导流 | ✅ | pharos `/readyz` 经 qdrant-client `collection_exists(real)`(底层 GET /collections/real/exists 的 bool,**非** HTTP 双 200)+ `httpx.get(inference/readyz).status_code==200` 双下游探活;`depends_on service_healthy` |
+| 端到端 remote | ✅ | 容器 pharos(0 torch)→裸机 inference→qdrant server,真命中 `financial_research_zh__...`,`mode:full` |
+| **sidecar S3 命门** | ✅ **正+反证** | 2 副本共享 `/index`:5×2 query `single_chunk_degraded=0`;控制组空 sidecar:19 降级(证测试能检出) |
+| 数据迁移 | ✅ count / 抽样手验 | `migrate_to_server.py` 7652→7652 **count**(脚本可复现);dense==1024/sparse/ACL payload 抽 50 点为**会话内一次性手验**(未入脚本,§7 三层校验待固化) |
+| **inference 镜像 build** | ✅ | `pytorch/pytorch:2.8.0-cuda12.8` base(daocloud 拉)+ `.[gpu]`(补 scipy/einops)→ `pharos-inference:0.3.0`(12.7GB)build 成功;`ready:true full_dim:4096` |
+| **committed compose 原样 up** | ✅ **盲区闭合** | `docker compose --env-file .env.compose up -d` 三容器全 healthy;inference 容器内 `get_device_name(0)=RTX 4090 count=1`(坑④真容器验证);pharos `/readyz`=ready;**全容器链路** retrieve `status:ok returned_n:3 mode:full`(full_section/section_window/deduped) |
+
+**实测抓到并修的真 bug(计划外,读码+验证发现)**:
+1. ~~**坑①**~~ **(对抗评审订正:这是我的误判,非真 bug)**:我曾称 `python -m pharos serve` 失败因"无 `src/pharos/__main__.py`"——实为 glob 搜错了目录(搜 cwd 而非 pharos 仓),`__main__.py` **确实存在**,`python -m pharos serve` 本就能跑。CMD 用 `["pharos","serve"]`(控制台脚本)是等价选择,更稳(不依赖 CWD/PYTHONPATH),但**不是**修 bug。
+2. **坑② `Dockerfile.inference`**:`COPY requirements-gpu.txt`(该文件不存在)+ `python3.12`(ubuntu22.04 base 源无此包)→ 都会 build fail → 改 `.[gpu]` + pytorch base。
+3. **坑③ torch 下载**:cu128 从 pytorch.org 走代理仅 368KB/s(5GB≈4h)→ 改用**预装 torch 的 `pytorch/pytorch` 官方镜像作 base**(daocloud 镜像拉),免下载。docker hub 拉取本身也要 daocloud 镜像加速器(在华无加速器→EOF)。
+4. **坑④ GPU 选卡(最坑)**:`dense.py:38` 固定 `get_device_name(0)` 并断言含 "4090"。原计划 `CUDA_DEVICE_ORDER=PCI_BUS_ID` 下 **device0=5070**→断言必失败→inference 永不 ready。**三态实测**:默认 FASTEST_FIRST→4090 ✅;PCI_BUS_ID→5070 ✗;`CUDA_VISIBLE_DEVICES=<4090UUID>`→4090 ✅(且 count=1)。修复=用 `CUDA_VISIBLE_DEVICES`(app 报错信息亲自建议的锁法)。**另**:WSL2 下 `device_ids`/`NVIDIA_VISIBLE_DEVICES=UUID` **不硬隔离**(实测容器仍见两卡),真锁靠 `CUDA_VISIBLE_DEVICES`。
+5. **坑⑤ 0.0.0.0 鉴权守卫**:`service.py:88` fail-closed——绑非回环**必须 keys 模式**(legacy 单密钥不接受)。容器内必须绑 0.0.0.0(Docker 端口转发要求)→ compose 必配 `PHAROS_KEYS_FILE`,否则 crash-loop。已加(评审 sec-4:明文 key 表单独 `:ro` 挂 `/run/pharos/keys.json`,**不进** RW 数据卷)。
+6. **坑⑥ 模型加载缺 scipy/einops(唯有真容器暴露)**:`[gpu]` extra 原只有 transformers/qwen-vl-utils/torch/accelerate,但 Qwen3-VL 加载经 transformers 传递依赖 **scipy**、rearrange 需 **einops**——pytorch base 不带、裸机 navikb 恰好有,故一直被掩盖。真三容器 up 时 inference `error: ModuleNotFoundError: No module named 'scipy'`→unhealthy→pharos 依赖不满足没起。已补进 `[gpu]`。**这正是"committed compose 从未原样跑过"盲区(评审判 PLAUSIBLE)的价值印证**:不真跑三容器,scipy/einops 永远发现不了。
+
+**阶段E 对抗评审(2026-07-06)修复的 confirmed 发现**:
+- **sec-2(高)**:`/readyz` 异常回 `str(e)` 泄漏内网 `qdrant:6333`/`inference:8900` 给未鉴权探针 → 改为只记服务端日志、响应体不回 detail(+ 测试断言 503 体无内网地址)。
+- **compose-B**:`/readyz` 丢弃 `collection_exists` 返回值 → 空库(新 server 未迁移)也报 ready → 加 `collection_missing` 503(+ 回归测试)。
+- **sec-3**:`/readyz` 探 inference 的 `httpx timeout=3` 每阶段各 3s(最坏 ~9s)> healthcheck 5s → 显式改 `httpx.Timeout(1.5, connect=1.0)`。
+- **migrate-F2**:源库独占锁检查移到建 dst collection **之前**(避免"建了没迁"中间态)+ 锁冲突转带指引的 SystemExit。
+- **migrate-F1**:退出语从"向量迁移完成"改为"仅验点数,向量/ACL 未校验,必须跑 §7"。
+- **sec-4**:keys 表移出 RW 数据卷,单独 `:ro` 挂载。
+- **honesty**:本表 readiness/迁移证据措辞订正 + 补 "committed compose 原样 up ⏸️" 行 + 坑① 订正。
+
+> pivot 用的临时 override(`/tmp/pharos-pivot.yml` inference→host、`/tmp/pharos-scale.yml` 清端口)不入库;committed compose 保持三容器形态。**注意**:committed 形态(`inference:8900` 服务名 DNS + `depends_on` 链 + GPU 直通块)**从未原样跑过**(见上表 ⏸️ 行)——网络就绪后须**先实测一遍**再当"能跑",不是"就差个 build 其余原样能跑"。
 
 ### 阶段 F —— 真多副本落地验证 + 收尾(学习高潮)
 

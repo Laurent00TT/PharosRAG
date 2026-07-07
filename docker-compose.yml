@@ -1,0 +1,124 @@
+# docker-compose.yml — 阶段 E(docs/SCALE_OUT.md §5-E):inference(GPU,2×8B)/ pharos(×N slim 无 torch)/ qdrant(server)。
+# 起:   docker compose --env-file .env.compose up -d --build
+# 多副本:docker compose --env-file .env.compose up -d --scale pharos=2   # 验 S3 sidecar 共享(命门)
+# 停:   docker compose down            (加 -v 才删 qdrant 持久卷)
+# 注:全程在 WSL 终端跑(bind mount 是 Linux 路径);.env.compose 路径必须 WSL ext4,绝不 /mnt/c(§8-坑2)。
+services:
+
+  # ── Qdrant server:唯一有状态,持久卷,多副本共享的单一真源(D 已验)──
+  qdrant:
+    image: qdrant/qdrant:v1.18.0            # 与 client 1.18 对齐;D 阶段实测版本,钉死
+    container_name: pharos-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage        # named volume,持久(down 不删,down -v 才删)
+    # 端口默认不发布(仅 pharos-net 内访问);要外部灌库/排障再开(只绑回环,别 0.0.0.0 裸奔无鉴权):
+    # ports: ["127.0.0.1:6333:6333"]
+    healthcheck:                            # qdrant 镜像无 curl,用 bash /dev/tcp TCP 探活
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [pharos-net]
+
+  # ── inference:GPU 直通,两个 8B 常驻,真 readiness ──
+  inference:
+    build: { context: ., dockerfile: Dockerfile.inference }
+    image: pharos-inference:0.3.0
+    container_name: pharos-inference
+    restart: unless-stopped
+    environment:
+      INFERENCE_HOST: "0.0.0.0"
+      INFERENCE_PORT: "8900"
+      # ⭐ GPU 锁 4090 —— 三层,缺一不可(WSL2 实测教训):
+      #  1) NVIDIA_VISIBLE_DEVICES/device_ids:toolkit 层选卡。**WSL2 下不硬隔离**(实测 device=UUID 仍见两卡),
+      #     故不能只靠它;在真 Linux 主机上它才隔离。
+      #  2) CUDA_VISIBLE_DEVICES=<4090 UUID>:CUDA 运行时层,把 4090 钉成 torch device 0。**这是 WSL2 下的真锁**。
+      #     因 dense.py:38 固定 get_device_name(0) 并断言含 "4090"——不设它则 PCI_BUS_ID 序下 device0=5070→断言失败→永不 ready。
+      #  3) gpu_name_must_contain="4090"(app 内):最后一道断言,错卡直接拒(fail-fast 而非 OOM)。
+      CUDA_VISIBLE_DEVICES: "${GPU_UUID}"            # 真锁:CUDA 只暴露 4090 为 device0(app 报错信息亲自建议的锁法)
+      NVIDIA_VISIBLE_DEVICES: "${GPU_UUID}"          # toolkit 选卡(非 WSL2 主机上生效隔离);取法见 .env.compose.example
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+    volumes:
+      # ⭐ 模型挂 /root/models(不是 /models):EmbedConfig 硬编码 ~/models 且不读 env($HOME=/root)。§0.1 裁决
+      - type: bind
+        source: ${MODELS_HOST_DIR}                    # WSL ext4!别 /mnt/c
+        target: /root/models
+        read_only: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${GPU_UUID}"]             # 精确到 4090
+              capabilities: [gpu]
+    healthcheck:
+      # 真 readiness:两个 8B 串行热完前 /readyz 返 503。base 有 curl(Dockerfile 装了)
+      test: ["CMD", "curl", "-sf", "http://localhost:8900/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 300s                              # 双 8B 串行预热 ~5min。注(评审A,因果别搞反):start_period 内探针失败
+                                                      # 不计数/不判 unhealthy(热完前恒 503,第一次 200 即转 healthy)——给短了无害,只是 pending 更久。
+                                                      # 真触发 unhealthy 的是【热完后】连续 3 次 503(掉卡/OOM);那时别调这个值,去查 GPU。
+    ports:
+      - "127.0.0.1:8900:8900"                         # 可选暴露(排障/独立压测);多副本时 pharos 走内网 DNS
+    networks: [pharos-net]
+
+  # ── pharos:slim 无 torch,无状态(除 sidecar 共享卷),可 ×N ──
+  pharos:
+    build: { context: ., dockerfile: Dockerfile.pharos }
+    image: pharos-app:0.3.0
+    # ⚠ 要 --scale pharos=N 就【不能】设 container_name(名字冲突);保持无 container_name
+    restart: unless-stopped
+    environment:
+      PHAROS_INFERENCE_URL: "http://inference:8900"   # 非空→RemoteDense/Reranker(不加载 GPU)
+      PHAROS_QDRANT_URL: "http://qdrant:6333"         # 非空→store.py 三分支 server
+      PHAROS_TENANT: "${PHAROS_TENANT:-demo}"         # ACL 身份(fail-closed:空则一切检索返空)
+      PHAROS_COLLECTION: "${PHAROS_COLLECTION:-real}"
+      PHAROS_DENSE_DIM: "${PHAROS_DENSE_DIM:-1024}"
+      # ⭐⭐ S3:所有副本【同一】路径,挂【同一】共享卷。不靠 index_dir 默认派生(config.py:123 病根)。config.py:116/123 消费此 env
+      PHAROS_SIDECAR_DIR: "/index/sidecar"
+      PHAROS_INDEX_DIR: "/index"
+      PHAROS_HOST: "0.0.0.0"                           # ⭐ 容器内必须 0.0.0.0(默认 127.0.0.1 只自听,别的容器/nginx 连不上)
+      PHAROS_PORT: "8787"
+      # ⭐ fail-closed 启动守卫(service.py:88):绑非回环(0.0.0.0)【必须】keys 模式(legacy 单密钥不接受)——
+      #   不允许把整库无鉴权裸奔到网络。多副本上 nginx = 团队部署,本就该 keys 模式。生成:
+      #   PYTHONPATH=src python -m pharos keys new <name> --tenant demo   (写进 ${KEYS_HOST_FILE})
+      # ⭐ 评审 sec-4:明文 key 表【绝不放】RW 数据卷(/index)——单独 :ro 挂载(见 volumes),与 sidecar/logs 隔离:
+      #   副本被 RCE 攻破也只读到只读 key 文件,且数据卷被写穿碰不到身份表。长期应存 key 的 hash 而非明文。
+      PHAROS_KEYS_FILE: "/run/pharos/keys.json"
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"        # /v1/ask 用(config.py:141 llm_api_key_env 默认此名);.env 注入,不进镜像
+      PHAROS_LLM_MODEL: "${PHAROS_LLM_MODEL:-deepseek-v4-flash}"
+    # ⭐ 各副本日志写各自 hostname 子目录:$$HOSTNAME 双 $ 转义→由容器内 shell 运行时取【本容器】hostname,
+    #    非 compose 宿主机插值(那样所有副本同名,防不住 JSONL 交错)。exec 保信号透传。
+    command: ["sh", "-c", "mkdir -p \"/index/pharos_logs/$$HOSTNAME\" && PHAROS_LOG_DIR=\"/index/pharos_logs/$$HOSTNAME\" exec pharos serve"]
+    volumes:
+      # ⭐⭐ S3:整 /index 共享卷(含 sidecar/ 查询期只读 + pharos_logs/ 各副本子目录)。
+      #    E 用整卷 RW(为写 log);F 再拆 sidecar :ro + logs :rw 两挂做纵深防御。
+      - type: bind
+        source: ${INDEX_HOST_DIR}
+        target: /index
+      # ⭐ 评审 sec-4:明文 key 表单独 :ro 挂载,不进上面的 RW 数据卷(纵深防御:数据卷写穿碰不到身份表)。
+      - type: bind
+        source: ${KEYS_HOST_FILE}
+        target: /run/pharos/keys.json
+        read_only: true
+    depends_on:
+      qdrant:    { condition: service_healthy }
+      inference: { condition: service_healthy }        # ⭐ inference /readyz 绿(模型热了)才起 pharos,避免起来就打 503 风暴
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8787/readyz"]  # ⭐ 打 /readyz(探下游),非 /healthz
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s                                # slim 秒起(无模型加载)
+    ports:
+      - "127.0.0.1:8787:8787"                          # 单副本直发布;F 上 nginx 后改只 expose 不 publish
+    networks: [pharos-net]
+
+networks:
+  pharos-net: { driver: bridge }
+volumes:
+  qdrant-data:                                         # named volume,docker 托管 WSL ext4,不落 /mnt/c

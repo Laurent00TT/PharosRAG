@@ -135,7 +135,7 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
     # ---------- 鉴权 + 身份解析(D10;/healthz 豁免)----------
     @app.middleware("http")
     async def _auth(request: Request, call_next):
-        if request.url.path != "/healthz":
+        if request.url.path not in ("/healthz", "/readyz"):   # readyz 同 healthz 豁免:编排/nginx 探针无 API key
             k = request.headers.get("x-api-key", "")
             if mode == "keys":
                 iden = keys.get(k)
@@ -196,6 +196,34 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
                 "collection": cfg.collection, "tenant_bound": bool(cfg.tenant) or mode == "keys",
                 "llm_model": cfg.llm_model, "identity_mode": mode,
                 "uptime_s": round(time.time() - state.stats.started, 1)}
+
+    @app.get("/readyz")
+    def readyz():
+        """readiness:探下游可达【且集合已就绪】。F 的 nginx 据此导流量;与 /healthz(liveness)分离——
+        下游抖动只让本副本暂时摘流量,不触发 crashloop(healthz 仍 200)。豁免鉴权(同 healthz),供编排探针无 key 调用。
+        安全(评审 sec-2):异常只记服务端日志,响应体**不回 str(e)**——否则未鉴权探针能读到内网 qdrant/inference host:port
+        (同 /v1/ask 的"细节只进服务端日志"纪律)。不进 _observe 计量白名单(service.py:166)——高频探针不污染业务指标。"""
+        if state.retriever is None:                          # lifespan 未建完(极早期):未就绪
+            return JSONResponse({"status": "starting"}, status_code=503)
+        try:
+            exists = state.retriever.store.client.collection_exists(cfg.collection)   # qdrant 一次轻 HTTP
+        except Exception:
+            log.warning("readyz: qdrant 探活失败", exc_info=True)   # 细节只进服务端日志,不外泄内网拓扑
+            return JSONResponse({"status": "qdrant_unavailable"}, status_code=503)
+        if not exists:                                       # 评审 compose-B:collection 不存在(新起 server 未迁移)= 未就绪,别绿着查空库
+            return JSONResponse({"status": "collection_missing", "detail": cfg.collection}, status_code=503)
+        if cfg.inference_url:                                 # remote 模式才探 inference /readyz
+            try:
+                import httpx
+                # 显式短超时(评审 sec-3):httpx.Timeout(3) 每阶段各 3s,最坏 ~9s > healthcheck 5s → 会把本副本误判 unhealthy 重启
+                r = httpx.get(cfg.inference_url.rstrip("/") + "/readyz",
+                              timeout=httpx.Timeout(1.5, connect=1.0))
+                if r.status_code != 200:
+                    return JSONResponse({"status": "inference_not_ready"}, status_code=503)
+            except Exception:
+                log.warning("readyz: inference 探活失败", exc_info=True)
+                return JSONResponse({"status": "inference_unavailable"}, status_code=503)
+        return {"status": "ready"}
 
     @app.get("/v1/stats")
     def stats(request: Request):

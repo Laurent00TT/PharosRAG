@@ -4,6 +4,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from types import SimpleNamespace
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -166,3 +168,47 @@ def test_ask_bad_strategy_structured():
     with TestClient(app) as c:
         r = c.post("/v1/ask", json={"query": "q", "strategy": "weird"}).json()
     assert r["status"] == "bad_arg" and "strategy" in r["hint"]
+
+
+# ---------- 阶段E:/readyz 探下游 + 豁免鉴权(F 的 nginx 健康导流前提;唯一代码改动)----------
+def _ret_with_qdrant(collection_exists):
+    """给 FakeRetriever 补一个 store.client.collection_exists(默认 fake 无 .client)。"""
+    ret = FakeRetriever()
+    ret.store = SimpleNamespace(client=SimpleNamespace(collection_exists=collection_exists))
+    return ret
+
+
+def test_readyz_ready_when_downstream_ok():
+    """local 模式(inference_url 空):store.client.collection_exists 可调 → ready 200。"""
+    with TestClient(make_app(retriever=_ret_with_qdrant(lambda name: True))) as c:
+        r = c.get("/readyz")
+    assert r.status_code == 200 and r.json()["status"] == "ready"
+
+
+def test_readyz_503_when_qdrant_down():
+    """collection_exists 抛错 → 结构化 503 qdrant_unavailable(不裸崩;nginx 据此摘流量,healthz 仍 200)。"""
+    def boom(name):
+        raise RuntimeError("connection refused to http://qdrant:6333")
+    with TestClient(make_app(retriever=_ret_with_qdrant(boom))) as c:
+        r = c.get("/readyz")
+        assert c.get("/healthz").status_code == 200      # liveness 不受下游影响(不 crashloop)
+    assert r.status_code == 503 and r.json()["status"] == "qdrant_unavailable"
+    # 评审 sec-2:503 体【不得】回 str(e)——否则未鉴权探针读到内网 host:port。删 log.warning 里的 exc_info 不影响,但删源码里的 deter 收紧即红
+    assert "qdrant:6333" not in r.text and "connection refused" not in r.text
+
+
+def test_readyz_collection_missing_503():
+    """评审 compose-B:collection 不存在(新起 server 未迁移)→ 503 collection_missing,不绿着查空库。
+    删 service.py 里 `if not exists` 那支即红(退回"qdrant 可达就 ready"的假绿)。"""
+    with TestClient(make_app(retriever=_ret_with_qdrant(lambda name: False))) as c:
+        r = c.get("/readyz")
+    assert r.status_code == 503 and r.json()["status"] == "collection_missing"
+
+
+def test_readyz_exempt_from_auth():
+    """legacy 鉴权模式无 API key:/readyz 不 401(探针无 key 可达);/v1/ 无 key 仍 401(证鉴权真在)。
+    删 auth 白名单里的 /readyz 即红 —— healthcheck 在 keys/legacy 模式永远 unhealthy。"""
+    app = make_app(retriever=_ret_with_qdrant(lambda name: True), cfg=make_cfg(api_key="secret"))
+    with TestClient(app) as c:
+        assert c.get("/readyz").status_code == 200                              # 无 key 也 200(豁免)
+        assert c.post("/v1/retrieve", json={"query": "q"}).status_code == 401   # 无 key → 401(鉴权真在)
