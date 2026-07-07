@@ -1,14 +1,69 @@
 # Pharos 水平扩展演化:拆 GPU 推理层 → 真多副本
 
-> 状态:**设计定案 v2,实施未开始**。经"侦察 → 六维度设计 → 对抗审视 → 综合"产出,再经"四路对抗审查
-> (准确性/完整性/可执行性/一致性)→ 主编修订"打磨。所有 `file:line` 已逐行核对源码(2026-07)。
-> v2 修正了 v1 的一个核心施工陷阱(P0-1 病灶定位错到 service 层,实为 toolcore 兜底)+ 7 处 MUST-FIX。
+> 状态:**阶段 A–E 已落地实测 + 提交(2026-07),F(nginx 真多副本)待做**。设计经"侦察 → 六维度设计 → 对抗审视
+> → 综合"产出,再经"四路对抗审查 → 主编修订"打磨;实施每阶段配对抗性 agent 审查 + 真跑验证。**实施回顾见下方总览**。
+> 所有 `file:line` 已逐行核对源码(2026-07)。v2 修正了 v1 的一个核心施工陷阱(P0-1 病灶定位错到 service 层,实为 toolcore 兜底)+ 7 处 MUST-FIX。
 >
 > 本文把 [DESIGN.md](DESIGN.md) 标为**非目标(v2)** 的"水平扩展/多副本"具体化为可执行的**六阶段落地计划**。
 >
 > **落地纪律**:先提案后改、每阶段可独立验证、"已修"须附复现命令 + 改动前后实测对比。
 > **环境前置(所有验证命令的先决)**:WSL `conda activate navikb && cd <repo> && pip install -e '.[dev]'`。
 > 未装齐核心依赖(jieba/qdrant-client 等)直接 `pytest` 会 **collection error**,不是真失败。
+
+---
+
+## 实施回顾(2026-07,A–E 落地 + 提交)
+
+> 本节是改造**完成后的总览**。详细阶段设计见 §5;E 的逐 gate 实测状态见 §5-E 的"落地状态"块。
+
+### 架构 before → after
+
+```
+改造前(单节点):                      改造后(三容器 compose):
+┌─────────────────────┐             ┌──────────┐  ┌──────────────┐  ┌──────────┐
+│ pharos              │             │ pharos×N │→│ inference ×1  │  │ qdrant   │
+│ + Qwen3-VL 8B×2(GPU)│    ──►      │ slim     │  │ GPU 4090     │  │ server   │
+│ + 嵌入式Qdrant(独占)│             │ 无 torch │→─────────────────→│ 持久卷   │
+└─────────────────────┘             └────┬─────┘  └──────────────┘  └──────────┘
+  GPU/库/应用死锁一起                      └── sidecar 共享 :ro 卷(S3 命门)
+```
+
+### 六阶段进度
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| **A** | 拆 GPU 推理层骨架:`inference_server.py`(FastAPI :8900,`/embed`/`/rerank`/`/readyz`,后台预热 + GPU 串行锁)+ `remote.py`(全维返回、客户端截维) | ✅ 提交 |
+| **B** | **锁下沉** + **等价性 go/no-go**:大锁拆资源类锁;修 bf16 normalize 让 remote↔local 向量数学等价 | ✅ 提交 |
+| **C** | CPU 测试进 CI(并入 B) | ✅ |
+| **D** | Qdrant **嵌入式→server**(多副本真开关):store 三分支 + `qdrant_url` 透传三出口 + ACL fail-closed 重验 | ✅ 提交 |
+| **E** | **容器化**:三 Dockerfile + compose + 数据迁移 + `/readyz`;committed 三容器原样 `up` 全 healthy | ✅ 提交 `93ae0ef` |
+| **F** | nginx 真多副本 + `docker kill` 无感 + 吞吐边界文档 | ⏸️ 待做 |
+
+### 核心技术改动
+
+1. **拆 GPU 推理层**——纯 GPU 前向独立成 HTTP 服务(端点无任何 pharos 业务概念);应用配 `inference_url` 即不再加载模型。全维返回 + 客户端 MRL 截维保证等价性(将来可换 TEI/vLLM)。
+2. **脱 torch**——核心依赖不含 torch,`[gpu]` extra 隔离;slim pharos 镜像 `pip install .` 天然无 torch,build 期断言钉死。**副本复制 250MB slim 而非 8GB GPU 镜像**。
+3. **锁下沉**——一把 `LockedRetriever` 大锁 → 资源类锁(Store / GPU 前向 / 单飞加载 / query 缓存各自锁)。修了"retry sleep 握大锁 → 整副本停摆"。
+4. **等价性**——`_mrl` 必须 `.float()` 后再截维 + normalize(bf16 normalize→norm≈1.002,曾致 cosine>1)。
+5. **Qdrant server + ACL**——三分支(`url > :memory: > path`);嵌入式 RRF fusion 丢顶层 should 的越权铁律靠 ACL 下推每个 prefetch 绕开;server 模式重验 fail-closed。
+6. **sidecar S3 命门**——多副本 small-to-big 靠 per-doc sidecar,必须共享同一 `:ro` 卷(否则副本命中却取空→静默降级)。正 + 反证实测。
+7. **容器化关键**——`CUDA_VISIBLE_DEVICES` 锁 4090、keys 表单独 `:ro` 挂载不进 RW 数据卷、`/readyz` 探下游给 nginx 导流量。
+
+### 一路诊断抓到的真 bug(改造真正的收获)
+
+价值不在"写了多少代码",在**每阶段对抗审查 + 真跑**逼出的一串"看着对、跑起来才崩":
+
+- **锁下沉根因** = retry sleep 在大锁内(A 审查)
+- **bf16 normalize** 让向量 norm≠1(等价性测试)
+- **D 幻觉宣告**:我称"透传三出口"却漏改 engine → 被自己的核实纪律逮住,补齐 + 加守护测试
+- **坑④ GPU 选卡(最坑)**:`CUDA_DEVICE_ORDER=PCI_BUS_ID` 下 device0=5070→`get_device_name(0)` 断言必败→inference 永不 ready。三态实测定案,改 `CUDA_VISIBLE_DEVICES`;另发现 **WSL2 下 `device_ids` 不硬隔离**。
+- **坑⑥ scipy/einops**:裸机有、容器没有,**唯有真跑 committed 三容器才暴露**——印证对抗审查把"从未原样跑过"标为盲区的价值。
+- **坑①(我的误判)**:曾称"无 `__main__.py`",实为 glob 搜错目录,已诚实订正。
+- **对抗评审 confirmed**:`/readyz` 泄漏内网地址(sec-high)、空库假绿、migrate 锁前置、keys 明文放共享卷——全修 + 回归。
+
+### 方法论主线
+
+每阶段 `实现 → 派对抗性 agent 审查 → 修 confirmed → 再验 → 提交`,配合"诊断→修复→验证"纪律(拒绝 verdict 型结论 / 盲目修补 / 幻觉宣告)。**这套流程抓出的 bug 比一次性写对的多**——尤其坑④、坑⑥、D 幻觉宣告,都是"不真跑就永远发现不了"。
 
 ---
 
