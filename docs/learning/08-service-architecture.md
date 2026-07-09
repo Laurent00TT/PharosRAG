@@ -22,7 +22,7 @@
 | **常驻守护进程 + 轻客户端** | 本项目;Ollama 式形态 | 资源加载一次、多消费方共享热后端 | 要自己解决并发/鉴权/探活 |
 | 全托管拆分(向量库 server + 无状态应用 + 推理服务) | 云上标准架构 | 每层独立扩缩 | 运维面数倍、小规模不划算 |
 
-Pharos 的路径是第二档起步,并在规模需求出现后向第三档演进(拆 GPU 推理层 + Qdrant server + nginx 多副本,见 [../SCALE_OUT.md](../SCALE_OUT.md))——这条演进弧线本身就是本篇最有面试价值的素材。
+Pharos 从第二档起步,规模需求一出现就往第三档走(拆 GPU 推理层 + Qdrant server + nginx 多副本,见 [../SCALE_OUT.md](../SCALE_OUT.md))——这条演进弧线本身就是本篇最有面试价值的素材。
 
 ---
 
@@ -43,7 +43,7 @@ pharos mcp --direct(stdio 直连,│     ├─ Retriever(Qdrant 嵌入式/serve
 - 嵌入式 Qdrant **单客户端独占锁**——第二个进程打开同一路径直接报错([src/embedder/store.py:25-32](../../src/embedder/store.py#L25) 的三分支与 `_lock` 注释);
 - dense 模型(Qwen3-VL 8B)**加载 1-2 分钟**——"每会话一进程"意味着每开一个 agent 会话重付这笔钱。
 
-独占锁在 lifespan 启动时才真正取得([src/pharos/service.py:105](../../src/pharos/service.py#L105)),retriever/user/generator 全部是注入点——测试用 fake 完整替换,这是整个服务层能纯 CPU 回归的前提。三个入口:HTTP 直打;`pharos mcp` 薄适配器(零 GPU 依赖,毫秒启动);`pharos mcp --direct` stdio 直连引擎作为守护进程没跑时的降级路径([src/pharos/cli.py:40-47](../../src/pharos/cli.py#L40)),但与 serve 不能同开同一索引。
+独占锁在 lifespan 启动时才真正取得([src/pharos/service.py:105](../../src/pharos/service.py#L105)),retriever/user/generator 全部是注入点——测试用 fake 完整替换,这是整个服务层能纯 CPU 回归的前提。三个入口:HTTP 直打;`pharos mcp` 薄适配器(零 GPU 依赖,毫秒启动);`pharos mcp --direct` 在守护进程没跑时用 stdio 直连引擎,作降级路径([src/pharos/cli.py:40-47](../../src/pharos/cli.py#L40)),但与 serve 不能同开同一索引。
 
 冒烟实测数据:适配器毫秒级连上,首查 19s(模型热缓存中),后续秒级(DESIGN D1)。
 
@@ -99,7 +99,7 @@ FastAPI 的 sync 端点跑在线程池里,会并发进 retriever。这里有一�
 2. **SCALE_OUT 阶段 B 审查发现**:remote 推理后端的 HTTP 重试退避 sleep 会**持大锁阻塞整副本**(预热/滚动重启期一次退避,所有查询排队);
 3. **锁下沉到资源类**([src/pharos/engine.py:6-12](../../src/pharos/engine.py#L6)):Qdrant 单 client 段 → `Store._lock`([src/embedder/store.py:32](../../src/embedder/store.py#L32),嵌入式非线程安全);GPU 前向 → `Dense/Reranker._fwd_lock`(remote 模式 override 成 nullcontext);query LRU → `_cache_lock`。remote 的 HTTP + 退避从此落在所有锁外。
 
-`/v1/ask` 的关键不变量保持不变:检索的 Qdrant/GPU 段在资源锁内,随后数秒到数十秒的 DeepSeek 调用**不持任何锁**([src/pharos/service.py:339](../../src/pharos/service.py#L339) 注释),一次慢生成不会饿死其他会话的检索。
+`/v1/ask` 的关键不变量照旧成立:检索的 Qdrant/GPU 段在资源锁内,随后数秒到数十秒的 DeepSeek 调用**不持任何锁**([src/pharos/service.py:339](../../src/pharos/service.py#L339) 注释),一次慢生成不会饿死其他会话的检索。
 
 同一轮对抗评审还抓到一个并发串味:Generator/LLM 共享单例时,`llm.last_finish_reason` 在并发 ask 下会跨请求污染(A 拿到 B 的截断标志)。修法不是加锁——加锁会把 LLM 网络调用串行化,违反 D8——而是 **Generator per-thread 惰性构建**([src/pharos/service.py:122-123](../../src/pharos/service.py#L122)、[304-310](../../src/pharos/service.py#L304)):线程池有界所以实例数有界,同线程内 answer→读 finish_reason 无并发窗口。**用执行模型消灭共享,而不是给共享加锁。**
 
@@ -142,7 +142,7 @@ F-2 端到端实测(3 副本 + nginx):轮询分发 6/6/7 近均匀;持续 50 请
 
 **错误提示的死循环**(P1 评审 C2)。toolcore 的 `no_identity` 提示早年写的是"请设置 RAG_TENANT"(引擎期命名),而 Pharos 服务只读 `PHAROS_TENANT`。用户照 hint 做 → 设了 RAG_TENANT → 重启 → 仍然全空 → hint 还是让他设 RAG_TENANT——**错误提示本身制造了一个无法逃出的排障死循环,比没有提示更糟**。后来命名空间统一为 PHAROS_*,错误从源头消除([src/pharos/toolcore.py:45-46](../../src/pharos/toolcore.py#L45)),服务绑定层的 `_adapt` 退化为防线([src/pharos/service.py:139-145](../../src/pharos/service.py#L139))。提炼:fail-closed 系统的错误提示必须和配置面同步演进,"提示指向的动作做了没用"是一类值得专门审计的 bug。
 
-**配置透传坑的复发**(阶段 F 审查)。D 阶段加 `qdrant_url` 时曾宣称"透传三出口"却漏改 engine,被自己的核实纪律逮住;F 阶段全量审查发现同款坑在另一个开关上复发——`mcp_stdio._config` 构造 EmbedConfig 时漏了 `inference_url`,agentic 出口配了 `PHAROS_INFERENCE_URL` 却静默丢失,在 slim(无 torch)环境首查走 local 路径 import torch 崩、再被 toolcore 宽兜底吞成 `backend_unavailable`——三层掩盖后用户只看到"后端暂不可用"。修法是补透传并顺带对齐模型路径/gpu_name([src/pharos/mcp_stdio.py:56-66](../../src/pharos/mcp_stdio.py#L56)),配守护测试 `test_mcp_stdio_config_passes_inference_url`(删透传即红)。结构性教训:**每加一个生产配置开关,必须枚举全部消费出口并各配一条"删了透传就红"的守护测试**——"配置静默丢失"比配置错误更危险,因为系统看起来在正常工作。
+**配置透传坑的复发**(阶段 F 审查)。D 阶段加 `qdrant_url` 时曾宣称"透传三出口"却漏改 engine,被自己的核实纪律逮住;F 阶段全量审查发现同款坑在另一个开关上复发:`mcp_stdio._config` 构造 EmbedConfig 时漏了 `inference_url`。agentic 出口明明配了 `PHAROS_INFERENCE_URL`,却在这里静默丢失;slim(无 torch)环境首查走 local 路径,import torch 直接崩,又被 toolcore 的宽兜底吞成 `backend_unavailable`——三层掩盖后,用户只看到"后端暂不可用"。修法是补透传并顺带对齐模型路径/gpu_name([src/pharos/mcp_stdio.py:56-66](../../src/pharos/mcp_stdio.py#L56)),配守护测试 `test_mcp_stdio_config_passes_inference_url`(删透传即红)。结构性教训:**每加一个生产配置开关,必须枚举全部消费出口并各配一条"删了透传就红"的守护测试**——"配置静默丢失"比配置错误更危险,因为系统看起来在正常工作。
 
 ### 2.10 MCP 薄适配器:同名同参同契约的第二种绑定
 
@@ -292,9 +292,9 @@ docker kill $(docker compose ps -q pharos | head -1)
 2. **200 包裹错误对 LB 失明**(已确认待修,deferred deploy#1):`inference_unavailable/backend_unavailable` 以 200 返回,nginx 被动摘除永不触发,病副本持续吃 1/N 流量。修法草图已定(此类状态改 503、body 结构不变),需 compose 环境实测后落地。
 3. **readyz 深度不足**(deferred deploy#2):只查 collection 存在不查非空——迁移中断留下的空 collection 下 readyz 仍绿,查询全 empty 无告警,正是自己定义过的"静默数据损坏"类别。
 4. **无请求取消传播**(deferred deploy#0):nginx 130s 超时后客户端拿 504,但 pharos 工作线程仍继续重试满 ~361s 烧线程;重试链无壁钟总 deadline。承认:"超时预算两端没有对齐成显式等式,这是下一轮要修的。"
-5. **agentic Δ−0.097 的幅度存疑**(deferred eval#0):eval 的 agentic/decompose 路径绕过生产 Generator,缺表格 content_raw 补回与 section_path 面包屑——对 agentic 系统性不利,Δ 的方向可信、幅度被高估的可能已确认,须复跑后修正。引用这个数字时要带此保留。
+5. **agentic Δ−0.097 的幅度存疑**(deferred eval#0):eval 的 agentic/decompose 路径绕过生产 Generator,缺表格 content_raw 补回与 section_path 面包屑——对 agentic 系统性不利——Δ 的方向可信,但幅度很可能被高估(这一点已确认),须复跑后修正。引用这个数字时要带上这个保留。
 6. **文档滞后于代码**:DESIGN D8 仍写大锁版(代码已锁下沉);DESIGN 称"/healthz 是唯一免鉴权端点"但代码同时豁免 /readyz;API.md 漏记 /readyz 端点与 `inference_unavailable` 状态。话术:"审查发现了这批 doc-code 漂移并已列入回填清单——这也是为什么我坚持'以代码为准 + 文档标注已交付边界'的习惯。"
-7. **create_app 的 env 通道**(service#5):同进程多 app 会互相覆盖预算;生产触发不可达所以保守留档,但承认这是一个用全局通道兑现注入语义的妥协。
+7. **create_app 的 env 通道**(service#5):同进程多 app 会互相覆盖预算;生产触发不可达所以保守留档,但承认这是拿一条全局通道来实现注入语义,终归是个妥协。
 
 ---
 

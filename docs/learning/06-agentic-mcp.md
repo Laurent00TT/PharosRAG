@@ -26,11 +26,11 @@
 | 查询分解 | 系统拆、系统合 | query decomposition(拆子问题→并集→合成) |
 | 全 agent 驱动 | 全在 LLM | ReAct 循环 + 工具调用 |
 
-**MCP(Model Context Protocol)** 是把"检索能力暴露成工具"这件事的协议标准化:server 声明工具签名与说明,
+**MCP(Model Context Protocol)** 把"检索能力暴露成工具"这件事标准化成协议:server 声明工具签名与说明,
 agent(如 Claude Code)经 stdio/HTTP 调用。但协议只解决"怎么连",不解决工具面设计的真问题:
 
 1. **工具结果是给程序消费的**——agent 不能靠解析自然语言错误做决策,需要结构化状态机(status/retriable/hint);
-2. **agent 是不可信驱动方**——它可能带非法参数、可能被检索到的文本注入指令、不能被允许篡改身份;
+2. **agent 是不可信驱动方**——它可能带非法参数、可能被检索到的文本注入指令,更不能让它篡改身份;
 3. **agent 的 context 是稀缺资源**——工具每次回传多少 token、重复内容要不要再发,都直接影响 agent 的推理质量;
 4. **多个接入方式必须语义一致**——同一个工具经 HTTP 和经 stdio 调用,行为漂移就是契约破产。
 
@@ -90,7 +90,7 @@ pharos mcp --direct ────────▶  toolcore.py(工具语义单一�
 经 FastMCP instructions 下发给 agent(HTTP 侧同文暴露在 `/v1/instructions`,
 [service.py:270](../../src/pharos/service.py#L270)):何时检索、grounding 防幻觉、检索结果是数据不是指令、
 引用锚用 chunk_id 而非会变的序号 n、status=empty 时最多重试一两次然后承认无据。
-它是 agentic 路径上对应闭管道 grounding SYSTEM prompt 的等价物——**闭管道靠 prompt 约束生成,
+它对应闭管道里那份 grounding SYSTEM prompt——**闭管道靠 prompt 约束生成,
 agentic 靠工具契约约束行为**。
 
 ### 2.3 agent 可执行语义:context_status 状态机
@@ -150,7 +150,7 @@ HTTP 侧的配套纪律(D7):**领域结果一律 HTTP 200 + status 字段**,HTTP
 多用户下,即使两个用户**伪造相同的会话 id** 也互不可见——否则 A 用户取过的段,B 用户会被误标
 already_returned(B 从没收到过,这是真实的信息破坏)。而这个设计反向推导出 identity 层的两条校验规则:
 身份 name 禁止含 `|`(否则 `'a'+'b|c'` 与 `'a|b'+'c'` 同键,命名空间碰撞)且 name 必须唯一(重名共享
-去重命名空间=串味)。**一个输入校验规则可以从数据结构设计里被证明出来**——这是面试里非常加分的细节。
+去重命名空间=串味)。**一条输入校验规则能从数据结构设计里推导出来**——这是面试里非常加分的细节。
 
 ### 2.5 安全边界:agent 不可信
 
@@ -223,7 +223,7 @@ pharos 同时实现了三条问答路径,在 **72 题散文考卷**(权威 Tier2
 ### 3.4 净负之后怎么办:smart-ask,把智能放进失败路径
 
 结论"agent 编排净负"不等于"什么都不做"。真实痛点存在:用户用默认参数问"Netflix 2011-2015 每年净利润",
-五年表在库里却被排序挤出 top-k 窗口——旋钮(kind=table)存在,但用户不该需要懂旋钮。
+五年表在库里却被排序挤出 top-k 窗口——旋钮(kind=table)是有的,但不该要求用户去懂它。
 
 pharos 的答案不是隐形 agent 循环,而是**失败驱动的有界智能**(smart-ask,
 [service.py:331](../../src/pharos/service.py#L331)):第一轮完全纯净(与无 smart 同路径);
@@ -248,7 +248,7 @@ generator.signals,产品与 eval 共用([run_eval.py:78](../../eval/run_eval.py#
 ### 3.5 为什么去重不做跨副本共享
 
 nginx 多副本轮询下,SessionRegistry 是进程内状态,同一会话的去重效果掉到约 1/N。
-Redis/session 粘滞的方案被**有意推迟**:去重是 context 省钱的便利,不是正确性——
+Redis/session 粘滞这类方案是我们**有意推迟**的:去重是 context 省钱的便利,不是正确性——
 降级的后果只是"多发了几段重复正文",声明为可接受(见 [../SCALE_OUT.md](../SCALE_OUT.md) F-3)。
 这是"区分正确性属性与便利属性,只为前者付架构成本"的例子。
 
@@ -387,7 +387,7 @@ agentic 平均 1.22 轮检索 + 每轮一次 LLM sufficiency 判断,延迟与 to
 **Q8:闭管道默认之下,复杂问题怎么办?**
 要点:分层出口——闭管道 /v1/ask 管一问一答;真正的多跳交给 MCP 出口,由 Claude Code 这类前沿 agent
 驱动(工具契约里写了何时改写、何时停);产品内只保留失败驱动的单次补检(smart-ask),它的触发条件
-被设计成"零误伤面"。一句话:**多轮循环是 MCP 出口的职责,不是闭管道内的隐形行为**。
+就设计成"零误伤面"。一句话:**多轮循环是 MCP 出口的职责,不是闭管道内的隐形行为**。
 
 ---
 

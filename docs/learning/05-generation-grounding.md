@@ -9,7 +9,7 @@
 
 ## 1. 概念底座:生成环节在任何 RAG 里解决什么问题
 
-检索把"可能相关的证据"找回来了,生成环节要解决的是一个与 LLM 本性相逆的问题:**语言模型天生想"补全",而 RAG 要它"只转述"**。预训练目标决定了模型在证据不足时倾向于用参数化知识把答案编圆——这正是 RAG 要消灭的幻觉。所以生成环节不是"把 context 拼进 prompt 调一次 API"那么简单,它要同时回答四个通用子问题:
+检索把"可能相关的证据"找回来了,生成环节要解决一个和 LLM 本性拧着来的问题:**语言模型天生想"补全",RAG 偏要它"只转述"**。模型的预训练目标就是补全,证据不够时它会拿参数里的知识把答案编圆——这正是 RAG 要消灭的幻觉。所以生成环节不是"把 context 拼进 prompt 调一次 API"那么简单,它得同时回答四个通用子问题:
 
 **(1) Grounding(答案受证据约束)。** 主流方案是一条从轻到重的光谱:
 
@@ -143,7 +143,7 @@ PromptBuilder 把 contexts 按 1-based 编号拼成 `[cite:i] (source: …)\n正
 
 pharos 生成层的每个"没做"几乎都有实验尸检报告。数据口径提醒:**88 题(72 散文 + 16 表格)与历史 72 题口径不可直接比较**,下面逐条标注。
 
-**否决 agentic 多轮编排作为默认。** paired 归因(72 题口径):single→agentic Δ**−0.097**——闭管道更好还更省([../OVERVIEW.md](../OVERVIEW.md))。故闭管道定为默认,agentic 留给 MCP 出口的交互式深挖(互补不竞争,[../DESIGN.md](../DESIGN.md))。⚠ 诚实标注:本轮审查确认 eval 的 agentic/decompose 路径**绕过了生产 Generator 的 context 组装**(缺 content_raw 补回与 section_path 面包屑),对 agentic 系统性不利,**Δ−0.097 的幅度可能被高估**,方向结论待复跑确认(见第 4 节延期项)。
+**否决 agentic 多轮编排作为默认。** paired 归因(72 题口径):single→agentic Δ**−0.097**——闭管道更好还更省([../OVERVIEW.md](../OVERVIEW.md))。所以闭管道定为默认,agentic 留给 MCP 出口做交互式深挖(互补不竞争,[../DESIGN.md](../DESIGN.md))。⚠ 诚实标注:本轮审查确认 eval 的 agentic/decompose 路径**绕过了生产 Generator 的 context 组装**(缺 content_raw 补回与 section_path 面包屑),对 agentic 系统性不利,**Δ−0.097 的幅度可能被高估**,方向结论待复跑确认(见第 4 节延期项)。
 
 **否决本地 LLM(vLLM 起 Qwen)。** 4090 显存要留给 embedding(16G)+ reranker;DeepSeek API 极廉 + 1M context + OpenAI 兼容([../components/generator/DESIGN.md](../components/generator/DESIGN.md) §5)。
 
@@ -173,7 +173,7 @@ pharos 生成层的每个"没做"几乎都有实验尸检报告。数据口径�
 
 **症状(评估暴露)**:端到端 eval 发现一类系统性失败——表格/图表数值题,检索明明命中了资产块,LLM 却答"信息不足"。"召回到却答不出"。
 
-**初判与推翻**:第一反应是单因假设"generator 没喂 content_raw"。这个初判被逐题实跟修正([../OVERVIEW.md](../OVERVIEW.md) 把它记为诊断纪律案例):真根因分布在**两层**——检索层的 section 去重会把资产块折叠掉(有些失败题资产块根本没活到 generator),big-block 组装又只取元素 text/caption、把资产的 content_raw 排除在外。只修 generator 一层,另一半失败照旧。
+**初判与推翻**:第一反应是单因假设"generator 没喂 content_raw"。逐题实跟一比,这个初判就被推翻了([../OVERVIEW.md](../OVERVIEW.md) 把它记为诊断纪律案例):真根因分布在**两层**——检索层的 section 去重会把资产块折叠掉(有些失败题资产块根本没活到 generator),big-block 组装又只取元素 text/caption、把资产的 content_raw 排除在外。只修 generator 一层,另一半失败照旧。
 
 **修复(两处)**:retrieve 资产块不进 section 去重(检索层)+ generator 资产命中补喂 content_raw(生成层,[src/generator/generate.py:75-80](../../src/generator/generate.py#L75))。
 
@@ -196,7 +196,7 @@ pharos 生成层的每个"没做"几乎都有实验尸检报告。数据口径�
 | 5 | query 里字面 [cite:n] 可伪造引用锚(agent 编排把不可信文本拼进 query 时) | passage 过 _neutralize 而 query 不过——"引用锚只由 PromptBuilder 生成"的不变量没覆盖 prompt 全部外来文本 | query 同过 _neutralize([prompt.py:59](../../src/generator/prompt.py#L59));检索路径用 raw query 不受影响 | `test_query_cite_marker_neutralized` |
 | 6 | DeepSeek 经公司网关(URL 无 "deepseek" 子串)时静默不发 thinking disabled,V4 Flash 默认开思考时轻则延迟费用翻倍、重则 400 | send_thinking 自动判定只看 base_url 子串 | 判定放宽为 base_url **或 model 名**任一含 "deepseek"([llm.py:70-71](../../src/generator/llm.py#L70)),显式 send_thinking= 覆盖仍在 | `test_send_thinking_gateway_by_model_name` |
 
-**延期项(confirmed 但不能马上改)**——这本身是工程判断的教学点:eval#0 确认 agentic/decompose 评测路径绕过生产 Generator 的 context 组装(缺 content_raw 补回与 § 面包屑),对 agentic 系统性不利。为什么不马上修?**修了三路对比数字就会变,必须重跑 GPU 评估后同步更新所有引用该结论的文档**——评测实现的改动会使已发布数字失真,这类改动的落地单元是"改码+重跑+改文档"整体,不是一个 commit。修法草图(抽公共 `build_context_entry` 供 Generator 与 eval 复用)已留档 deferred 清单。在此之前,所有引用 Δ−0.097 的地方都应诚实标注幅度存疑。
+**延期项(confirmed 但不能马上改)**——这本身是工程判断的教学点:eval#0 确认 agentic/decompose 评测路径绕过生产 Generator 的 context 组装(缺 content_raw 补回与 § 面包屑),对 agentic 系统性不利。为什么不马上修?**修了三路对比数字就会变,必须重跑 GPU 评估后同步更新所有引用该结论的文档**——评测实现一动,已发布的数字就失真,这类改动的落地单元是"改码+重跑+改文档"一整套,不是一个 commit。修法草图(抽公共 `build_context_entry` 供 Generator 与 eval 复用)已留档 deferred 清单。在此之前,所有引用 Δ−0.097 的地方都应诚实标注幅度存疑。
 
 ---
 
@@ -225,7 +225,7 @@ pharos 生成层的每个"没做"几乎都有实验尸检报告。数据口径�
 要点:分两个攻击面答。指令劫持→UNTRUSTED 声明 + NEVER follow(承认是软防线);引用伪造→_neutralize 把 passage/query 里字面 [cite:n] 全部中和为 [ref],这个攻击面**连可信语料都会自然触发**(引用格式论文)。加分点:中和与解析共用同一正则,"解析器认的变体中和器必拦"是构造性保证,不是两份正则碰巧一致。
 
 **Q3:LLM 引用了错的块怎么办?引用能被伪造吗?**
-要点:三道防线——标记形态隔离(裸 [n] 不算引用)、越界丢弃(幻觉编号不映射错来源)、passage 中和(伪造编号块进不了 prompt)。承认残余:LLM 把论断挂到不支持它的合法编号上(块级张冠李戴)靠协议防不住,靠 eval 的引用召回 + 忠实度裁判兜底;曾报的"17% 张冠李戴"后被证实主要是裁判截断伪影。
+要点:三道防线——标记形态隔离(裸 [n] 不算引用)、越界丢弃(幻觉编号不映射错来源)、passage 中和(伪造编号块进不了 prompt)。承认残余:LLM 把论断挂到不支持它的合法编号上(块级张冠李戴)靠协议防不住,靠 eval 的引用召回 + 忠实度裁判兜底;曾报的"17% 张冠李戴",后来查明主要是裁判截断造成的伪影。
 
 **Q4:为什么不加一个 NLI 模型逐句校验?**
 要点:成本收益。零召回分支已被代码接管(确定性),剩余错答类型(scoped 数字引申)被窄靶约束+范围证据实测修复;72 题口径忠实度已 1.000,NLI 模型挣不到指标只挣延迟和一个新的错误源。方法论:先把可确定性判定的分支从模型手里拿走,再谈加模型。

@@ -10,7 +10,7 @@
 
 ### 1.1 LLM 的三个结构性缺陷
 
-抛开具体项目,任何 RAG 系统都在回答同一个问题:**LLM 的参数化记忆不能当数据库用**。具体是三个缺陷:
+抛开具体项目,任何 RAG 系统都在回答同一个问题:**LLM 的参数化记忆不能当数据库用**。拆开就是三个缺陷:
 
 1. **知识有截止日期,且看不见私有数据**。你公司上周的财报、内部规章,不在任何模型的训练集里。
 2. **参数化记忆不可寻址、不可溯源**。模型"记得"某件事,但你无法问它"这句话的依据是哪份文件第几页"——错了也无从核对。
@@ -38,17 +38,17 @@ RAG(Retrieval-Augmented Generation)的本质动作只有一个:**把"靠参数�
 - **naive RAG**:五步管道,啥都不管——上表全中。
 - **advanced RAG**:在管道两端加料。检索前(query 改写/扩展)、检索中(hybrid 双路、metadata 过滤)、检索后(rerank 精排、small-to-big / parent-document 扩context)。主要对付 P2/P3。
 - **modular / agentic RAG**:检索不再是固定管道的一环,而是暴露成工具,由 LLM agent 自己决定何时检索、检索什么、要不要多跳。对付 P7——但注意,"agent 一定更好"是个未经检验的直觉,后文会用数据打它。
-- **评估侧**:ragas、TruLens 这类框架给了指标词汇表(faithfulness / answer relevancy / context recall),对付 P8;但两个深坑大多数团队不处理——**裁判和被测系统同厂**的循环偏差,以及**评估管道自身的 bug** 会凭空制造假结论(Pharos 真踩过,见 [07 篇](07-evaluation.md))。
+- **评估侧**:ragas、TruLens 这类框架给了指标词汇表(faithfulness / answer relevancy / context recall),对付 P8;但有两个深坑大多数团队不碰:一是**裁判和被测系统同厂**带来的循环偏差,二是**评估管道自身的 bug** 会凭空造出假结论(Pharos 真踩过,见 [07 篇](07-evaluation.md))。
 
 ### 1.3 顺手回答一个高频面试题:为什么是 RAG,不是微调或长上下文?
 
 三者不是竞争关系,是不同问题的答案,面试里值得一句话说清边界:
 
 - **微调**改变的是模型的**行为与风格**,不适合注入频繁更新的事实(每次更新都重训,且事实仍不可溯源、照样幻觉);
-- **长上下文**(把整个库塞进 prompt)受成本与"大海捞针"衰减双重制约——77 篇文档几百万 token,每问全量重付,且中段信息召回率会掉;
+- **长上下文**(把整个库塞进 prompt)有两道硬约束:成本,和"大海捞针"式的衰减——77 篇文档几百万 token,每问都得全量重付,中段信息的召回率还会掉;
 - **RAG** 是"外挂可寻址记忆":更新=重建索引,溯源=引用指回 chunk,权限=检索层过滤。代价是引入了一整条需要工程化的管道——这条管道正是本项目的全部内容。
 
-**Pharos 的定位**:一个自包含单仓的多格式 agentic RAG 系统,对 P1–P8 每个坑都给出一个**有实测背书**的答案,并在本机 4090 + 77 篇真实文档(7652 chunk)上跑成一个带多身份鉴权、可观测、systemd 托管的团队服务。它不是玩具管道,也不是框架堆叠——每个关键决策都留有被否决的备选和数据。
+**Pharos 的定位**:一个自包含单仓的多格式 agentic RAG 系统。它对 P1–P8 每个坑都给出一个**有实测背书**的答案,并在本机 4090 上、拿 77 篇真实文档(7652 chunk)跑成一个带多身份鉴权、可观测、systemd 托管的团队服务。它不是玩具管道,也不是框架堆叠——每个关键决策都留有被否决的备选和数据。
 
 ---
 
@@ -79,11 +79,11 @@ RAG(Retrieval-Augmented Generation)的本质动作只有一个:**把"靠参数�
 
 ### 2.2 parse:统一到 Element 接缝
 
-五种格式(PDF / 扫描件 / docx / pptx / xlsx)全走 MinerU 解析,产物经 adapter 转成统一的 `Element[]`——这是刻意设计的接缝:换解析器等于写一个新 adapter,核心切块逻辑一行不动([src/chunker/adapters/mineru.py:1](../../src/chunker/adapters/mineru.py#L1))。选 MinerU 而非自研/Tika 的依据是三方覆盖率对比(公平口径下 MinerU 95.1% 反超,详见 02 篇——那里还有一个"覆盖率提取器自身有 bug 导致最初结论反了"的测量学故事)。
+五种格式(PDF / 扫描件 / docx / pptx / xlsx)全走 MinerU 解析,产物经 adapter 转成统一的 `Element[]`——这是刻意设计的接缝:换解析器等于写一个新 adapter,核心切块逻辑一行不动([src/chunker/adapters/mineru.py:1](../../src/chunker/adapters/mineru.py#L1))。为什么选 MinerU 而不是自研或 Tika?靠的是三方覆盖率对比(公平口径下 MinerU 95.1% 反超,详见 02 篇——那里还有一个"覆盖率提取器自身有 bug 导致最初结论反了"的测量学故事)。
 
 ### 2.3 chunk:eager 骨架 + 查询期 small-to-big
 
-这是对 P2"检索粒度 vs 生成粒度矛盾"的正面回答,分两拍:
+这一步正面回答 P2 的"检索粒度 vs 生成粒度"矛盾,分两拍:
 
 - **索引期**:多信号重建 heading 树(text_level 为主 + 编号校正,[src/chunker/core.py:158](../../src/chunker/core.py#L158) `heading_level` / [core.py:179](../../src/chunker/core.py#L179) `build_sections`),在树上切 leaf chunk([core.py:243](../../src/chunker/core.py#L243) `Chunker`)。每个 chunk 带 breadcrumb、section 锚点,并**盖 ACL 章**——默认 RESTRICTED、fail-closed([core.py:33-36](../../src/chunker/core.py#L33))。全树构建实测 66.6ms,所以是 eager 而非 lazy(早期设计叫 "Lazy Heading-Tree",被实测否决,文档名留作化石证据)。
 - **查询期**:命中小块后,`assemble_big` 按 token 预算取包围区——小节太小就向上爬父节、超预算就在祖先内开窗拉兄弟([src/chunker/retrieve.py:109](../../src/chunker/retrieve.py#L109))。原始 elements 存在 sidecar 里,取材全程 ACL 感知。

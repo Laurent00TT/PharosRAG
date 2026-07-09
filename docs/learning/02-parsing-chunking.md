@@ -8,7 +8,7 @@
 
 ## 1. 概念底座:切块在任何 RAG 里解决什么问题
 
-在讲 pharos 之前,先把这一层的问题本身讲清楚——它与具体项目无关。
+在讲 pharos 之前,先把这一层的问题本身讲清楚,它跟具体项目无关。
 
 **为什么必须切块。** 三个硬约束叠加:
 1. **embedding 的表征会随文本变长而稀释**——一个 30 页文档压进一个向量,任何具体问题都捞不准它;
@@ -72,7 +72,7 @@ xlsx/xls 走独立的 TableChunker(网格不是文档流,heading 树不适用),�
 
 pharos 把所有格式收敛到 MinerU 一个解析器:PDF、扫描件 OCR、docx/pptx(MinerU 原生 office 后端)产出同一份 `content_list` schema。适配层只有一个职责——把 parser 输出归一成 `Element[]`([src/chunker/types.py:22-41](../../src/chunker/types.py#L22-L41)):`idx/kind/text/text_level/caption/table_body/asset_content/merge_prev/image_path`。core 只吃这个接缝,**换 parser = 换 adapter,不碰核心**([src/chunker/adapters/mineru.py:45-65](../../src/chunker/adapters/mineru.py#L45-L65))。
 
-一个值得注意的细节:跨页续接标志 `merge_prev` 不在 content_list 里,adapter 从 layout.json 的 para_blocks 按归一化文本前缀模糊匹配回填([src/chunker/adapters/mineru.py:31-38](../../src/chunker/adapters/mineru.py#L31-L38))——为什么不用 bbox 对齐?因为 content_list 与 layout 的 bbox 在**两个坐标系**(渲染图 vs PDF 点),这个坑在评估阶段还会再咬一次(§3.3)。这个模糊匹配本身有已确认的串扰缺陷,见 §4。
+这里有个容易被忽略的细节:跨页续接标志 `merge_prev` 不在 content_list 里,adapter 从 layout.json 的 para_blocks 按归一化文本前缀模糊匹配回填([src/chunker/adapters/mineru.py:31-38](../../src/chunker/adapters/mineru.py#L31-L38))——为什么不用 bbox 对齐?因为 content_list 与 layout 的 bbox 在**两个坐标系**(渲染图 vs PDF 点),这个坑在评估阶段还会再咬一次(§3.3)。这个模糊匹配本身有已确认的串扰缺陷,见 §4。
 
 自研的 docx/pptx adapter 降级为零依赖 fallback,保留是因为它踩过的坑有教学价值(文本框、GROUP 形状递归、无样式标题推断——真实世界 64% 的 docx 不用标题样式)。
 
@@ -155,7 +155,7 @@ table/image/chart 各自成一个**原子 chunk**([src/chunker/core.py:372-402](
 2. **命中节 < target** → 沿 `parent_sec_id` 上爬;父节 > max 时改在父节范围内开窗,自然拉入相邻兄弟节内容(带 `seen` 集合防损坏 sidecar 的环形父指针死循环);
 3. **无 section** → 命中页邻域开窗(防无标题多页文档拉整篇);顶层仍 < min 则整篇开窗兜底。
 
-真实语料上**上爬是主路径而非兜底**:section 中位只有 42 token,过大裁窗只占 1%(77 篇实测);big-block 中位 818 token,贴着 target 800。`windowed=True` 标记"这是 token 受限窗口而非完整节"([src/chunker/types.py:107-122](../../src/chunker/types.py#L107-L122)),embedder 检索层把它映射成 `context_status="section_window"`([src/embedder/retrieve.py:172-182](../../src/embedder/retrieve.py#L172-L182)),agent 看到就知道可以对该 chunk_id 调 expand——上下文完整性从隐式变成可编程决策的显式信号。
+真实语料上**上爬是主路径而非兜底**:section 中位只有 42 token,过大裁窗只占 1%(77 篇实测);big-block 中位 818 token,贴着 target 800。`windowed=True` 标记"这是 token 受限窗口而非完整节"([src/chunker/types.py:107-122](../../src/chunker/types.py#L107-L122)),embedder 检索层把它映射成 `context_status="section_window"`([src/embedder/retrieve.py:172-182](../../src/embedder/retrieve.py#L172-L182)),agent 看到就知道可以对该 chunk_id 调 expand——上下文完不完整,从此不再是隐式的,而是 agent 能读、能据此决策的显式信号。
 
 安全维度(big-block 按 idx 从原始 elements 重取材,会跨 chunk 边界——"同文档≠同 ACL")由 `acl_index` 等价类门控解决([src/chunker/retrieve.py:90-106](../../src/chunker/retrieve.py#L90-L106)、[src/chunker/types.py:93-104](../../src/chunker/types.py#L93-L104)),真语料实测泄漏 3/79→0/79。这条线的完整故事属于 ACL 篇,本篇只需记住:**查询期取材的每个元素都过了与命中块同 ACL 的等价类判定,未知 idx fail-closed 排除**——这个"未知 idx 排除"恰好埋下了 §4 的 chunker#0。
 

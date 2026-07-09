@@ -54,7 +54,7 @@ manifest 声明 acl ──► chunker 盖章(缺省=RESTRICTED,fail-closed)
    服务层身份(keys/legacy/open)每请求解析出 User{tenant, principals} 喂给上面三道闸
 ```
 
-分层原则来自 [DESIGN.md D5/D12](../DESIGN.md):**身份在服务层,ACL 在检索层**。服务层只回答"谁在问",把它变成一个 `User(tenant, principals)`;"能看什么"的兑现收敛在 embedder 一处。这条分层让 HTTP、MCP 适配器、stdio 直连三个入口共享同一个 fail-closed 模型,而不是各写一套。
+分层原则来自 [DESIGN.md D5/D12](../DESIGN.md):**身份在服务层,ACL 在检索层**。服务层只回答"谁在问",把它变成一个 `User(tenant, principals)`;至于"能看什么",统一收敛到 embedder 一处去兑现。这条分层让 HTTP、MCP 适配器、stdio 直连三个入口共享同一个 fail-closed 模型,而不是各写一套。
 
 ### 2.1 索引期:盖章、拆解、防走私
 
@@ -182,12 +182,12 @@ per-session 去重(已交付的段落下次只回指针)是便利功能,但在�
 
 ## 4. 实战复盘:本轮对抗审查中与 ACL/安全相关的条目
 
-写作前的这轮对抗审查(34 confirmed)按纪律分流:行为无关的健壮性修复直接落地,改变输出内容或需 GPU 验证的延期。安全相关条目恰好三种结局都有,各是一个教学点。
+写作前的这轮对抗审查(34 confirmed)按纪律分流:行为无关的健壮性修复直接落地,会改变输出内容、或需要 GPU 验证的则延期。安全相关条目恰好三种结局都有,各是一个教学点。
 
 ### 已修:healthz 信息收敛(fixes_applied #8)
 
 - **症状**:`/healthz` 未鉴权可读 `collection`、`llm_model` 等字段;而同文件的 `/readyz` 因评审 sec-2 结论刻意**不回集合名、异常不回 str(e)**。
-- **根因**:同一个信息边界被两个端点执行成两种标准——readyz 辛苦建立的"未鉴权探针不泄内部信息"被 healthz 直接架空。这类"不一致"比单点缺陷更值得警惕:它说明边界没有被当成一条系统性纪律,而是逐端点各自为政。
+- **根因**:同一条信息边界,两个端点却执行成两套标准——readyz 辛苦立起来的"未鉴权探针不泄内部信息",被 healthz 直接架空。这类"不一致"比单点缺陷更值得警惕:它说明没人把边界当成一条系统性纪律,而是逐端点各自为政。
 - **修法**:healthz 收敛为最小 liveness 响应 `{status, service, version, tenant_bound, uptime_s}`([src/pharos/service.py:211-222](../../src/pharos/service.py#L211-L222)),敏感字段挪进 admin-gated 的 `/v1/stats`([src/pharos/service.py:264-267](../../src/pharos/service.py#L264-L267));docs/API.md 同步。
 - **测试**:healthz 响应体负向断言(不含 collection/llm_model),防回归。
 
@@ -197,7 +197,7 @@ per-session 去重(已交付的段落下次只回指针)是便利功能,但在�
 
 - **确认的事实**:heading 元素不进任何 chunk 的 source_indices,因此不在 acl_index 里;等价类门控对未知 idx fail-closed 排除 → 生产默认路径的 big.text **不含任何标题行**。同一根因 get_document 已打过补丁(own-section 可见的小节额外纳入其标题,[src/embedder/retrieve.py:212-232](../../src/embedder/retrieve.py#L212-L232)),但 assemble_big/expand 路径未同步。
 - **为什么确认了却不马上改**:修复会改变 big-block 内容 → 检索交付与评估数字都会动 → 必须 bump SIDECAR_VERSION、重建索引、重跑 GPU eval 才能落地。在写作窗口内"顺手修"意味着已发布的评估基线失真。**"确认 → 排期 → 附修法草图"本身是工程判断**:fail-closed 的方向性错误(漏出而非泄入)是质量缺陷不是安全漏洞,可以等一个正规的重建窗口。
-- **教学点**:这是 fail-closed 的**代价面**。方向选对了(标题被漏出,而不是受限标题被泄入),但代价真实存在——LLM 收到的 context 缺小节边界信号,climb 到父节时兄弟正文连成一片。安全默认值的质量成本要被显式管理,而不是假装不存在。
+- **教学点**:这是 fail-closed 的**代价面**。方向选对了(标题被漏出,而不是受限标题被泄入),但代价真实存在——LLM 收到的 context 缺小节边界信号,climb 到父节时兄弟正文连成一片。安全默认值的质量成本得拿出来显式管理,而不是假装它不存在。
 
 ### refuted:readyz 绕过 Store._lock(service#0)
 

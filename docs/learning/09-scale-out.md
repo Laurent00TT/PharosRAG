@@ -9,7 +9,7 @@
 
 ## 1. 概念底座:为什么 RAG 服务的水平扩展不是"多起几个进程"
 
-任何在线服务想扛更多并发,教科书答案都是"无状态应用层 + 负载均衡 + 多副本"。但一个典型的自托管 RAG 服务天生长成反面教材——它至少有三类耦合,把"复制一份进程"变成不可能:
+任何在线服务想扛更多并发,教科书答案都是"无状态应用层 + 负载均衡 + 多副本"。但典型的自托管 RAG 服务天生就是反面教材——它至少有三类耦合,把"复制一份进程"变成不可能:
 
 1. **计算资源耦合**:embedding / rerank 模型在应用进程内加载。一个 8B 模型十几 GB 显存,副本数直接被显卡数钉死;更糟的是应用逻辑(检索编排、权限过滤、上下文组装)明明不吃 GPU,却陪着模型一起无法复制。
 2. **状态耦合**:嵌入式向量库(Qdrant local / Chroma / LanceDB 之类)以文件锁独占方式打开。第二个进程连库都开不了——这才是多副本的硬互斥,比 GPU 更早把路堵死。
@@ -59,11 +59,11 @@
 
 ### 2.2 第一层:inference :8900——"纯 GPU 前向"的边界铁律
 
-系统里唯一吃 GPU 的东西是两个 8B 模型的前向,把且只把它拆成独立 FastAPI 服务。端点里**不出现任何 pharos 业务概念**——没有 ACL、没有 Hit、没有 sidecar,只有 `texts→vectors`、`(query,docs)→scores`。MRL 截维、query LRU 缓存、排序写回、small-to-big 全部留在应用层。
+系统里唯一吃 GPU 的东西是两个 8B 模型的前向,就只把它拆成独立 FastAPI 服务。端点里**不出现任何 pharos 业务概念**——没有 ACL、没有 Hit、没有 sidecar,只有 `texts→vectors`、`(query,docs)→scores`。MRL 截维、query LRU 缓存、排序写回、small-to-big 全部留在应用层。
 
 - 服务端用 `dense_dim=10**9` 构造 Dense(强制 local,防递归),让 `_mrl` 永不截维、返回模型原始全维(4096)归一向量:[src/embedder/inference_server.py:73](../../src/embedder/inference_server.py#L73)(`_FULL_DIM` 定义在 [:34](../../src/embedder/inference_server.py#L34))。
 - 客户端 `RemoteDense._mrl_np` 用纯 numpy 按真实 `dense_dim`(1024)截维 + L2 renorm,并带下界断言 fail-loud(配置错位不许静默灌短向量):[src/embedder/remote.py:160-173](../../src/embedder/remote.py#L160)。
-- 应用层配 `PHAROS_INFERENCE_URL` 非空即经工厂切到 Remote 后端,本进程不加载模型:[src/embedder/remote.py:203-211](../../src/embedder/remote.py#L203);remote 模式连本地模型文件都不需要:[src/pharos/engine.py:27-33](../../src/pharos/engine.py#L27)。
+- 应用层只要 `PHAROS_INFERENCE_URL` 非空,工厂就切到 Remote 后端,本进程不加载模型:[src/embedder/remote.py:203-211](../../src/embedder/remote.py#L203);remote 模式连本地模型文件都不需要:[src/pharos/engine.py:27-33](../../src/pharos/engine.py#L27)。
 
 这就是**"全维返回 + 客户端截维"的等价性结构保证**:local 与 remote 走同一份 `Qwen3VLEmbedder` 前向代码 + 数学等价的确定性截维,所以"local 建库、remote 查询"的向量必然一致——等价性是结构性质,不是实测赌注。阶段 B 的 GPU 实测做了背书:E1 encode cosine=1.0000000、maxdiff 2.98e-08;E3 rerank maxdiff 0.00(`scripts/equiv_gpu.py` 分时跑——2×8B 占 33GB/48GB,双加载会 OOM,这个约束本身反过来印证了"应用层必须脱 GPU")。
 
@@ -77,7 +77,7 @@
 
 **失败非对称:dense loud / rerank 降级**。这是有意设计并用测试锁死的:
 
-- dense 失败:`_post_retry` 重试耗尽抛 `InferenceUnavailable`——一个纯异常类,带 `inference_unavailable=True` 类属性作 marker:[src/embedder/errors.py:11-21](../../src/embedder/errors.py#L11)。异常冒泡到 toolcore 的宽 `except`,用 `getattr(e, "inference_unavailable", False)` duck-typing 分流成结构化 `inference_unavailable`(retriable:true):[src/pharos/toolcore.py:229-234](../../src/pharos/toolcore.py#L229)。**绝不降级成空结果或纯 BM25**——query 向量是主召回信号,静默降级等于用户拿到质量崩塌却无感,比失败更坏。
+- dense 失败:`_post_retry` 重试耗尽抛 `InferenceUnavailable`——一个纯异常类,带 `inference_unavailable=True` 类属性作 marker:[src/embedder/errors.py:11-21](../../src/embedder/errors.py#L11)。异常冒泡到 toolcore 的宽 `except`,用 `getattr(e, "inference_unavailable", False)` duck-typing 分流成结构化 `inference_unavailable`(retriable:true):[src/pharos/toolcore.py:229-234](../../src/pharos/toolcore.py#L229)。**绝不降级成空结果或纯 BM25**——query 向量是主召回信号,静默降级等于用户拿到的结果质量已经崩了却毫无察觉,比直接失败更坏。
 - rerank 失败:`retrieve` 的 try/except 吞掉,降级返回 hybrid 召回的 `hits[:k]`,上层标 `rerank_degraded`:[src/embedder/retrieve.py:113-116](../../src/embedder/retrieve.py#L113)。rerank 是增强信号,降级安全。
 
 toolcore 保持 stdlib-only(不 import embedder),靠 marker 而非类型判断——这是"依赖边界"和"错误语义"两个设计约束的交点。
@@ -88,7 +88,7 @@ toolcore 保持 stdlib-only(不 import embedder),靠 marker 而非类型判断�
 
 **多副本的真开关不是拆 GPU,是嵌入式 Qdrant 的单进程文件锁**(拆 GPU 只是必要非充分)。`Store.__init__` 按优先级 `url > :memory: > path` 三分支建 client(`:memory:` 必须排在 path 前,大量测试依赖它短路):[src/embedder/store.py:26-31](../../src/embedder/store.py#L26)。
 
-这一步的教学点不在"加个字段",在**字段必须被全部生产出口消费**。`qdrant_url` 首版三个出口全漏——engine(查询)、indexer(建库)、mcp_stdio(agentic stdio),server 链从未真正通过;我曾宣称"改了 engine"却没改,被自己的核实纪律逮住。补齐后三处透传都有守护测试(mock QdrantClient,删透传行即红):[src/pharos/engine.py:34-43](../../src/pharos/engine.py#L34)、[src/pharos/indexer.py:59-65](../../src/pharos/indexer.py#L59)、[src/pharos/mcp_stdio.py:56-66](../../src/pharos/mcp_stdio.py#L56)。同款坑后来在 `inference_url` 上原样复发(mcp_stdio 漏透传,slim 环境首查 `import torch` 崩)——"配置字段的加入 ≠ 生效,必须逐出口验证消费"是这次改造沉淀的可迁移经验。
+这一步的教学点不在"加个字段",而在**每个生产出口都得真正用上这个字段**。`qdrant_url` 首版三个出口全漏——engine(查询)、indexer(建库)、mcp_stdio(agentic stdio),server 链从未真正通过;我曾宣称"改了 engine"却没改,被自己的核实纪律逮住。补齐后三处透传都有守护测试(mock QdrantClient,删透传行即红):[src/pharos/engine.py:34-43](../../src/pharos/engine.py#L34)、[src/pharos/indexer.py:59-65](../../src/pharos/indexer.py#L59)、[src/pharos/mcp_stdio.py:56-66](../../src/pharos/mcp_stdio.py#L56)。同款坑后来在 `inference_url` 上原样复发(mcp_stdio 漏透传,slim 环境首查 `import torch` 崩)——"配置字段的加入 ≠ 生效,必须逐出口验证消费"是这次改造沉淀的可迁移经验。
 
 **换存储后端要重测的不只是数据,还有安全语义**。嵌入式 QdrantLocal 在 RRF fusion 下会丢弃顶层 `query_filter` 的 `should`(实测发现),所以 ACL filter 必须下推到每个 prefetch:[src/embedder/store.py:103-123](../../src/embedder/store.py#L103)。迁 server 后 fusion filter 语义不同,必须**新增 server-mode 越权测试**而不是重跑硬编码 `:memory:` 的旧测试(那还走嵌入式 fusion,对 server 语义零覆盖 = 假绿):`tests/engine/test_store_server.py` 里有一条原始探针绕过出口 `acl_admits`、直接断言 server RRF 的 `query_points` 原始输出不含越权点——测的层次决定测试证明的命题(prefetch 下推真生效,而非出口兜底掩盖)。还配了 `PHAROS_REQUIRE_QDRANT_SERVER=1` 强制不许静默 skip(否则 CI server 不可达全 skip 也是假绿)。
 
@@ -133,7 +133,7 @@ nginx 是唯一对外入口(`127.0.0.1:8080`),pharos 改 `expose: 8787` 不发�
 
 ### 2.8 vLLM:Plan B 并存 + 等价性从"保证"降级为"实验"
 
-自建 FastAPI 的等价性是结构性的(两端同一份前向代码);换 vLLM 后 pooling 是它自己实现的,等价性从结构保证降级成**必须实测的命题**。所以方案是"不替换、先并存":vLLM 侧呈现完全相同的 `/embed /rerank /readyz` 契约(薄适配器套 chat 模板转发 `/v1/embeddings`),应用层零改动,compose profile 互斥切换 = 秒级回退——这正是"端点无业务概念"红利的兑现。四道门顺序刚性(G0 可行 → G1 向量等价 → G2 混建混查 → G4 吞吐),过门才升 Plan A,详见 [../VLLM_PLAN.md](../VLLM_PLAN.md)。
+自建 FastAPI 的等价性是结构性的(两端同一份前向代码);换 vLLM 后 pooling 是它自己实现的,等价性从结构保证降级成**必须实测的命题**。所以方案是"不替换、先并存":vLLM 侧呈现完全相同的 `/embed /rerank /readyz` 契约(薄适配器套 chat 模板转发 `/v1/embeddings`),应用层零改动,compose profile 互斥切换 = 秒级回退——"端点无业务概念"的红利,到这里就兑现了。四道门顺序刚性(G0 可行 → G1 向量等价 → G2 混建混查 → G4 吞吐),过门才升 Plan A,详见 [../VLLM_PLAN.md](../VLLM_PLAN.md)。
 
 实测(2026-07-07,`scripts/vllm_equiv_probe.py` + `scripts/vllm_g2_topk.py`):
 

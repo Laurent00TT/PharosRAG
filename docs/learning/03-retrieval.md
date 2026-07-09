@@ -13,7 +13,7 @@
 
 **问题一:语义匹配与精确匹配是两种能力,一个模型给不全。**
 
-- **稠密检索(dense / bi-encoder)**:query 和文档各自过一遍编码器变成向量,用余弦相似度衡量语义接近。优势是泛化——"营收下滑的原因"能召回写着"收入同比减少系……所致"的段落;盲区是**精确串**:法条编号、产品型号、金额这类字符,在向量空间里"第 42 条"和"第 43 条"几乎重合,一字之差检索不出差别。
+- **稠密检索(dense / bi-encoder)**:query 和文档各自过一遍编码器变成向量,用余弦相似度衡量两者语义上有多接近。优势是泛化——"营收下滑的原因"能召回写着"收入同比减少系……所致"的段落;盲区是**精确串**:法条编号、产品型号、金额这类字符,在向量空间里"第 42 条"和"第 43 条"几乎重合,一字之差检索不出差别。
 - **词法检索(sparse,代表是 BM25)**:按词条倒排,词频 × 逆文档频率打分。优势恰好互补——`Section 6.1`、`v1.2`、`$1196` 一字不差命中;盲区是同义改写:用户换个说法就查不到。还有一支"学习型 sparse"(SPLADE、BGE-M3 lexical),用模型给词条赋权,介于两者之间。
 
 主流做法是 **hybrid:两路都跑,再融合**。融合有两个流派:分数加权(需要先把余弦分和 BM25 分归一到可比量纲,脏活)和**名次融合 RRF**(Reciprocal Rank Fusion:只看每路的排名,`score = Σ 1/(k+rank)`,天然回避量纲问题)。
@@ -57,12 +57,12 @@ pharos 对这四个问题各给了一个答案,且每个答案都有"被否决�
 
 ### 2.1 图文同空间:一个向量空间装下文本和图表
 
-dense 层用 Qwen3-VL-Embedding-8B,**复用模型自带的官方脚本**(last-token pooling),不自写 pooling/forward——自写与官方数值漂移的风险不值得冒([src/embedder/dense.py:58-63](../../src/embedder/dense.py#L58))。文本与图像编码进同一个 4096 维空间。
+dense 层用 Qwen3-VL-Embedding-8B,**复用模型自带的官方脚本**(last-token pooling),不自写 pooling/forward——自己写要担和官方脚本数值漂移的风险,不值得([src/embedder/dense.py:58-63](../../src/embedder/dense.py#L58))。文本与图像编码进同一个 4096 维空间。
 
 索引期按 chunker 打的 `image_only` flag 分流([src/embedder/embed.py:70-85](../../src/embedder/embed.py#L70)):
 
 - **纯图 chunk**(无 caption 无正文)→ `encode_image` 得图像向量,**跳过 sparse**——纯图没有可检索文字,BM25 无意义;召回全靠图文同空间,文字 query 直接跨模态命中;
-- **text / table / 带 caption 的 image / chart** → 一律 `encode_text`(caption 文字向量)+ BM25 sparse——文字信号更全,不走图像向量(这是对旧设计的否决,见 §3);
+- **text / table / 带 caption 的 image / chart** → 一律 `encode_text`(caption 文字向量)+ BM25 sparse——文字信号更全,不走图像向量(这一条否决了旧设计,见 §3);
 - 图像路径缺失或失效的纯图,计入 `skipped` 明确上报,不静默假装索引成功。
 
 跨模态召回不是"理论上应该行",做过最小实测:准确文字描述对"对应图"的相似度 0.74 / 0.49,对"非对应图"只有 0.37 / 0.17,无关描述(金毛在沙滩)对两图仅 0.07–0.11——分离度足够支撑"文字 query 召回纯图 chunk"这条路(两图两描述的 spot-check,口径见 §8)。
@@ -88,7 +88,7 @@ hybrid 用 Qdrant `query_points` 的两层结构([src/embedder/store.py:96-124](
 两个容易被忽略的设计点:
 
 - **ACL 硬过滤下推到每个 Prefetch**([src/embedder/store.py:118-120](../../src/embedder/store.py#L118)):实测发现嵌入式 QdrantLocal 在 fusion 模式下会**静默丢弃顶层 query_filter 的 should 子句**,权限过滤退化成 fail-open。修复是把 filter 放进每个 prefetch,fusion 只融合已过滤结果;返回前还有逐条 `acl_admits` 出口复核([src/embedder/store.py:126-129](../../src/embedder/store.py#L126))。ACL 的三道闸设计是另一篇的主角,此处只需记住:**检索层的权限过滤必须发生在召回层,否则 limit 会被无权结果污染**。
-- **score_kind 显式标注分数量纲**([src/embedder/types.py:16-26](../../src/embedder/types.py#L16)):agent 可用 `strategy` 参数选路——dense/sparse 单路直查拿原生分(cosine/bm25,可解释、可跨查询比较),hybrid 走 RRF 拿融合分(只随名次,**不可跨查询比较**,嵌入式与 server 的 RRF k 常数还不同,绝对值差一个量级)。rerank 之后 score 与 score_kind 一起改写,防止"名次按 rerank、分数还是 RRF"的脱节误导 agent 的置信判断。
+- **score_kind 显式标注分数量纲**([src/embedder/types.py:16-26](../../src/embedder/types.py#L16)):agent 可用 `strategy` 参数选路——dense/sparse 单路直查拿原生分(cosine/bm25,可解释、可跨查询比较),hybrid 走 RRF 拿融合分(只随名次,**不可跨查询比较**,嵌入式与 server 的 RRF k 常数还不同,绝对值差一个量级)。rerank 之后 score 与 score_kind 一起改写,免得"名次按 rerank、分数还是 RRF"脱了节,误导 agent 的置信判断。
 
 ### 2.5 可选精排:cross-encoder 与"非对称失败"
 
@@ -100,7 +100,7 @@ Qwen3-VL-Reranker-8B(同源 cross-encoder)把 `(query, doc)` 整个喂进模型,
 
 索引粒度矛盾的 pharos 答案:**Qdrant 只存 chunk 向量 + payload;原始 elements/sections/banners/acl_index 按 doc_id 存 sidecar JSON**([src/embedder/embed.py:107-125](../../src/embedder/embed.py#L107))。为什么不塞进 Qdrant payload?因为查询期组装需要**全文档**的元素与小节结构,而 payload 是单点数据——组装是文档级操作,不是命中点级操作。
 
-检索命中后,`_assemble` 用 payload 重建一个轻量 shim,按 doc_type 取预算(slides/policy 这类文档整节保留),调 chunker 的 `assemble_big` 把命中块所在小节的原文组装成 big-block 交付([src/embedder/retrieve.py:186-197](../../src/embedder/retrieve.py#L186))。取材只取与命中块**同 ACL** 的元素,使 big-block 的 ACL 天然等于命中块 ACL、出口可校验。
+检索命中后,`_assemble` 用 payload 重建一个轻量 shim,按 doc_type 取预算(slides/policy 这类文档整节保留),调 chunker 的 `assemble_big` 把命中块所在小节的原文组装成 big-block 交付([src/embedder/retrieve.py:186-197](../../src/embedder/retrieve.py#L186))。取材只取与命中块**同 ACL** 的元素,让 big-block 的 ACL 天然就等于命中块的 ACL,出口能校验。
 
 sidecar 的可靠性也有讲究:写侧原子写(`.tmp` + fsync + `os.replace`,防崩溃留半截 JSON 让组装永久崩)+ `SIDECAR_VERSION` 盖章;读侧**错误分层**——缺文件/坏 JSON 是单 doc 瞬态,降级返回裸 hit;版本不符是系统性 schema 漂移,故意不进降级 catch,响亮失败提示整体重建([src/embedder/retrieve.py:60-95](../../src/embedder/retrieve.py#L60))。"静默错"变"响亮失败"是这个子系统反复出现的母题。
 
@@ -129,7 +129,7 @@ sidecar 的可靠性也有讲究:写侧原子写(`.tmp` + fsync + `os.replace`,�
 
 ### 2.8 查询向量 LRU
 
-agentic RAG 多跳常重发相同 query,`encode_query` 做了 256 容量的 LRU([src/embedder/dense.py:89-105](../../src/embedder/dense.py#L89)),免重复 8B 前向。值得记的是锁结构:**双段锁**——读段只包字典查找、写段只包写入淘汰,真正昂贵的 encode(GPU 前向或 HTTP+重试退避)在锁外。两线程同 query 同时 miss 会各算一次、后写覆盖,MRL 确定性保证结果相同,这是**可接受的良性竞态**——绝不为消除它把整段包锁,否则推理服务预热期一个查询的退避会阻塞所有查询的缓存命中(这教训来自一次真实的"修可用性的补丁制造更大可用性事故",详见并发/扩展篇)。
+agentic RAG 多跳常重发相同 query,`encode_query` 做了 256 容量的 LRU([src/embedder/dense.py:89-105](../../src/embedder/dense.py#L89)),免重复 8B 前向。锁结构值得说一句:**双段锁**——读段只包字典查找、写段只包写入淘汰,真正昂贵的 encode(GPU 前向或 HTTP+重试退避)在锁外。两线程同 query 同时 miss 会各算一次、后写覆盖,MRL 确定性保证结果相同,这是**可接受的良性竞态**——绝不为消除它把整段包锁,否则推理服务预热期一个查询的退避会阻塞所有查询的缓存命中(这教训来自一次真实的"修可用性的补丁制造更大可用性事故",详见并发/扩展篇)。
 
 ---
 
@@ -145,7 +145,7 @@ agentic RAG 多跳常重发相同 query,`encode_query` 做了 256 容量的 LRU(
 | bgem3 lexical | 0.584 | 0.347 | 0.453 | 2.3GB 模型 + GPU |
 | dense(参照) | 0.149 | **0.794** | 0.506 | — |
 
-判决逻辑分两步:**整体打平**(0.453 vs 0.446)时,零模型零 GPU 的 BM25 赢在成本;更关键的是**hybrid 语境下的角色分工**——dense 已经把语义包了(0.794),sparse 在混合里只需要补精确词,而精确词恰是 BM25 主场(0.738 完胜 0.584)。BGE-M3 学到的那点语义(0.347)在 hybrid 里是冗余能力,为冗余能力付 GPU 成本不值。SPLADE 类学习型 sparse 未单独进对比——BGE-M3 已代表该路线,且其中文能力偏弱(MIRACL-zh 36.3,材料口径)。
+判决逻辑分两步:**整体打平**(0.453 vs 0.446)时,零模型零 GPU 的 BM25 赢在成本;更关键的是**hybrid 语境下的角色分工**——dense 已经把语义包了(0.794),sparse 在混合里只需要补精确词,而精确词恰是 BM25 主场(0.738 完胜 0.584)。BGE-M3 学到的那点语义(0.347)在 hybrid 里是冗余能力,为它付 GPU 成本不值。SPLADE 类学习型 sparse 未单独进对比——BGE-M3 已代表该路线,且其中文能力偏弱(MIRACL-zh 36.3,材料口径)。
 
 这个表还顺手证明了 §1 的"盲区"论断:dense 在精确词上 0.149,几乎瞎;BM25 在语义上 0.210,同样瞎——**hybrid 不是锦上添花,是互相补盲**。
 
@@ -212,7 +212,7 @@ agentic RAG 多跳常重发相同 query,`encode_query` 做了 256 容量的 LRU(
 
 这两条是工程判断的教学点——**confirmed 不等于该立即修**,判断标准是"改动是否改变输出内容/是否需要当前没有的验证环境"。
 
-**embedder#3 索引期逐 chunk 编码、无批处理**(deferred 清单;证据:[src/embedder/embed.py:76-79](../../src/embedder/embed.py#L76) 里 `encode_text([ch.text])[0]` 单元素调用,官方接口天然吃批)。为什么不马上改:本仓自己立过等价性标准(bf16 norm 1.002 都要修),而**批前向 vs 单条前向在 padding/attention 下存在 bf16 数值差异风险**——没做 GPU 实测批/单编码 cosine 等价之前合入,新建库向量可能与既有库系统性微偏。且产品建库入口(indexer)walk 的是 local 路径,最坏的"每 chunk 一次 HTTP"场景当前不可达,SCALE_OUT P2-4 已登记为接受的取舍。**延期不是懒,是等价性纪律优先于吞吐优化。**
+**embedder#3 索引期逐 chunk 编码、无批处理**(deferred 清单;证据:[src/embedder/embed.py:76-79](../../src/embedder/embed.py#L76) 里 `encode_text([ch.text])[0]` 单元素调用,官方接口天然吃批)。为什么不马上改:本仓自己立过等价性标准(bf16 norm 1.002 都要修),而**批前向 vs 单条前向在 padding/attention 下存在 bf16 数值差异风险**——没做 GPU 实测确认批/单编码 cosine 等价就合入,新建库向量可能与既有库系统性微偏。且产品建库入口(indexer)walk 的是 local 路径,最坏的"每 chunk 一次 HTTP"场景当前不可达,SCALE_OUT P2-4 已登记为接受的取舍。**延期不是懒,是等价性纪律优先于吞吐优化。**
 
 **embedder#6 去重后不回填**(超采回填半边)。同节折叠有理(big-block 相同),但请求 top_k=8 可能只拿到 2-3 条独立证据,跨小节的补位候选明明在 prefetch 的 50 个里却被 store 层 top_k 截断。修法草图已备(fetch_k=2×k 超采、去重循环够 k 即 break)。为什么不马上改:**超采回填改变检索交付内容**,eval 走同一函数,已发布的评估基线会失真——须 GPU 重跑 eval 验证后才能合入。所以拆成两半:不改变行为的"折叠计数信号"先落地(§4.1⑥),改变行为的"回填"排队等验证窗口。
 
