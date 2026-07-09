@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 470" width="1180" height="470" role="img" aria-label="Pharos 架构图:消费方 → 守护进程 → 后端服务">
+  <defs>
+    <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0A1830"/><stop offset="1" stop-color="#0E2748"/>
+    </linearGradient>
+    <linearGradient id="abeam" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD37A" stop-opacity="0.10"/><stop offset="1" stop-color="#FFD37A" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="alan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFE9A8"/><stop offset="1" stop-color="#F5B84A" stop-opacity="0"/>
+    </radialGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7.5" refY="5" orient="auto">
+      <path d="M0 1 L9 5 L0 9 Z" fill="#CFA85E"/></marker>
+  </defs>
+
+  <rect x="1" y="1" width="1178" height="468" rx="16" fill="url(#ag)" stroke="#25436E" stroke-width="1"/>
+  <polygon points="0,0 420,0 130,470 0,470" fill="url(#abeam)"/>
+
+  <g>
+    <polygon points="52,74 66,74 63,40 55,40" fill="#12294A" stroke="#4A6B98" stroke-width="1.2"/>
+    <rect x="54" y="52" width="10" height="5" fill="#F5B84A"/>
+    <circle cx="59" cy="40" r="9" fill="url(#alan)"/><circle cx="59" cy="40" r="2.6" fill="#FFF2CC"/>
+  </g>
+  <text x="82" y="46" font-family="Georgia, serif" font-size="15" fill="#B9C6DC" letter-spacing="1">Pharos · 请求生命线</text>
+
+  <text x="150" y="112" text-anchor="middle" font-family="Georgia, serif" font-size="12.5" fill="#6E86A8" letter-spacing="3">消费方</text>
+  <text x="686" y="92" text-anchor="middle" font-family="Georgia, serif" font-size="12.5" fill="#D0A85A" letter-spacing="3">守护进程 · 独占资源</text>
+  <text x="1040" y="112" text-anchor="middle" font-family="Georgia, serif" font-size="12.5" fill="#6E86A8" letter-spacing="3">后端服务</text>
+
+  <g font-family="Georgia, serif">
+    <rect x="60" y="150" width="190" height="72" rx="10" fill="#13294A" stroke="#3A5A86" stroke-width="1.2"/>
+    <text x="155" y="182" text-anchor="middle" font-size="18" fill="#F2E9D6">curl / 脚本</text>
+    <text x="155" y="204" text-anchor="middle" font-size="12.5" fill="#8CA3C4">HTTP 客户端 · 前端</text>
+
+    <rect x="60" y="300" width="190" height="72" rx="10" fill="#13294A" stroke="#3A5A86" stroke-width="1.2"/>
+    <text x="155" y="332" text-anchor="middle" font-size="18" fill="#F2E9D6">Claude Code</text>
+    <text x="155" y="354" text-anchor="middle" font-size="12.5" fill="#8CA3C4">MCP agent</text>
+
+    <rect x="322" y="300" width="176" height="72" rx="10" fill="#13294A" stroke="#3A5A86" stroke-width="1.2"/>
+    <text x="410" y="330" text-anchor="middle" font-size="16.5" fill="#F2E9D6">pharos mcp</text>
+    <text x="410" y="352" text-anchor="middle" font-size="12.5" fill="#8CA3C4">薄适配器 · 毫秒启动</text>
+
+    <rect x="560" y="126" width="252" height="284" rx="14" fill="#0E223F" stroke="#F5B84A" stroke-width="2"/>
+    <text x="686" y="156" text-anchor="middle" font-size="16" fill="#F5C877">pharos serve</text>
+    <rect x="588" y="176" width="196" height="86" rx="10" fill="#16325A" stroke="#5A7EAE" stroke-width="1.2"/>
+    <text x="686" y="210" text-anchor="middle" font-size="18" fill="#F2E9D6">FastAPI</text>
+    <text x="686" y="232" text-anchor="middle" font-size="12.5" fill="#9DB2D0">闭管道问答 + 6 检索端点</text>
+    <rect x="588" y="288" width="196" height="86" rx="10" fill="#16325A" stroke="#5A7EAE" stroke-width="1.2"/>
+    <text x="686" y="322" text-anchor="middle" font-size="18" fill="#F2E9D6">toolcore</text>
+    <text x="686" y="344" text-anchor="middle" font-size="12.5" fill="#9DB2D0">工具契约单一来源</text>
+    <line x1="686" y1="262" x2="686" y2="288" stroke="#5A7EAE" stroke-width="1.2"/>
+
+    <g>
+      <path d="M930 133 a92 13 0 0 0 184 0 v70 a92 13 0 0 1 -184 0 Z" fill="#123A5A" stroke="#3A6A9A" stroke-width="1.2"/>
+      <ellipse cx="1022" cy="133" rx="92" ry="13" fill="#164a72" stroke="#3A6A9A" stroke-width="1.2"/>
+      <text x="1022" y="176" text-anchor="middle" font-size="18" fill="#F2E9D6">Qdrant</text>
+      <text x="1022" y="197" text-anchor="middle" font-size="12" fill="#9DB2D0">77 篇 / 7652 chunk</text>
+    </g>
+
+    <rect x="930" y="250" width="192" height="66" rx="10" fill="#13294A" stroke="#3A5A86" stroke-width="1.2"/>
+    <text x="1026" y="280" text-anchor="middle" font-size="17" fill="#F2E9D6">Qwen3-VL 8B</text>
+    <text x="1026" y="300" text-anchor="middle" font-size="12" fill="#8CA3C4">dense / rerank · GPU 常驻</text>
+
+    <rect x="930" y="352" width="192" height="66" rx="10" fill="#13294A" stroke="#3A5A86" stroke-width="1.2"/>
+    <text x="1026" y="382" text-anchor="middle" font-size="17" fill="#F2E9D6">DeepSeek</text>
+    <text x="1026" y="402" text-anchor="middle" font-size="12" fill="#8CA3C4">生成 · 带引用答案</text>
+  </g>
+
+  <g stroke="#CFA85E" stroke-width="1.6" fill="none">
+    <path d="M250 178 C 400 178, 430 190, 558 196" marker-end="url(#arrow)"/>
+    <path d="M250 336 L 318 336" marker-end="url(#arrow)"/>
+    <path d="M498 330 C 528 324, 536 312, 558 300" marker-end="url(#arrow)"/>
+    <path d="M814 196 C 872 186, 900 176, 928 168" marker-end="url(#arrow)"/>
+    <path d="M814 250 C 872 260, 890 274, 928 282" marker-end="url(#arrow)"/>
+    <path d="M814 344 C 872 360, 890 374, 928 382" marker-end="url(#arrow)"/>
+  </g>
+
+  <g font-family="Georgia, serif" font-size="12.5" fill="#CDAE74" text-anchor="middle">
+    <rect x="352" y="167" width="112" height="18" rx="4" fill="#0C1F3C"/><text x="408" y="180">HTTP /v1/ask</text>
+    <rect x="262" y="315" width="80" height="18" rx="4" fill="#0C1F3C"/><text x="302" y="328">MCP stdio</text>
+    <rect x="836" y="150" width="120" height="18" rx="4" fill="#0C1F3C"/><text x="896" y="163">混合检索 + ACL</text>
+    <rect x="840" y="256" width="104" height="18" rx="4" fill="#0C1F3C"/><text x="892" y="269">dense / rerank</text>
+    <rect x="836" y="356" width="112" height="18" rx="4" fill="#0C1F3C"/><text x="892" y="369">/v1/ask 生成</text>
+  </g>
+</svg>

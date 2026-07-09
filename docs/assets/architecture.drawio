@@ -1,0 +1,75 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="Pharos 架构" id="pharos-arch">
+    <mxGraphModel dx="1180" dy="470" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1180" pageHeight="470" math="0" background="#0B1E3A">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Pharos · 请求生命线" style="text;html=1;align=left;verticalAlign=middle;fontFamily=Georgia;fontColor=#B9C6DC;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="80" y="30" width="220" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="zoneA" value="消费方" style="text;html=1;align=center;fontFamily=Georgia;fontColor=#6E86A8;fontSize=12;letterSpacing=3;" vertex="1" parent="1">
+          <mxGeometry x="90" y="100" width="130" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="zoneB" value="守护进程 · 独占资源" style="text;html=1;align=center;fontFamily=Georgia;fontColor=#D0A85A;fontSize=12;letterSpacing=3;" vertex="1" parent="1">
+          <mxGeometry x="600" y="76" width="172" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="zoneC" value="后端服务" style="text;html=1;align=center;fontFamily=Georgia;fontColor=#6E86A8;fontSize=12;letterSpacing=3;" vertex="1" parent="1">
+          <mxGeometry x="975" y="100" width="130" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="curl" value="&lt;b&gt;curl / 脚本&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#8CA3C4&quot;&gt;HTTP 客户端 · 前端&lt;/font&gt;" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#13294A;strokeColor=#3A5A86;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="60" y="150" width="190" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="agent" value="&lt;b&gt;Claude Code&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#8CA3C4&quot;&gt;MCP agent&lt;/font&gt;" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#13294A;strokeColor=#3A5A86;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="60" y="300" width="190" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="mcp" value="&lt;b&gt;pharos mcp&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#8CA3C4&quot;&gt;薄适配器 · 毫秒启动&lt;/font&gt;" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#13294A;strokeColor=#3A5A86;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="322" y="300" width="176" height="72" as="geometry" />
+        </mxCell>
+
+        <mxCell id="panel" value="&lt;span style=&quot;color:#F5C877&quot;&gt;pharos serve&lt;/span&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#0E223F;strokeColor=#F5B84A;strokeWidth=2;fontColor=#F5C877;fontFamily=Georgia;fontSize=15;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="560" y="126" width="252" height="284" as="geometry" />
+        </mxCell>
+        <mxCell id="fastapi" value="&lt;b&gt;FastAPI&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#9DB2D0&quot;&gt;闭管道问答 + 6 检索端点&lt;/font&gt;" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16325A;strokeColor=#5A7EAE;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="588" y="176" width="196" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="toolcore" value="&lt;b&gt;toolcore&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#9DB2D0&quot;&gt;工具契约单一来源&lt;/font&gt;" style="rounded=1;arcSize=10;whiteSpace=wrap;html=1;fillColor=#16325A;strokeColor=#5A7EAE;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="588" y="288" width="196" height="86" as="geometry" />
+        </mxCell>
+        <mxCell id="link" style="endArrow=none;html=1;strokeColor=#5A7EAE;" edge="1" parent="1" source="fastapi" target="toolcore">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="qdrant" value="&lt;b&gt;Qdrant&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#9DB2D0&quot;&gt;77 篇 / 7652 chunk&lt;/font&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#123A5A;strokeColor=#3A6A9A;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="930" y="130" width="184" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="qwen" value="&lt;b&gt;Qwen3-VL 8B&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#8CA3C4&quot;&gt;dense / rerank · GPU 常驻&lt;/font&gt;" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#13294A;strokeColor=#3A5A86;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="930" y="250" width="192" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="deepseek" value="&lt;b&gt;DeepSeek&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#8CA3C4&quot;&gt;生成 · 带引用答案&lt;/font&gt;" style="rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#13294A;strokeColor=#3A5A86;fontColor=#F2E9D6;fontFamily=Georgia;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="930" y="352" width="192" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="HTTP /v1/ask" style="endArrow=block;html=1;strokeColor=#CFA85E;fontColor=#CDAE74;fontFamily=Georgia;fontSize=12;labelBackgroundColor=#0C1F3C;curved=1;" edge="1" parent="1" source="curl" target="fastapi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="MCP stdio" style="endArrow=block;html=1;strokeColor=#CFA85E;fontColor=#CDAE74;fontFamily=Georgia;fontSize=12;labelBackgroundColor=#0C1F3C;" edge="1" parent="1" source="agent" target="mcp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="HTTP" style="endArrow=block;html=1;strokeColor=#CFA85E;fontColor=#CDAE74;fontFamily=Georgia;fontSize=12;labelBackgroundColor=#0C1F3C;curved=1;" edge="1" parent="1" source="mcp" target="panel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="混合检索 + ACL" style="endArrow=block;html=1;strokeColor=#CFA85E;fontColor=#CDAE74;fontFamily=Georgia;fontSize=12;labelBackgroundColor=#0C1F3C;curved=1;" edge="1" parent="1" source="panel" target="qdrant">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="dense / rerank" style="endArrow=block;html=1;strokeColor=#CFA85E;fontColor=#CDAE74;fontFamily=Georgia;fontSize=12;labelBackgroundColor=#0C1F3C;curved=1;" edge="1" parent="1" source="panel" target="qwen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="/v1/ask 生成" style="endArrow=block;html=1;strokeColor=#CFA85E;fontColor=#CDAE74;fontFamily=Georgia;fontSize=12;labelBackgroundColor=#0C1F3C;curved=1;" edge="1" parent="1" source="panel" target="deepseek">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

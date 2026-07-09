@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img" aria-label="Pharos — 为团队的文档库导航">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#081428"/>
+      <stop offset="0.55" stop-color="#0B1E3A"/>
+      <stop offset="1" stop-color="#0E2748"/>
+    </linearGradient>
+    <radialGradient id="lantern" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFE9A8"/>
+      <stop offset="0.4" stop-color="#FFD37A"/>
+      <stop offset="1" stop-color="#F5B84A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#FFD37A" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#FFD37A" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="360" fill="url(#sky)"/>
+
+  <g fill="#DCE6F4">
+    <circle cx="70" cy="52" r="1.5" opacity="0.8"/><circle cx="150" cy="96" r="1" opacity="0.5"/><circle cx="220" cy="40" r="1.7" opacity="0.9"/><circle cx="300" cy="120" r="1" opacity="0.45"/>
+    <circle cx="360" cy="60" r="1.2" opacity="0.6"/><circle cx="430" cy="30" r="1" opacity="0.5"/><circle cx="500" cy="150" r="1.3" opacity="0.55"/><circle cx="560" cy="72" r="1" opacity="0.5"/>
+    <circle cx="640" cy="44" r="1.6" opacity="0.85"/><circle cx="705" cy="112" r="1" opacity="0.45"/><circle cx="770" cy="66" r="1.2" opacity="0.6"/><circle cx="835" cy="34" r="1" opacity="0.5"/>
+    <circle cx="905" cy="128" r="1.1" opacity="0.5"/><circle cx="980" cy="54" r="1.5" opacity="0.8"/><circle cx="1050" cy="96" r="1" opacity="0.45"/><circle cx="1120" cy="40" r="1.3" opacity="0.7"/>
+    <circle cx="1190" cy="118" r="1" opacity="0.5"/><circle cx="115" cy="150" r="1" opacity="0.4"/><circle cx="255" cy="180" r="1" opacity="0.35"/><circle cx="1240" cy="70" r="1.2" opacity="0.6"/>
+    <circle cx="410" cy="170" r="1" opacity="0.35"/><circle cx="670" cy="150" r="1" opacity="0.4"/><circle cx="850" cy="160" r="1" opacity="0.35"/><circle cx="1020" cy="150" r="1" opacity="0.4"/>
+  </g>
+
+  <polygon points="1035,150 250,92 250,150" fill="url(#beam)"/>
+  <polygon points="1035,150 250,150 260,238" fill="url(#beam)" opacity="0.7"/>
+
+  <path d="M0 262 Q220 250 440 260 T880 260 T1280 262" stroke="#25436E" stroke-width="2" fill="none" opacity="0.85"/>
+  <path d="M0 286 Q260 276 520 285 T1040 284 T1280 286" stroke="#1B3357" stroke-width="2" fill="none" opacity="0.7"/>
+
+  <g>
+    <ellipse cx="1035" cy="262" rx="70" ry="10" fill="#0A1A32"/>
+    <polygon points="1012,262 1058,262 1050,132 1020,132" fill="#122A49" stroke="#3A5A86" stroke-width="1.5"/>
+    <rect x="1018" y="176" width="34" height="14" fill="#C9552F"/>
+    <rect x="1016" y="214" width="38" height="14" fill="#C9552F"/>
+    <polygon points="1020,132 1050,132 1046,120 1024,120" fill="#0E2340" stroke="#3A5A86" stroke-width="1.2"/>
+    <rect x="1026" y="100" width="18" height="20" fill="#0B1D38" stroke="#4A6B98" stroke-width="1.2"/>
+    <circle cx="1035" cy="110" r="26" fill="url(#lantern)"/>
+    <circle cx="1035" cy="110" r="6" fill="#FFF2CC"/>
+    <polygon points="1026,100 1044,100 1035,86" fill="#12294A" stroke="#4A6B98" stroke-width="1.2"/>
+    <circle cx="1035" cy="84" r="2.4" fill="#FFD37A"/>
+  </g>
+
+  <text x="150" y="184" font-family="Georgia, 'Times New Roman', serif" font-size="92" fill="#F2E9D6" letter-spacing="3">Pharos</text>
+  <text x="153" y="224" font-family="Georgia, 'Times New Roman', serif" font-size="17" fill="#8CA3C4" letter-spacing="1.5">多格式 · agentic · 企业级 ACL 的自建 RAG</text>
+</svg>
