@@ -69,8 +69,7 @@ Windows 登录 ─► 启动文件夹 PharosWSL.vbs(静默保活 WSL,防空闲�
 ## 5. 备份 / 恢复(演练实录 2026-07-04)
 
 **要备份的全部状态**:`~/rag_real`(qdrant+sidecar)+ `~/pharos.keys.json` + **`.env`**
-(仓根 `pharos/.env`——`.gitignore` 忽略,git 恢复不回来,漏了它服务会 fail-closed 空跑 / ask 无 LLM key)
-+ git(代码/文档,单仓)。请求日志(~/pharos_logs)按需。
+(仓根 `pharos/.env`——`.gitignore` 忽略,git 恢复不回来,漏了它服务会 fail-closed 空跑 / ask 无 LLM key)+ git(代码/文档,单仓)。请求日志(~/pharos_logs)按需。
 
 ```bash
 sudo systemctl stop pharos                       # 单客户端锁:必须先停

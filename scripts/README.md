@@ -25,5 +25,5 @@ knowledge-base/  ──▶  选样 + 均衡 3 账号        ──▶   MinerU �
 
 ## 依赖
 
-`pip install -e .[parse]`(pypdf / requests / python-dotenv)。office 解析额外需 MinerU 源仓。
+`pip install -e '.[parse]'`(pypdf / requests / python-dotenv)。office 解析额外需 MinerU 源仓。
 `corpus/ parsed/ parsed_office/` 等大产物均 gitignored(可再生,留仓外)。

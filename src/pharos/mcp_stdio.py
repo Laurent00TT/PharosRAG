@@ -27,7 +27,6 @@ dense 模型(Qwen3-VL 8B,GPU)在**首次 retrieve 时 lazy 加载**(启动快,�
 """
 from __future__ import annotations
 
-import os
 
 from mcp.server.fastmcp import FastMCP
 

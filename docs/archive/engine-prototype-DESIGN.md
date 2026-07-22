@@ -1,7 +1,11 @@
 # 设计文档 — 结构感知 Chunking 系统
 
+> *归档件：本文由引擎原型仓原样迁入，保留原文不改。文中指向 `../analysis/CHUNKING_STRATEGY.md`
+> 与 `EVALUATION.md` 指的是原仓布局，那两份文档未随迁（已降级为纯文本以免点出 404）。当前版本见
+> [docs/components/chunker/](../components/chunker/) 与 [CHUNKING_EVALUATION.md](../methodology/CHUNKING_EVALUATION.md)。*
+
 > 目的：把 PDF → 可检索 chunk 的过程做成**可复用、可审核、可调**的工程系统。
-> 本文讲"为什么这么设计"；实施细节见 [IMPLEMENTATION.md](IMPLEMENTATION.md)；过程与依据见 [PROCESS_LOG.md](PROCESS_LOG.md)；策略依据见 [../analysis/CHUNKING_STRATEGY.md](../analysis/CHUNKING_STRATEGY.md)。
+> 本文讲"为什么这么设计"；实施细节见 [IMPLEMENTATION.md](engine-prototype-IMPLEMENTATION.md)；过程与依据见 [PROCESS_LOG.md](PROCESS_LOG.md)；策略依据见 `../analysis/CHUNKING_STRATEGY.md`。
 
 ---
 
@@ -93,7 +97,7 @@ parent chunk（`*.parents.jsonl`）：`parent_id, section_path, child_ids[], tex
 
 > **这就是留给你调的旋钮**：改 `CONFIG[doc_type]` 的三元组，或改 `assemble_text` 的合并逻辑（如允许跨相邻 section 合并、改用语义相似度切分），即可改变检索颗粒度，其余六步不受影响。
 
-**分类型预算 `CONFIG`（min/target/max，token）**：见 `scripts/chunk_document.py` 顶部；幻灯片/政策设为"整节不切"（一页/一节=一 chunk），其余依 [CHUNKING_STRATEGY.md §4](../analysis/CHUNKING_STRATEGY.md) 的 playbook。
+**分类型预算 `CONFIG`（min/target/max，token）**：见 `scripts/chunk_document.py` 顶部；幻灯片/政策设为"整节不切"（一页/一节=一 chunk），其余依 `CHUNKING_STRATEGY.md` §4 的 playbook。
 
 ---
 
@@ -122,7 +126,7 @@ parent chunk（`*.parents.jsonl`）：`parent_id, section_path, child_ids[], tex
 
 ## 8. 验证（against ground truth）
 
-不只靠抽样自检——用 MMDocIR 标注问题（43 篇重叠 / 356 问）量化"证据保全度"，详见 [EVALUATION.md](EVALUATION.md)。
+不只靠抽样自检——用 MMDocIR 标注问题（43 篇重叠 / 356 问）量化"证据保全度"，详见 `EVALUATION.md`。
 **坐标修复后**：证据保在**单 chunk 70.1%**（严阈值下相同→不依赖阈值）、split 22.5%、missing 7.4%、**asset 通道-kind 匹配 92.4%(any) / 83.2%(真资产严口径)**；答案串软召回 16.3%（仅参考，短词/改写假阴性高）。与策略难度排序自洽（academic/financial_report/government 较好）。
 该评估是**调旋钮的客观标尺**：改 `CONFIG`/`assemble_text` 后看 `single%↑ / split%↓ / missing%≈0`。
 **split 的正确解读**：research/brochure/slides 的 split 高，是"图+讨论文字"被资产原子化分到不同 chunk——属预期，parent-child 检索会重聚；它衡量"叶子层需回取 parent"，非"证据丢失"。

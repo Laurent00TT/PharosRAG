@@ -247,7 +247,7 @@ Tier1 基线一组数记住量级即可(deepseek 裁判,88 题,闭管道 single)
 
 ```bash
 cd projects/pharos
-pip install -e .[dev]                       # src-layout 可编辑安装
+pip install -e '.[dev]'                     # src-layout 可编辑安装
 python -m pytest tests -q --ignore=tests/engine   # 产品层:HTTP 服务/身份/会话/适配器
 python -m pytest tests/engine/test_generate.py tests/engine/test_tools.py -q  # 闭管道与工具面脚手架
 ```

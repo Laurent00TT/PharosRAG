@@ -2,7 +2,7 @@
 
 <img src="docs/assets/pharos-banner.svg" alt="Pharos —— 为团队的文档库导航" width="880">
 
-<br/>
+# Pharos
 
 ![Python](https://img.shields.io/badge/Python-3.10+-F5B84A?style=flat-square&labelColor=0B1E3A)
 ![RAG](https://img.shields.io/badge/RAG-agentic%20%2B%20闭管道-6FA8DC?style=flat-square&labelColor=0B1E3A)
@@ -18,7 +18,7 @@
 
 > 亚历山大灯塔守在亚历山大图书馆旁,为往来的航船指路。**Pharos 做的是同一件事,只不过照亮的是你团队的文档库。**
 
-这不是又一个切块玩具。每个关键决策背后都有实测撑着,也经过好几轮对抗评审来回推敲,如今已经在 77 篇真实文档、7652 个 chunk 上完整跑通。装起来只要一句 `pip install -e .[dev]`(src-layout,可编辑安装)。
+这不是又一个切块玩具。每个关键决策背后都有实测撑着,也经过好几轮对抗评审来回推敲,如今已经在 77 篇真实文档、7652 个 chunk 上完整跑通。装起来只要一句 `pip install -e '.[dev]'`(src-layout,可编辑安装)。
 
 ## 两个出口,同一套语义
 
@@ -64,7 +64,7 @@ docker compose --env-file .env.compose up -d --scale pharos=3   # 入口 http://
 
 ```bash
 conda activate pharos
-pip install -e .[dev]                          # src-layout,可编辑安装
+pip install -e '.[dev]'                        # src-layout,可编辑安装
 
 python -m pharos ask "库里关于 X 的内容有哪些?"   # 闭管道问答,答案带引用
 python -m pharos health
@@ -142,6 +142,7 @@ GPU 端到端的 0-leak 回归(`eval/acl_regression.py`,跑在 WSL + 4090)、并
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | **团队运维手册**:部署、密钥、容量实测、备份恢复、故障排查 |
 | [docs/SCALE_OUT.md](docs/SCALE_OUT.md) | 单机走到多副本(阶段 A–F):三层拆分、负载均衡、等价性验证 |
 | [docs/TESTING.md](docs/TESTING.md) | 测试矩阵加实测证据:单测、ACL 回归、GPU 冒烟、压测、演练、安全 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 往哪走、以及**明确不做**什么(附理由) |
 | [docs/COMPONENT_NOTES.md](docs/COMPONENT_NOTES.md) · [docs/PROVENANCE.md](docs/PROVENANCE.md) | 对既有组件的异议留痕、来历与口径断代 |
 
 组件级的设计与评估在 [docs/components/](docs/components/)(chunker / embedder / generator / mcp-server),方法论在 [docs/methodology/](docs/methodology/)。

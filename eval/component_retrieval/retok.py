@@ -3,7 +3,6 @@
 import glob
 import os
 import re
-import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

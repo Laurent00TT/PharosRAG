@@ -4,9 +4,11 @@
 # dense.py/rerank.py 运行时 sys.path.insert 加载它 —— 不是本仓代码,勿删(见 docs 不变量)。
 #
 # 安装(在 pharos):pip install -r requirements-gpu.txt
-# 或用 extra:pip install -e .[gpu]
+# 或用 extra:pip install -e '.[gpu]'
 
 torch>=2.8.0          # 必须 CUDA 版(cu128);conda/官方 index 装
 transformers>=4.57.0
 qwen-vl-utils>=0.0.14
 accelerate
+scipy                 # Qwen3-VL 加载经 transformers 的传递依赖
+einops                # rearrange;pytorch base 镜像不带

@@ -10,7 +10,7 @@
   python scripts/bench_embed.py --mode fastapi --url http://localhost:8900 --conc 1 8 16 32 --n 200
   # vLLM(:8000)
   python scripts/bench_embed.py --mode vllm    --url http://localhost:8000 --conc 1 8 16 32 --n 200 \
-      --model /home/tiantian/models/Qwen3-VL-Embedding-8B
+      --model ~/models/Qwen3-VL-Embedding-8B
 """
 from __future__ import annotations
 

@@ -7,7 +7,6 @@
 跑:conda activate pharos && python eval/index_eval_corpus.py
 """
 import os
-import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)   # 引擎包已 pip install -e . 安装,无需 sys.path 注入

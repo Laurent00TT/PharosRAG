@@ -29,7 +29,7 @@
 
 ### 读法 A · 系统学习(约 2 天)
 
-顺着"数据流"读,先建骨架,再逐层深入,最后收方法论。**每篇末尾的"动手实验"务必做 CPU 那档**(零 GPU、零网络,`pip install -e .[dev]` 即可)——RAG 是"手上过一遍才懂"的东西。
+顺着"数据流"读,先建骨架,再逐层深入,最后收方法论。**每篇末尾的"动手实验"务必做 CPU 那档**(零 GPU、零网络,`pip install -e '.[dev]'` 即可)——RAG 是"手上过一遍才懂"的东西。
 
 - **Day 1 · 引擎六环节**:[01 RAG 全景](01-rag-overview.md)(总纲,建立六环节地图)→ [02 解析与切块](02-parsing-chunking.md) → [03 检索与混合召回](03-retrieval.md) → [04 ACL 与安全](04-acl-security.md) → [05 生成与 Grounding](05-generation-grounding.md) → [06 Agentic 与 MCP](06-agentic-mcp.md)。
 - **Day 2 · 度量、服务、方法论**:[07 评估方法论](07-evaluation.md)(全套的"尺子",建议慢读)→ [08 服务化与架构](08-service-architecture.md) → [09 扩展性演进](09-scale-out.md) → [10 方法论与故事集](10-methodology-stories.md)(收束)。

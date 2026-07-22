@@ -1,7 +1,5 @@
 """Generator 单测(纯 CPU,MockLLM + fake retriever,duck typing 不依赖 embedder)。
 覆盖:引用解析、ACL 出口降级(context=None 用 hit.text)、grounding 退路(无 context)、越界引用丢弃。"""
-import os
-import sys
 
 
 from generator.generate import Generator

@@ -7,7 +7,7 @@
 
 ## 1. 这是什么
 
-Pharos 是一个**自包含单仓的多格式 agentic RAG 系统**:把 PDF / 扫描件 / docx / pptx / xlsx 变成**能问答、带企业级 ACL、可溯源引用**的本地知识库(本机 4090)。不是切块实验——每个关键决策都有实测背书,整套经过 88 题去偏评估 + 多轮对抗评审加固,并已在 77 篇真文档上跑通。检索引擎与面向小团队的部署形态(双出口 + 多身份 + 可观测 + systemd 托管)现已**合并在同一个仓库**里,一次 `pip install -e .[dev]` 装齐(src-layout,editable)。
+Pharos 是一个**自包含单仓的多格式 agentic RAG 系统**:把 PDF / 扫描件 / docx / pptx / xlsx 变成**能问答、带企业级 ACL、可溯源引用**的本地知识库(本机 4090)。不是切块实验——每个关键决策都有实测背书,整套经过 88 题去偏评估 + 多轮对抗评审加固,并已在 77 篇真文档上跑通。检索引擎与面向小团队的部署形态(双出口 + 多身份 + 可观测 + systemd 托管)现已**合并在同一个仓库**里,一次 `pip install -e '.[dev]'` 装齐(src-layout,editable)。
 
 **两种消费模式,共用同一检索引擎:**
 - **闭管道**(`generator` + DeepSeek):一问一答、确定性、可评估 —— **默认推荐**(评估证明它最好最省)。
@@ -114,13 +114,13 @@ Pharos 是一个**自包含单仓的多格式 agentic RAG 系统**:把 PDF / 扫
 
 **已落地(曾经的非目标)**:早期作为个人单用户引擎时,把 "HTTP 常驻 / 多会话守护" 列为**明确不做**。合仓成 Pharos 后这些正是当前形态——`pharos serve` HTTP 守护进程 + 团队多身份(D10)+ 可观测(D11)均**已完成**,不再是非目标。
 
-**仍明确不做(决策,非欠账,见 [TODO.md](TODO.md))**:跨文档综合提升(研究性难题、边际收益低)、MCP 取图工具(image_path 远端解不了)。
+**仍明确不做(决策,非欠账,见 [ROADMAP.md](ROADMAP.md))**:跨文档综合提升(研究性难题、边际收益低)、MCP 取图工具(image_path 远端解不了)。
 
 ## 文档地图
 
 ```
 docs/OVERVIEW.md                                 ← 本文(系统入口,新人先读)
-docs/{DESIGN,IMPLEMENTATION,API,OPERATIONS,TESTING,TODO}.md   设计 / 实现 / 接口 / 运维 / 测试 / 待办
+docs/{DESIGN,IMPLEMENTATION,API,OPERATIONS,TESTING,ROADMAP}.md  设计 / 实现 / 接口 / 运维 / 测试 / 路线图
 docs/{PROVENANCE,COMPONENT_NOTES}.md             溯源(来路/决策沿革)+ 组件笔记
 docs/methodology/{LAZY_HEADING_TREE_DESIGN,MULTIFORMAT_IMPL,CHUNKING_EVALUATION,REVIEW_PLAN}.md   方法论 + 评审计划
 docs/components/{chunker,embedder,generator}/*.md + components/mcp-server.md   组件文档

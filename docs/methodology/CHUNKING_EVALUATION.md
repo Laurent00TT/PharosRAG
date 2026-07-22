@@ -2,7 +2,7 @@
 
 > 不自说自话：拿数据集**自带的标注问题**检验"chunking 是否把证据保在可检索的单元里"。
 > 脚本 `scripts/eval_chunks.py`；结果 `analysis/eval_report.json` + `analysis/eval_by_doctype.csv`。
-> **本版数字为坐标 bug 修复后的结果**（旧版被坐标错配污染，见 §2 与 [PROCESS_LOG 阶段9](PROCESS_LOG.md)）。
+> **本版数字为坐标 bug 修复后的结果**（旧版被坐标错配污染，见 §2 与 [PROCESS_LOG 阶段9](../archive/PROCESS_LOG.md)）。
 
 ---
 
@@ -89,7 +89,7 @@ verdict 把"测量做不到"和"chunking 没做好"分开：
 ## 6. 局限（诚实记录）
 
 - **ground-truth 覆盖偏**：仅 43/77 篇（mmdocir 子集）有标注；**占比最大的 financial_research_zh(12篇) 及 policy/form/tech_report 完全未被证据保全评估**——它们的策略只经统计画像，未经检索验证。
-- **PAGE_CAP=50** → 41 题 out_of_range；长文档被头部截断，**"跨页/深层级"结论在被截断样本上不可下定论**（见 [PROCESS_LOG 阶段9 / 抽样局限](PROCESS_LOG.md)）。
+- **PAGE_CAP=50** → 41 题 out_of_range；长文档被头部截断，**"跨页/深层级"结论在被截断样本上不可下定论**（见 [PROCESS_LOG 阶段9 / 抽样局限](../archive/PROCESS_LOG.md)）。
 - **答案串召回 16.3% 不可信**：答案多为短词/数字/改写，子串匹配假阴性高 → **仅参考，不作为 chunking 指标**；严谨需 embedding/LLM 语义判定。
 - **law single=100% 来自单篇 mmdocir 文档**，未覆盖 pdf_corpus 法案里 F2(SEC 长正文)场景；law 的真实保全度需补该类 ground truth。
 - **scale 推导依赖文本配对**：无文本/纯扫描件无法推导 → 那些题计 unlocalized_zero。

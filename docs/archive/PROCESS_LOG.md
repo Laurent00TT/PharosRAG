@@ -1,5 +1,8 @@
 # 过程记录 — 从问题到策略到实现（审计追踪）
 
+> *归档件：本文由引擎原型仓原样迁入，保留原文不改。文中指向 `../analysis/CHUNKING_STRATEGY.md`
+> 与 `EVALUATION.md` 指的是原仓布局，那两份文档未随迁；正文一字未改，仅把这些指向降级为纯文本以免点出 404。*
+
 > 按时间线记录每个阶段的**输入、决策、发现、纠错、产出**，使整个结论链可复用、可审核。
 > 日期：2026-06-21。模型侧执行 + 用户决策点已标注。
 
@@ -76,7 +79,7 @@
 ## 阶段 6 — 跨文档分析
 
 `analyze_chunks.py` 逐文档算指标、按 14 类聚合。
-**核心定量发现**（详见 [../analysis/CHUNKING_STRATEGY.md](../analysis/CHUNKING_STRATEGY.md) §1 表）：
+**核心定量发现**（详见 `../analysis/CHUNKING_STRATEGY.md` §1 表）：
 - 噪声率 0→0.37；`discarded` 与 type 噪声几乎相等 → discarded 判定可信。
 - 编号可恢复率：academic 0.64 vs law 0.02 vs financial 0.04 → 层级恢复必须分领域。
 - 11/14 类正文块中位 < 75 token → 必须向上合并。
@@ -106,7 +109,7 @@
 
 动机：不自说自话，用数据集自带标注检验 chunking。
 对象：`mmdocir/MMDocIR_annotations.jsonl`，与样本**重叠 43 篇 / 356 问**（带 page+bbox+通道+答案）。
-方法：`source_indices` 作桥，证据 bbox→content_list 元素→chunk；详见 [EVALUATION.md](EVALUATION.md)。
+方法：`source_indices` 作桥，证据 bbox→content_list 元素→chunk；详见 `EVALUATION.md`。
 
 **两个测量 bug（按"诊断→修复→验证"处理，未把异常当结论）**：
 1. **通道匹配 0%**：标注 `type` 是字符串 `"['Figure']"` 非真列表，成员判断恒假 → 用 `ast.literal_eval` 解析。诊断证据：DIAG2 对 asset 问题零输出。
@@ -155,4 +158,4 @@
 
 ## 复现入口
 
-见 [IMPLEMENTATION.md §2](IMPLEMENTATION.md)。所有脚本确定性、可断点续跑。
+见 [IMPLEMENTATION.md §2](engine-prototype-IMPLEMENTATION.md)。所有脚本确定性、可断点续跑。

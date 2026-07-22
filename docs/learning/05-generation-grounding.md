@@ -279,7 +279,7 @@ print([c.marker for c in ans.citations])   # -> [1]:裸[1]不算、[cite:99]越�
 运行(仓库根,src-layout 需指路径;pytest 场景由根 conftest.py 自动注入):
 
 ```bash
-cd C:/Users/11541/Desktop/projects/pharos
+cd <pharos 仓根>
 PYTHONPATH=src python demo_inject.py
 ```
 

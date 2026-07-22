@@ -1,6 +1,4 @@
 """ACL 客户端逻辑单测(纯 CPU)。重点:空 tenant fail-closed(seal#1)+ admits 与 split 同语义 + RESTRICTED 默认拒绝。"""
-import os
-import sys
 
 
 from embedder.acl import acl_admits, acl_split

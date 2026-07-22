@@ -4,7 +4,6 @@ re-import 本模块当 __main__ 重跑整脚本(无限重入 + RuntimeError);并
 不起多进程 pool)。"""
 import json
 import os
-import sys
 import uuid
 
 EVAL = os.path.dirname(os.path.abspath(__file__))

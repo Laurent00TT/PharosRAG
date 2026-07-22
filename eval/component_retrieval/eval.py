@@ -2,7 +2,6 @@
 指标 MRR + Recall@10。同样必须 main()+if __name__ 保护(BGE-M3 多进程重入坑)+ bge-m3 锁单卡。"""
 import json
 import os
-import sys
 
 EVAL = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

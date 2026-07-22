@@ -1,6 +1,9 @@
 # 实施文档 — 运行、复现、扩展、审核
 
-> 面向"拿来就能跑、能改、能查"的操作手册。设计动机见 [DESIGN.md](DESIGN.md)。
+> *归档件：本文由引擎原型仓原样迁入，保留原文不改。所述脚本与路径属于原仓布局，
+> 当前版本见 [docs/components/chunker/](../components/chunker/)。*
+
+> 面向"拿来就能跑、能改、能查"的操作手册。设计动机见 [DESIGN.md](engine-prototype-DESIGN.md)。
 
 ---
 

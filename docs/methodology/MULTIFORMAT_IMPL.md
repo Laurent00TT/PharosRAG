@@ -153,7 +153,7 @@
 |---|---|
 | 表头盲取区首行(~33%错) | 找**真表头行**(首个多列 label-like 行);**多行表头**前向填充合并;**跨带表头继承**(续接数据带复用上一带表头) |
 | 标题/注释行被丢/当表头 | 表头前的标题/单位/注释行**单独发文本块**(永不丢,boe 目录全保留)→ 表头正确率 33%→~20%(残余多为"年份列头"误判) |
-| `|`→`/` 篡改真值 | 改 markdown 转义 `\|`(值保留),换行 `[\r\n]+`→空格 |
+| `\|`→`/` 篡改真值 | 改 markdown 转义 `\|`(值保留),换行 `[\r\n]+`→空格 |
 | 续接带更宽时丢列 | 续接用 `max(carried宽, 本带宽)`,multiset deficit 21134→**0** |
 | .xls 硬崩+静默漏 | chunk() 显式抛 `ValueError`;harness glob `*.xls*` 把失败计入 bad 显示 |
 | colgrp flag 算错 | 改记实际列区间 `cols:{first}-{last}` |
@@ -328,7 +328,7 @@
 ## 8. 待办
 
 - **图 alt-text/caption(跨格式真缺口)**:MinerU/自研/Tika 对嵌入图都只到邻近题注(≈1%),要拿图内语义得单独接视觉模型(Tika 能抽 docx 的 `wp:docPr@descr` alt——可移植)。
-- ~~benchmark Docling HybridChunker vs 自研 chunker core~~ ✅ **已做(2026-06,见 [EVALUATION.md §8](EVALUATION.md))**:Docling 在 MinerU 输出上证据保全崩盘(missing 3–5×)→ 不换;自研护城河是 source_indices 精确溯源等工程集成、**非边界算法**(纯边界 chonkie 略胜 71.6%→74.9%)。组件版重测确认 R1–R3 修复对证据保全无感(价值在 breadcrumb/检索语义)。
+- ~~benchmark Docling HybridChunker vs 自研 chunker core~~ ✅ **已做(2026-06,见 [EVALUATION.md §8](CHUNKING_EVALUATION.md))**:Docling 在 MinerU 输出上证据保全崩盘(missing 3–5×)→ 不换;自研护城河是 source_indices 精确溯源等工程集成、**非边界算法**(纯边界 chonkie 略胜 71.6%→74.9%)。组件版重测确认 R1–R3 修复对证据保全无感(价值在 breadcrumb/检索语义)。
 - table chunker round-2:legacy .xls 支持、多行/合并表头、图表 sheet 识别跳过、过切修正。
 - 自研 adapter(仅 fallback,优先级低):`_table_html` 递归嵌套表、内联 `w:sdt` 下钻。
 

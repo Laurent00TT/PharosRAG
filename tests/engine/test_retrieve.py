@@ -3,7 +3,6 @@
 同 anchor big-block 去重(lazy-tree review)、sidecar 版本绑定(写侧盖章 + 读侧不符响亮失败)。"""
 import json
 import os
-import sys
 import tempfile
 
 

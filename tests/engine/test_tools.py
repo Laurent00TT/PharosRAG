@@ -3,7 +3,6 @@ Batch1.A 起工具返回**结构化 dict**(非纯文本)。覆盖:结构化字�
 deduped 计数/score_kind/trust 标记(1.D)、入参校验(no_identity/empty_query/bad_arg fail-closed)、list。
 ACL 真过滤(跨租户 0)由 embedder/tests/test_store.py::test_list_documents_acl_scoped 覆盖。"""
 import os
-import sys
 from types import SimpleNamespace
 
 

@@ -1,6 +1,4 @@
 """BM25 sparse 单测(纯 CPU)。重点验精确串保留——选 BM25 的初衷。"""
-import os
-import sys
 
 
 from embedder.sparse import _tok_id, doc_sparse, query_sparse, tokenize

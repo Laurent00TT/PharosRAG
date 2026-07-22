@@ -14,11 +14,10 @@
 
 服务面覆盖:多身份鉴权(keys 模式,§D10)、请求日志与指标(§D11)、systemd 托管、备份恢复。
 
-**非目标**(明确不做,理由见 [TODO.md](TODO.md)):HTTPS/公网终结(内网信任边界 + key,要远程走隧道)、
+**非目标**(明确不做,理由见 [ROADMAP.md](ROADMAP.md)):HTTPS/公网终结(内网信任边界 + key,要远程走隧道)、
 SSO/OIDC、解析编排(MinerU 调用在本仓 `scripts/`)、前端 UI。
 （原非目标"水平扩展/多副本"已在阶段 A–F 交付:拆 GPU 推理层 + 应用脱 torch + Qdrant server + nginx 多副本,
-见 [SCALE_OUT.md](SCALE_OUT.md)。⚠ 下方 D1 "Qdrant server 换 url 即可"是**仅配置面**的简化——实际还需 store 三分支
-+ 全出口透传 + 数据迁移 + server-mode ACL 越权重测。）
+见 [SCALE_OUT.md](SCALE_OUT.md)。⚠ 下方 D1 "Qdrant server 换 url 即可"是**仅配置面**的简化——实际还需 store 三分支 + 全出口透传 + 数据迁移 + server-mode ACL 越权重测。）
 
 ## 2. 核心架构决策
 
@@ -52,7 +51,7 @@ HTTP 端点与 MCP 适配器的校验/结构化结果/去重/预算/错误映射
 ### D4:单仓自包含(path-dep 已作废)
 
 四个组件(chunker / embedder / generator / pharos)现已折入本仓 `src/`,src-layout 可编辑安装
-(`pip install -e .[dev]`),导入名不变。**历史**:早期 pharos 是薄产品壳、经 path-dep(sys.path 插引擎
+(`pip install -e '.[dev]'`),导入名不变。**历史**:早期 pharos 是薄产品壳、经 path-dep(sys.path 插引擎
 src)消费一个独立引擎仓——该跨仓接缝(含 `PHAROS_ENGINE` 定位、`bootstrap()`/版本守卫)**已随合仓拆除**。
 `engine.py` 现只是 `LockedRetriever` + `build_*`,走本仓普通包导入,不再有 sys.path 注入与跨仓漂移面。
 

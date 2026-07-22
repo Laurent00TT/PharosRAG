@@ -155,7 +155,7 @@ table/image/chart 各自成一个**原子 chunk**([src/chunker/core.py:372-402](
 2. **命中节 < target** → 沿 `parent_sec_id` 上爬;父节 > max 时改在父节范围内开窗,自然拉入相邻兄弟节内容(带 `seen` 集合防损坏 sidecar 的环形父指针死循环);
 3. **无 section** → 命中页邻域开窗(防无标题多页文档拉整篇);顶层仍 < min 则整篇开窗兜底。
 
-真实语料上**上爬是主路径而非兜底**:section 中位只有 42 token,过大裁窗只占 1%(77 篇实测);big-block 中位 818 token,贴着 target 800。`windowed=True` 标记"这是 token 受限窗口而非完整节"([src/chunker/types.py:107-122](../../src/chunker/types.py#L107-L122)),embedder 检索层把它映射成 `context_status="section_window"`([src/embedder/retrieve.py:172-182](../../src/embedder/retrieve.py#L172-L182)),agent 看到就知道可以对该 chunk_id 调 expand——上下文完不完整,从此不再是隐式的,而是 agent 能读、能据此决策的显式信号。
+真实语料上**上爬是主路径而非兜底**:section 中位只有 42 token,过大裁窗只占 1%(77 篇实测);big-block 中位 818 token,贴着 target 800。`windowed=True` 标记"这是 token 受限窗口而非完整节"([src/chunker/types.py:107-121](../../src/chunker/types.py#L107-L121)),embedder 检索层把它映射成 `context_status="section_window"`([src/embedder/retrieve.py:172-182](../../src/embedder/retrieve.py#L172-L182)),agent 看到就知道可以对该 chunk_id 调 expand——上下文完不完整,从此不再是隐式的,而是 agent 能读、能据此决策的显式信号。
 
 安全维度(big-block 按 idx 从原始 elements 重取材,会跨 chunk 边界——"同文档≠同 ACL")由 `acl_index` 等价类门控解决([src/chunker/retrieve.py:90-106](../../src/chunker/retrieve.py#L90-L106)、[src/chunker/types.py:93-104](../../src/chunker/types.py#L93-L104)),真语料实测泄漏 3/79→0/79。这条线的完整故事属于 ACL 篇,本篇只需记住:**查询期取材的每个元素都过了与命中块同 ACL 的等价类判定,未知 idx fail-closed 排除**——这个"未知 idx 排除"恰好埋下了 §4 的 chunker#0。
 
@@ -292,7 +292,7 @@ chunker#3 还有个设计哲学层面的看点:reset-aware 的设计初衷是"**
 **Lab 1:reset-aware 定级对照——同一批编号,重启 vs 单调两种命运**(CPU,~秒级)
 
 ```bash
-cd C:/Users/11541/Desktop/projects/pharos
+cd <pharos 仓根>
 python -m pytest -q tests/engine/test_core.py -k "reset or monotonic" -v
 ```
 
@@ -301,7 +301,7 @@ python -m pytest -q tests/engine/test_core.py -k "reset or monotonic" -v
 **Lab 2:幽灵表格块门控——亲手复现 chunk id 平移**(CPU,~秒级)
 
 ```bash
-cd C:/Users/11541/Desktop/projects/pharos
+cd <pharos 仓根>
 python -m pytest -q tests/engine/test_core.py -k "placeholder_table or table_retrieval_signal" -v
 ```
 

@@ -41,7 +41,7 @@ Chunker(target=None, min_tokens=None, max_tokens=None, budgets=None, page_groupe
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `idx` | int | 阅读序(0 起、连续) |
-| `kind` | str | `text|table|image|chart|list|header|footer|page_number` |
+| `kind` | str | `text\|table\|image\|chart\|list\|header\|footer\|page_number` |
 | `text` | str? | 正文/标题文本 |
 | `text_level` | int? | parser 给的标题级别提示 |
 | `page` | int | 页号 |
@@ -58,14 +58,14 @@ Chunker(target=None, min_tokens=None, max_tokens=None, budgets=None, page_groupe
 | 字段 | 说明 |
 |---|---|
 | `chunk_id` | `<doc_id>#0007` |
-| `doc_id` / `kind` / `lang` | `kind ∈ text|table|image|chart` |
+| `doc_id` / `kind` / `lang` | `kind ∈ text\|table\|image\|chart` |
 | `text` | **嵌入这个** |
 | `content_raw` | 资产生成负载(表 HTML / VLM 内容);文本为 None |
 | `breadcrumb` / `section_path` | 祖先标题链 / `" > "` 拼接 |
 | `section_id` / `section_anchor` | 所属节 id / `[start_idx, end_idx]`(供 small-to-big) |
 | `page_start` / `page_end` | 页范围 |
 | `source_indices` | 来源 Element idx 列表(可溯源) |
-| `n_tokens` / `trust` | 估算 token / `high|low` |
+| `n_tokens` / `trust` | 估算 token / `high\|low` |
 | `flags` | text/图:`captionless` / `vlm_content` / `image_only`(纯图,走图像向量、跳稀疏路) / `multi_page` / `merge_prev_stitched`;table 另有 `nontabular` / `header_only` / `chart_meta` / `cols:N-M` / `sheet:X` |
 | `doc_meta` | 文档级 metadata dict(title/source/date/doc_type/...);payload 过滤+引用 |
 | `acl` | 访问策略 dict(安全;硬过滤 + fail-closed `RESTRICTED_ACL` 默认) |

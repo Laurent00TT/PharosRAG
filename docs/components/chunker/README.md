@@ -52,7 +52,7 @@ big = Chunker().assemble_big(hit_chunk, result, elements)         # ④ 查询�
 | **输出** | `ChunkResult(chunks, sections)` | 本组件 |
 | **检索 helper** | `assemble_big(hit, result, elements) -> BigBlock` | 本组件(查询期) |
 
-→ parse 将来组件化时,只需让它吐 `Element[]` 或写个新适配器(见 [`docs/INTEGRATION.md`](docs/INTEGRATION.md)),**核心与检索 helper 全部复用**。
+→ parse 将来组件化时,只需让它吐 `Element[]` 或写个新适配器(见 [`docs/INTEGRATION.md`](INTEGRATION.md)),**核心与检索 helper 全部复用**。
 
 ## 目录结构
 
@@ -81,4 +81,4 @@ chunker/
 
 ## 诚实定位
 
-定级质量**取决于 parser 的 `text_level` 有多干净**,不取决于 doc_type:parser 给对(干净学术/规范)→ 精确层级、breadcrumb 准;parser 压平但编号单调(深度报告)→ reset-aware 恢复章节;parser 压平且编号循环(周报、封面密集中文研报)→ 诚实退化为"单根 + 扁平 L2"的通用大小切块,**不要指望章节嵌套**。三轮对抗审核(0 refuted)、格式范围与边界详见 [`docs/ARCHITECTURE.md` §7 / §格式 / §适用边界](docs/ARCHITECTURE.md)。
+定级质量**取决于 parser 的 `text_level` 有多干净**,不取决于 doc_type:parser 给对(干净学术/规范)→ 精确层级、breadcrumb 准;parser 压平但编号单调(深度报告)→ reset-aware 恢复章节;parser 压平且编号循环(周报、封面密集中文研报)→ 诚实退化为"单根 + 扁平 L2"的通用大小切块,**不要指望章节嵌套**。三轮对抗审核(0 refuted)、格式范围与边界详见 [`docs/ARCHITECTURE.md` §7 / §格式 / §适用边界](ARCHITECTURE.md)。

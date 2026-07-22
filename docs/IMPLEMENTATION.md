@@ -19,7 +19,7 @@ src/pharos/
   cli.py          serve / mcp / index / ask / health
   identity.py     多身份(D10):keys 文件解析/生成(fail-closed 校验)/身份 dataclass
   obs.py          可观测(D11):Stats(端点计数+延迟分位)+ RequestLog(JSONL,截断在本层)
-src/{chunker,embedder,generator}/  三个组件包(pip install -e .[dev],src-layout 可编辑安装)
+src/{chunker,embedder,generator}/  三个组件包(pip install -e '.[dev]',src-layout 可编辑安装)
 tests/            179 项(产品 59 + 引擎 120 在 tests/engine/);_fakes.py 提供 FakeRetriever/make_app
 ```
 
@@ -76,7 +76,7 @@ instructions 单一来源于 toolcore._INSTRUCTIONS;适配器与 mcp_stdio 的�
 
 ## 4. 组件装配(全部收在 engine.py)
 
-组件(chunker/embedder/generator)与 toolcore 都是同仓包,`pip install -e .[dev]` 后普通 import;
+组件(chunker/embedder/generator)与 toolcore 都是同仓包,`pip install -e '.[dev]'` 后普通 import;
 engine.py 只做工厂装配,不再有跨仓接缝。
 
 | 装配点 | 方式 | 断裂时表现 |

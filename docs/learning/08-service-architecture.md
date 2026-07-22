@@ -225,7 +225,7 @@ F-2 端到端实测(3 副本 + nginx):轮询分发 6/6/7 近均匀;持续 50 请
 
 ### Lab 1(CPU):起一个 fake 后端守护进程,亲手观察 D6/D7
 
-整个服务层可注入 fake retriever,无 GPU/网络即可完整跑起来。前置:仓库开发环境(`pip install -e .[dev]`;仓库标准环境为 WSL `conda activate pharos`,Windows 侧装齐依赖亦可)。
+整个服务层可注入 fake retriever,无 GPU/网络即可完整跑起来。前置:仓库开发环境(`pip install -e '.[dev]'`;仓库标准环境为 WSL `conda activate pharos`,Windows 侧装齐依赖亦可)。
 
 ```bash
 cd <repo>/tests

@@ -1,6 +1,4 @@
 """Unit tests for the spreadsheet table chunker (Strategy A). Builds tiny .xlsx in a temp dir."""
-import re
-import sys
 from pathlib import Path
 
 import pytest

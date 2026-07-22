@@ -1,7 +1,7 @@
 # embedder/examples/eval — 检索质量评估(BM25 vs BGE-M3 + RRF 权重)
 
 embedder 的"质量封板":用真实语料构造检索评估基准,数据定 sparse 选型 + RRF 权重。
-手动跑(GPU + Qwen3-VL + BGE-M3 模型 + `parsed/` 真实数据,非 CI)。脚本 `REPO`=pharos 仓根(__file__ 相对);引擎包已随 pharos 安装。
+手动跑(GPU + Qwen3-VL + BGE-M3 模型 + `parsed/` 真实数据,非 CI)。脚本 `REPO`=pharos 仓根(`__file__` 相对);引擎包已随 pharos 安装。
 
 ## 流程
 

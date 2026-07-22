@@ -2,7 +2,6 @@
 复用已 index 的 eval qdrant + chunks。main() 保护(GPU 习惯)。"""
 import json
 import os
-import sys
 
 EVAL = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

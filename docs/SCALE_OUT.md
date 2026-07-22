@@ -110,7 +110,7 @@
 - [DESIGN.md](DESIGN.md) D1 否决备选:"Qdrant server 模式…这是 v2 的自然升级路径(EmbedConfig 换 url 即可)"
   ← **阶段 D 展开。⚠ 批注:"换 url 即可"仅指配置面**;实际还需 `store.py` 三分支 + `engine.py` 透传 +
   数据迁移 + **ACL server 模式重测(Q2)** —— 后两块最重,D1 的措辞过度简化了(§9 需纠正)。
-- [TODO.md](TODO.md) v2 方向:"Qdrant server 化后才谈得上多 pharos 副本" ← **阶段 D→F 兑现**
+- [ROADMAP.md](ROADMAP.md) v2 方向:"Qdrant server 化后才谈得上多 pharos 副本" ← **阶段 D→F 兑现**
 
 落地完成后需回填这些文档(见 §9)。
 
@@ -524,8 +524,8 @@ inference 失败模式 4 字段无 `PHAROS_*` env → PharosConfig 补 4 字段 
 
 **跑法:**
 ```bash
-# ⚠ 必须从 WSL 内跑(bind mount 是 /home/tiantian 原生路径)+ Docker Desktop 对 Ubuntu 开 WSL Integration,
-#   否则 /home/tiantian/models 挂载解析错、inference warmup 报 ModuleNotFoundError(见附:环境前置)。
+# ⚠ 必须从 WSL 内跑(bind mount 是 /home/<you> 原生路径)+ Docker Desktop 对 Ubuntu 开 WSL Integration,
+#   否则 /home/<you>/models 挂载解析错、inference warmup 报 ModuleNotFoundError(见附:环境前置)。
 docker compose --env-file .env.compose up -d --build --scale pharos=3   # 3 副本 + nginx
 # 入口是 nginx:8080(pharos 副本不发布宿主端口)
 curl -s -XPOST localhost:8080/v1/retrieve -H "X-API-Key: <key>" -d '{"query":"..."}'   # 轮询 3 副本
@@ -551,9 +551,9 @@ docker kill $(docker compose ps -q pharos | head -1)
   "人为停止",`unless-stopped` 只自愈**真崩溃**(进程自己异常退出)。诚实订正 OPERATIONS 的"自动拉起"措辞:
   kill 无感靠 nginx failover(客户端 0 感知),被 kill 副本需 `up --scale` 补回;要"任何退出都自愈"用 `restart: always`。
 
-> **环境前置(踩了整整一轮)**:compose bind mount 源是 WSL ext4 原生路径(`/home/tiantian/models` 等)。**必须从 WSL 终端内
+> **环境前置(踩了整整一轮)**:compose bind mount 源是 WSL ext4 原生路径(`/home/<you>/models` 等)。**必须从 WSL 终端内
 > 跑 compose**,且 Docker Desktop 要对 Ubuntu 发行版**开 WSL Integration**(Settings→Resources→WSL Integration)。否则从 Windows
-> 跑,引擎把 `/home/tiantian/...` 解析到 docker-desktop 发行版(空)→ 容器看得到部分文件却缺 `scripts/` 子目录 → inference
+> 跑,引擎把 `/home/<you>/...` 解析到 docker-desktop 发行版(空)→ 容器看得到部分文件却缺 `scripts/` 子目录 → inference
 > warmup 报 `ModuleNotFoundError: No module named 'qwen3_vl_embedding'` → `depends_on:service_healthy` 令整个 up 卡死。
 > 排查特征:WSL 主机 `ls ~/models/.../scripts` 明明有,但容器内缺 → 挂载解析问题,非模型缺失。
 
@@ -628,7 +628,7 @@ Plan B 并存 + go/no-go 探针就位,等价/吞吐过门才升 Plan A**;inferen
 ## 9. 落地后需回填的文档
 
 - [DESIGN.md](DESIGN.md) §1 非目标:移除"水平扩展/多副本";D1 **纠正"换 url 即可"**为"配置面换 url,另需 store 三分支 + 数据迁移 + ACL server 重测";`:166` 测试基数 **179 → 与实测对齐**
-- [TODO.md](TODO.md) v2 方向:"Qdrant server / 多副本"从候选移到已交付;同样纠正"换 url 即可"
+- [ROADMAP.md](ROADMAP.md) v2 方向:"Qdrant server / 多副本"从候选移到已交付;同样纠正"换 url 即可"
 - [OPERATIONS.md](OPERATIONS.md):补推理服务运维(启动/预热/失败降级/重试语义)、多副本运维(滚更/单副本故障/大锁边界)
 - [README.md](../README.md):架构图改画"应用层无 GPU 多副本 + 独立推理服务"
 - [TESTING.md](TESTING.md):补 remote 测试矩阵 + 等价性 gate + server-mode ACL 测试

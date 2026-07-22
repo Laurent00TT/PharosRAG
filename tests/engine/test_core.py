@@ -1,6 +1,5 @@
 """Unit tests on the bundled fixture (no external data). Run: pytest -q"""
 import json
-import sys
 from pathlib import Path
 
 

@@ -1,6 +1,4 @@
 """PromptBuilder 单测(纯 CPU)。"""
-import os
-import sys
 
 
 from generator.prompt import PromptBuilder

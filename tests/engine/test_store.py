@@ -1,8 +1,6 @@
 """Qdrant store + ACL 硬过滤单测(:memory: 嵌入式,假 dense + 真 BM25 sparse,纯 CPU)。
 重点:ACL fail-closed —— 跨租户/无权/unset 文档绝不被检索到。"""
-import os
 import random
-import sys
 
 
 from qdrant_client import models
