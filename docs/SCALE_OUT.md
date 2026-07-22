@@ -630,7 +630,7 @@ Plan B 并存 + go/no-go 探针就位,等价/吞吐过门才升 Plan A**;inferen
 - ✅ [DESIGN.md](DESIGN.md) §1 非目标:移除"水平扩展/多副本";D1 **纠正"换 url 即可"**为"配置面换 url,另需 store 三分支 + 数据迁移 + ACL server 重测";测试基数已收敛到 [TESTING.md §1](TESTING.md) 单一来源
 - [ROADMAP.md](ROADMAP.md) v2 方向:"Qdrant server / 多副本"从候选移到已交付;同样纠正"换 url 即可"
 - [OPERATIONS.md](OPERATIONS.md):补推理服务运维(启动/预热/失败降级/重试语义)、多副本运维(滚更/单副本故障/大锁边界)
-- [README.md](../README.md):架构图改画"应用层无 GPU 多副本 + 独立推理服务"
+- [README.zh.md](../README.zh.md):架构图改画"应用层无 GPU 多副本 + 独立推理服务"
 - [TESTING.md](TESTING.md):补 remote 测试矩阵 + 等价性 gate + server-mode ACL 测试
 
 ---
