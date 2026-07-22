@@ -252,7 +252,7 @@ per-session 去重(已交付的段落下次只回指针)是便利功能,但在�
 
 ### Lab 1(CPU):亲手复现"嵌入式 fusion 丢 should"的 fail-open
 
-前置:仓库已 `pip install -e .`(需要 qdrant-client、jieba;WSL 下 `conda activate navikb`)。原理见 §2.2;脚本用 :memory: 库、随机 dense 向量(不需要 GPU/模型),五个 point 覆盖 public/受限/跨租户/unset 四类 ACL:
+前置:仓库已 `pip install -e .`(需要 qdrant-client、jieba;WSL 下 `conda activate pharos`)。原理见 §2.2;脚本用 :memory: 库、随机 dense 向量(不需要 GPU/模型),五个 point 覆盖 public/受限/跨租户/unset 四类 ACL:
 
 ```bash
 python - <<'PY'
@@ -311,10 +311,10 @@ python -m pytest -q tests/test_team.py -v
 
 ### Lab 3(GPU/WSL):端到端 ACL 回归,含"禁出口闸"隔离段
 
-前置:WSL + `conda activate navikb`(需要 Qwen3-VL 模型与 4090,脚本会现建 2 租户合成库、真向量灌入):
+前置:WSL + `conda activate pharos`(需要 Qwen3-VL 模型与 4090,脚本会现建 2 租户合成库、真向量灌入):
 
 ```bash
-conda activate navikb && python eval/acl_regression.py
+conda activate pharos && python eval/acl_regression.py
 ```
 
 **预期**:65 断言全过,退出码 0。重点看第 5 段输出——`[禁出口闸]` 前缀的断言在 `acl_admits` 被打成恒 True 后仍 0 泄漏,这就是 §2.6 讲的"证明第一道防线自身有效"。

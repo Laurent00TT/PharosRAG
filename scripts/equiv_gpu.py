@@ -1,7 +1,7 @@
 """GPU 等价性端到端实测(阶段B go/no-go,docs/SCALE_OUT.md §5-B)。证明 local 建库向量 == remote 查询向量。
 
 **分时跑**(避 OOM:inference 2×8B 占 4090 ~33GB,local Dense 再要 16GB,双加载爆显存):
-  1) 起推理服务:   conda activate navikb && python -m embedder.inference_server   # 127.0.0.1:8900
+  1) 起推理服务:   conda activate pharos && python -m embedder.inference_server   # 127.0.0.1:8900
   2) remote 存档:  python scripts/equiv_gpu.py --step remote   # remote encode/query/rerank -> /tmp/equiv_remote.npz
   3) 停推理服务(释放 GPU)
   4) local 对比:   python scripts/equiv_gpu.py --step local    # local vs 存档 -> E1/E3 GO/NO-GO

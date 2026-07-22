@@ -254,10 +254,10 @@ python -m pytest tests/engine/test_generate.py tests/engine/test_tools.py -q  # 
 
 然后读 [tests/_fakes.py](../../tests/_fakes.py):`FakeRetriever` 用 duck-typing 对齐真 `embedder.Retriever` 的方法面,`make_hit`/`make_res` 伪造命中与 big-block。**练习**:改 `make_res` 的 `status` 为 `section_window`,跑 `tests/test_service.py`,观察 toolcore 如何把 context_status 透传给 agent——这就是 2.4 节状态机的可触摸版本。
 
-### 实验 2(GPU/WSL,前置:WSL `navikb` 环境 + 4090 + 已建索引 `~/rag_real`):走一遍真生命线
+### 实验 2(GPU/WSL,前置:WSL `pharos` 环境 + 4090 + 已建索引 `~/rag_real`):走一遍真生命线
 
 ```bash
-conda activate navikb
+conda activate pharos
 python -m pharos health                      # 确认守护进程在(systemd 托管)
 python -m pharos ask "库里关于 X 的内容有哪些?"   # 闭管道:观察 citations 与 finish_reason
 ```

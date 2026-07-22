@@ -4,7 +4,7 @@
 为何"问题从单 chunk 生成":让 golden_chunk_id 无歧义 —— 问题就该被这段回答,citation/retrieval recall 可程序化判定,
 免人工标注。代价是问题偏单跳事实型(测不出多跳),这正是 run_eval --mode agentic 双层归因要补的盲区。
 
-用法:conda activate navikb && python eval/gen_gold.py [--per-doc 6]
+用法:conda activate pharos && python eval/gen_gold.py [--per-doc 6]
 """
 from __future__ import annotations
 

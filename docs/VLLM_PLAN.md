@@ -43,7 +43,7 @@ GPU 利用率和吞吐拉上去;但**前提是 vLLM 出的向量与现有库(官
 | D | vLLM 返回**已归一化**向量(notebook 直接 `emb @ emb.T` 不再 normalize) | 官方 notebook | 与本地 `F.normalize` 对齐,无需二次归一 |
 | E | **image/video 预处理 vLLM 与官方不同**(`qwen_vl_utils` vs transformers `video_processing_qwen3_vl`)→ 结果"略有差异" | vLLM/Qwen 文档明确警告 | **只影响 image 路径**;而 image 编码是**建库专用、走 local torch**(D4/D5),**查询路径纯文本 → 不受影响**。这恰好把 vLLM 的最大等价风险挡在方案之外 |
 | F | Reranker 是 `Qwen3-VL-Reranker`(yes/no logits + sigmoid),vLLM 的 score/rerank 对它的支持**未确认** | 未查到权威确认 | **Reranker 先不迁 vLLM**;rerank 是降级安全项(失败→hybrid),留 torch,零风险(见 §5 Phase 1) |
-| G | 本机 `vllm` conda env 已装 **vLLM 0.22.1 / torch 2.11+cu130 / transformers 5.10.2** | `conda activate vllm` 实测 | 可本地直接跑 G0/G1;⚠ 与建库用的 navikb(transformers 4.57)版本不同 → 数值可能微漂,G1 要量化 |
+| G | 本机 `vllm` conda env 已装 **vLLM 0.22.1 / torch 2.11+cu130 / transformers 5.10.2** | `conda activate vllm` 实测 | 可本地直接跑 G0/G1;⚠ 与建库用的 pharos(transformers 4.57)版本不同 → 数值可能微漂,G1 要量化 |
 
 **方案可行性初判(依据上表,非实测)**:文本查询路径 **G0 大概率可行、G1 有较大概率过**(同 pooling/normalize + 官方
 input 格式可照抄 + image 差异被挡在查询路径外);主要不确定性在 **transformers 版本差 + bf16 数值** 上,须 G1 量化。
@@ -89,7 +89,7 @@ input 格式可照抄 + image 差异被挡在查询路径外);主要不确定性
 | 门 | 判据 | 怎么测 | 不过的后果 |
 |---|---|---|---|
 | **G0 可行** | vLLM 在 pooling 模式加载 Qwen3-VL-Embedding-8B,`/v1/embeddings` 出 4096 维向量 | `vllm serve ... --runner pooling`(或 `LLM(runner="pooling")`)起服务,curl 一条文本 | vLLM 这条路直接断,方案作废(回退 FastAPI) |
-| **G1 向量等价** ⭐ | 同批文本(中英/长短/带 instruction),`cosine(vLLM, 官方 Qwen3VLEmbedder) > 0.9999`,且 norm≈1 | `scripts/vllm_equiv_probe.py`(见 §7):navikb 出官方向量存档 → 停 → vllm 出向量 → 比 cosine(分时,免 OOM) | 现有库(官方建)**不能被 vLLM 查**(向量漂移→top-k 错位,静默数据损坏)。出路二选一:①精确对齐 input 格式/transformers 版本再测;②接受 vLLM 只在**全库用 vLLM 重建**后用(大迁移) |
+| **G1 向量等价** ⭐ | 同批文本(中英/长短/带 instruction),`cosine(vLLM, 官方 Qwen3VLEmbedder) > 0.9999`,且 norm≈1 | `scripts/vllm_equiv_probe.py`(见 §7):pharos 出官方向量存档 → 停 → vllm 出向量 → 比 cosine(分时,免 OOM) | 现有库(官方建)**不能被 vLLM 查**(向量漂移→top-k 错位,静默数据损坏)。出路二选一:①精确对齐 input 格式/transformers 版本再测;②接受 vLLM 只在**全库用 vLLM 重建**后用(大迁移) |
 | **G2 混建混查** ⭐ | 官方建的真库,vLLM 编码查询,~50 条真 query 的 top-k `chunk_id` 序与"官方查"完全一致 | 起 vLLM 适配器 + 指向真库,对拍官方 encode 的 top-k(同阶段B E2 方法) | 逐元素等价**不蕴含** top-k 不变(HNSW 近似 + RRF rank 放大微差)。不过则**不上生产**(同 E2 铁律) |
 | **G3 reranker**(可选) | vLLM 对 Qwen3-VL-Reranker score 与官方 `allclose` | 若 Phase 2 才做;Phase 1 跳过(reranker 留 torch) | 不过就**不迁 reranker**,只迁 embed(rerank 降级安全,零损失) |
 | **G4 吞吐**("效果好"判据) | 并发 C∈{16,32,64} 下,vLLM 的 QPS / p50 / p95 **显著优于** FastAPI(串行 gpu_lock);单请求延迟不劣化 | `scripts/bench.py` 扩并发档,分别打 FastAPI 和 vLLM 适配器,同一批 query | vLLM 不比串行快(低并发时可能更差)→ **不升 Plan A**,留 Plan B 备规模;诚实记录 |
@@ -104,7 +104,7 @@ input 格式可照抄 + image 差异被挡在查询路径外);主要不确定性
 | **G0 可行** | ✅ **GO** | vLLM 0.22.1 `LLM(runner="pooling", max_model_len=8192)` 成功加载 Qwen3-VL-Embedding-8B,`llm.embed()` 出 **4096 维、已归一(norm=1.00000)** 向量。**架构完全支持** |
 | **G1 向量等价** | ⚠ **边缘** | 8 样本(中英/长短)cosine 全在 **[0.99956, 0.99982]**,min **0.99956** / mean **0.99973**。方向高度一致(最差约 1.7° 夹角),但**未达严格 >0.9999** |
 
-**微漂根因(诊断,未定论)**:头号嫌疑 **transformers 版本差**——库是 navikb **4.57.6** 建的,vLLM 环境是 **5.10.2**,
+**微漂根因(诊断,未定论)**:头号嫌疑 **transformers 版本差**——库是 pharos **4.57.6** 建的,vLLM 环境是 **5.10.2**,
 两版 Qwen3-VL 前向数值实现不同;其次 bf16 kernel 差异。最短文本("a")cosine 最低(0.99956),符合"短序列放大逐 token 数值差"。
 
 **这算过还是不过?** —— **不是看这个 cosine 数字拍板,是看 G2**:0.9997 的对齐对绝大多数查询 top-k 稳定(微漂远小于
@@ -191,14 +191,14 @@ G4 赢 → vLLM 升 Plan A(默认 profile 切 vllm);否则留 Plan B。
 
 ## 7. go/no-go 探针脚本(Phase 0,已就位)
 
-`scripts/vllm_equiv_probe.py`(见仓库):分时跑,`--step official` 用 navikb 出官方向量存档,`--step vllm` 用 vllm env
+`scripts/vllm_equiv_probe.py`(见仓库):分时跑,`--step official` 用 pharos 出官方向量存档,`--step vllm` 用 vllm env
 出 vLLM 向量并对比 cosine。**关键**:input 格式严格照 §2-C(chat 模板 + `add_generation_prompt=True` + 同 instruction),
 否则假阴。跑法:
 ```bash
 # 0) 腾 GPU
 docker compose --env-file .env.compose stop inference
-# 1) 官方向量存档(navikb)
-conda activate navikb && python scripts/vllm_equiv_probe.py --step official --out /tmp/vllm_probe
+# 1) 官方向量存档(pharos)
+conda activate pharos && python scripts/vllm_equiv_probe.py --step official --out /tmp/vllm_probe
 # 2) vLLM 向量 + 比对(vllm env)
 conda activate vllm    && python scripts/vllm_equiv_probe.py --step vllm     --out /tmp/vllm_probe
 # 输出:每条 cosine + max/min/mean;min cosine>0.9999 = G1 GO

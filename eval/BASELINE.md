@@ -5,7 +5,7 @@
 ## Tier1(DeepSeek 自判,仓内可复现)
 
 - **配置**:`--mode single --judge deepseek --smart-tables`,gold 88 题(散文 72 + 表格 16),eval 库 `~/rag_eval_big`(collection `evalbig`,15 篇 / 1409 chunk)。
-- **复现于**:引擎折入 pharos 单仓后(`master`,合并提交 `b6fe69d`),2026-07-05,WSL navikb / RTX 4090。
+- **复现于**:引擎折入 pharos 单仓后(`master`,合并提交 `b6fe69d`),2026-07-05,WSL pharos / RTX 4090。
 
 | 指标 | 本次(单仓 master) | 迁移前权威基线 | Δ |
 |---|---|---|---|

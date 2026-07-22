@@ -4,7 +4,7 @@
 选型:academic_paper(en,NLP 簇,结果表)/ financial_research_zh(ch,研报,表格密集)/ financial_report_en(en,财报)。
 双语言 + 两类强表格内容 → 同时压"表格数值 grounding"瓶颈和"多跳/跨文档"评估。
 
-跑:conda activate navikb && python eval/index_eval_corpus.py
+跑:conda activate pharos && python eval/index_eval_corpus.py
 """
 import os
 import sys

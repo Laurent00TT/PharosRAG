@@ -56,7 +56,7 @@ single_chunk/already_returned…)决定要不要 expand/get_document。**更强�
 
 ## 接入 Claude Code(stdio 直连,无守护进程时用)
 
-本服务跑在 WSL `navikb`(需 GPU + `pip install -e .[gpu]`)。Claude Code(Windows)经 `wsl` 起 `pharos mcp --direct`。
+本服务跑在 WSL `pharos`(需 GPU + `pip install -e .[gpu]`)。Claude Code(Windows)经 `wsl` 起 `pharos mcp --direct`。
 项目根 `.mcp.json` 默认接**守护进程**(`pharos mcp` 薄适配器,推荐);下例是 **stdio 直连**降级配置(想不起守护进程直接试玩用它):
 
 ```json

@@ -1,5 +1,5 @@
 # GPU 推理服务镜像(阶段 E,docs/SCALE_OUT.md §5-E)。
-# 基于官方 pytorch 镜像:torch 2.8.0+cu128 已预装,与本机 navikb 同版本(等价性稳)。
+# 基于官方 pytorch 镜像:torch 2.8.0+cu128 已预装,与本机 pharos 同版本(等价性稳)。
 # 关键:免掉在 build 内从 download.pytorch.org 下 ~5GB torch —— 实测本机代理下仅 ~368KB/s(要数小时);
 #       base 经 daocloud 镜像拉(~2-3GB,分钟级)。大模型仍不进镜像,compose 外挂 /root/models。
 FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime

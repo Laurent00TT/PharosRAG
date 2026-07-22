@@ -8,7 +8,7 @@
 > 本文把 [DESIGN.md](DESIGN.md) 标为**非目标(v2)** 的"水平扩展/多副本"具体化为可执行的**六阶段落地计划**。
 >
 > **落地纪律**:先提案后改、每阶段可独立验证、"已修"须附复现命令 + 改动前后实测对比。
-> **环境前置(所有验证命令的先决)**:WSL `conda activate navikb && cd <repo> && pip install -e '.[dev]'`。
+> **环境前置(所有验证命令的先决)**:WSL `conda activate pharos && cd <repo> && pip install -e '.[dev]'`。
 > 未装齐核心依赖(jieba/qdrant-client 等)直接 `pytest` 会 **collection error**,不是真失败。
 
 ---
@@ -97,7 +97,7 @@
 ### 1.3 约束(不可违反)
 
 1. **向后兼容**:`inference_url` 空 = local(进程内 GPU),默认行为**零改动**。回归基线 = 当前 CPU 测试套件全绿
-   (基数以 navikb 环境 `pytest tests` 实测为准;`grep -c 'def test_'` = 185,含 4 个 remote 骨架测试 →
+   (基数以 pharos 环境 `pytest tests` 实测为准;`grep -c 'def test_'` = 185,含 4 个 remote 骨架测试 →
    "local 零破坏"应扣除这 4 个,即 181;⚠ [DESIGN.md](DESIGN.md):166 记的是 "179 passed",两处需对齐,见 §9)。
 2. **引擎改动最小**:靠依赖注入 + 工厂(`make_dense`/`make_reranker`),不改 local 代码路径。
 3. **等价性**:local 与 remote 产出的**最终检索向量数学等价** —— 同一个库能 local 建、remote 查,不错位。
@@ -304,10 +304,10 @@ S6b(退避系数)。**遗留 M1(高·并发)**:remote 重试退避在检索大�
 - 新增 `tests/engine/test_equivalence_gpu.py`(`skipif` 无 GPU 自动跳过;只需 local 模型对同一真 bf16 全维跑 torch/numpy
   两条截维路径,不起服务、不 OOM)。端到端(起服务混建混查)分时脚本见 scratchpad,命令记于完成状态。
 
-**怎么跑(可照抄;须 navikb 的 CUDA torch,非默认 CPU torch)**:
+**怎么跑(可照抄;须 pharos 的 CUDA torch,非默认 CPU torch)**:
 ```bash
 # 1) 起推理服务(占 GPU,后台预热 1-2 分钟)
-conda activate navikb && python -m embedder.inference_server &   # 默认 0.0.0.0:8900
+conda activate pharos && python -m embedder.inference_server &   # 默认 0.0.0.0:8900
 # 2) 等 /readyz 转绿
 until curl -sf localhost:8900/readyz; do sleep 5; done
 # 3) 跑等价性测试(指向真服务)
@@ -340,7 +340,7 @@ PHAROS_INFERENCE_URL=http://localhost:8900 pytest tests/test_equivalence_gpu.py 
 - **护栏措辞诚实化**(审查 S1):`_mrl_np` 下界断言(P1-1)是**运行时**兜底(首次 encode 才触发、只覆盖 dense_dim > full_dim);
   `healthz` 的 `full_dim`/`model_dense` 目前**仅暴露供人工排障,无客户端自动校验**(启动 fail-fast 的客户端 probe 是后续项)。
 - **跑法**:CPU `pytest tests`(210 绿,含 remote/concurrency/bf16 守护);GPU `pytest tests/engine/test_equivalence_gpu.py`
-  (navikb,自动 skip);端到端分时 **`python scripts/equiv_gpu.py --step remote|local`**(已入库,可复现审计)。
+  (pharos,自动 skip);端到端分时 **`python scripts/equiv_gpu.py --step remote|local`**(已入库,可复现审计)。
 
 ### 阶段 C —— CPU-mock 测试矩阵进 CI(仍单副本;常驻回归网)
 
@@ -433,7 +433,7 @@ docker compose exec pharos    python -c "import torch"        # 应 ModuleNotFou
 
 **落地状态(2026-07-06 实测,本机 Docker Desktop + WSL2 + 4090)**:
 
-> `pytorch/pytorch` base 的 4.25GB 层曾在代理下仅 ~70KB/s。先用 **bare-metal-inference pivot**(inference 裸机 navikb 跑,
+> `pytorch/pytorch` base 的 4.25GB 层曾在代理下仅 ~70KB/s。先用 **bare-metal-inference pivot**(inference 裸机 pharos 跑,
 > 容器化 pharos 经 `host.docker.internal:8900` 连它)验证架构 + sidecar S3 命门;后 base 镜像拉全(累积重试)+ 补 `scipy/einops`(坑⑥),
 > **committed 三容器 compose 原样 `docker compose --env-file .env.compose up -d` 已端到端跑通,全 healthy**——全部 gate 实测通过,无遗留 ⏸️。
 
@@ -455,7 +455,7 @@ docker compose exec pharos    python -c "import torch"        # 应 ModuleNotFou
 3. **坑③ torch 下载**:cu128 从 pytorch.org 走代理仅 368KB/s(5GB≈4h)→ 改用**预装 torch 的 `pytorch/pytorch` 官方镜像作 base**(daocloud 镜像拉),免下载。docker hub 拉取本身也要 daocloud 镜像加速器(在华无加速器→EOF)。
 4. **坑④ GPU 选卡(最坑)**:`dense.py:38` 固定 `get_device_name(0)` 并断言含 "4090"。原计划 `CUDA_DEVICE_ORDER=PCI_BUS_ID` 下 **device0=5070**→断言必失败→inference 永不 ready。**三态实测**:默认 FASTEST_FIRST→4090 ✅;PCI_BUS_ID→5070 ✗;`CUDA_VISIBLE_DEVICES=<4090UUID>`→4090 ✅(且 count=1)。修复=用 `CUDA_VISIBLE_DEVICES`(app 报错信息亲自建议的锁法)。**另**:WSL2 下 `device_ids`/`NVIDIA_VISIBLE_DEVICES=UUID` **不硬隔离**(实测容器仍见两卡),真锁靠 `CUDA_VISIBLE_DEVICES`。
 5. **坑⑤ 0.0.0.0 鉴权守卫**:`service.py:88` fail-closed——绑非回环**必须 keys 模式**(legacy 单密钥不接受)。容器内必须绑 0.0.0.0(Docker 端口转发要求)→ compose 必配 `PHAROS_KEYS_FILE`,否则 crash-loop。已加(评审 sec-4:明文 key 表单独 `:ro` 挂 `/run/pharos/keys.json`,**不进** RW 数据卷)。
-6. **坑⑥ 模型加载缺 scipy/einops(唯有真容器暴露)**:`[gpu]` extra 原只有 transformers/qwen-vl-utils/torch/accelerate,但 Qwen3-VL 加载经 transformers 传递依赖 **scipy**、rearrange 需 **einops**——pytorch base 不带、裸机 navikb 恰好有,故一直被掩盖。真三容器 up 时 inference `error: ModuleNotFoundError: No module named 'scipy'`→unhealthy→pharos 依赖不满足没起。已补进 `[gpu]`。**这正是"committed compose 从未原样跑过"盲区(评审判 PLAUSIBLE)的价值印证**:不真跑三容器,scipy/einops 永远发现不了。
+6. **坑⑥ 模型加载缺 scipy/einops(唯有真容器暴露)**:`[gpu]` extra 原只有 transformers/qwen-vl-utils/torch/accelerate,但 Qwen3-VL 加载经 transformers 传递依赖 **scipy**、rearrange 需 **einops**——pytorch base 不带、裸机 pharos 恰好有,故一直被掩盖。真三容器 up 时 inference `error: ModuleNotFoundError: No module named 'scipy'`→unhealthy→pharos 依赖不满足没起。已补进 `[gpu]`。**这正是"committed compose 从未原样跑过"盲区(评审判 PLAUSIBLE)的价值印证**:不真跑三容器,scipy/einops 永远发现不了。
 
 **阶段E 对抗评审(2026-07-06)修复的 confirmed 发现**:
 - **sec-2(高)**:`/readyz` 异常回 `str(e)` 泄漏内网 `qdrant:6333`/`inference:8900` 给未鉴权探针 → 改为只记服务端日志、响应体不回 detail(+ 测试断言 503 体无内网地址)。

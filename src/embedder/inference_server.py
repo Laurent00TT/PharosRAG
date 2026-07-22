@@ -13,7 +13,7 @@ dense_dim 截。保证 local 与 remote 最终向量等价(remote.py 说明)。
 
 **GPU 前向串行化**:单卡上并发 model.process 非线程安全,用一把锁串行(同 pharos LockedRetriever 思路)。
 
-跑:conda activate navikb && python -m embedder.inference_server   # 默认 0.0.0.0:8900
+跑:conda activate pharos && python -m embedder.inference_server   # 默认 0.0.0.0:8900
 需 pip install fastapi uvicorn。
 """
 from __future__ import annotations

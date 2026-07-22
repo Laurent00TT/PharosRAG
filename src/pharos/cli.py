@@ -1,6 +1,6 @@
 """Pharos CLI:serve(HTTP 守护进程)/ mcp(薄适配器)/ index(建库)/ parse(解析语料)/ ask(问答)/ health。
 
-serve/index 需要 WSL navikb 环境(GPU + 引擎依赖);parse 需 MINERU_TOKEN_*;mcp/ask/health 只需 httpx(+ mcp 包)。
+serve/index 需要 WSL pharos 环境(GPU + 引擎依赖);parse 需 MINERU_TOKEN_*;mcp/ask/health 只需 httpx(+ mcp 包)。
 """
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""embedder 配置。组件跑在 WSL `navikb` conda 环境(GPU=4090,按名锁定——见 dense.py)。"""
+"""embedder 配置。组件跑在 WSL `pharos` conda 环境(GPU=4090,按名锁定——见 dense.py)。"""
 from __future__ import annotations
 
 import os

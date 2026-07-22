@@ -1,6 +1,6 @@
 """并发压测:对 live 守护进程打混合负载,输出 p50/p95/max/吞吐/错误数。
 
-用法(WSL navikb):
+用法(WSL pharos):
   python scripts/bench.py --key <API_KEY> --clients 5 --n 10 [--ask-ratio 0.1]
 
 设计:全局锁串行化是已知架构(检索段串行、LLM 段并行),压测目的不是"证明它快",

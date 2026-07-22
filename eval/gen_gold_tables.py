@@ -7,7 +7,7 @@
 **程序化 QC(防出题幻觉)**:golden_answer 里的关键数值必须逐字出现在表体里(逗号规范化后子串匹配),
 不满足直接丢弃——出题人自己编的数,不配进考卷。
 
-用法:conda activate navikb && python eval/gen_gold_tables.py [--per-doc 2 --cap 16]
+用法:conda activate pharos && python eval/gen_gold_tables.py [--per-doc 2 --cap 16]
 产出:gold_tables.jsonl(单独留档)+ 追加进 gold.jsonl(原 72 题先备份 gold_backup_prose72.jsonl)。
 """
 from __future__ import annotations

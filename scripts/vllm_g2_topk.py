@@ -3,7 +3,7 @@
 (docs/VLLM_PLAN.md §4 G2)。这是决定 vLLM 能否当 Plan A 的**生产门** —— G1 的逐元素微漂(cosine 0.9997)
 不蕴含 top-k 不变(HNSW 近似 + RRF rank 融合会放大近重复 chunk 的微差)。
 
-**隔离设计**:vLLM 只出**查询向量**(它唯一的活);检索管道(dense+BM25+RRF+ACL)**只在 navikb 跑一次**,
+**隔离设计**:vLLM 只出**查询向量**(它唯一的活);检索管道(dense+BM25+RRF+ACL)**只在 pharos 跑一次**,
 两侧唯一差别 = dense 向量来源(官方 encode_query vs vLLM 预算)。同 sparse、同库、同 RRF → 纯隔离出编码器差异。
 
 **分时**(避免 8B 双载 OOM,同探针):
@@ -11,8 +11,8 @@
   # 1) vLLM 出 88 条查询向量(vllm env;截维 4096→1024+renorm,对齐库维度)
   conda activate vllm && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1 \
       python scripts/vllm_g2_topk.py --step vllm --out /tmp/vllm_g2
-  # 2) navikb 出官方向量 + 两侧检索 + 比对(navikb;开嵌入式库 ~/rag_real)
-  conda activate navikb && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1 \
+  # 2) pharos 出官方向量 + 两侧检索 + 比对(pharos;开嵌入式库 ~/rag_real)
+  conda activate pharos && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1 \
       python scripts/vllm_g2_topk.py --step retrieve --out /tmp/vllm_g2
   docker compose --env-file .env.compose start inference          # 还原栈
 """
@@ -80,7 +80,7 @@ def step_vllm(out_dir: str) -> None:
 
 
 def step_retrieve(out_dir: str) -> None:
-    """navikb:官方向量 + vLLM 向量各打同一嵌入式库,比 top-k。检索管道只此一处,纯隔离编码器差异。"""
+    """pharos:官方向量 + vLLM 向量各打同一嵌入式库,比 top-k。检索管道只此一处,纯隔离编码器差异。"""
     sys.path.insert(0, os.path.join(REPO, "src"))
     from embedder.config import EmbedConfig
     from embedder.dense import Dense

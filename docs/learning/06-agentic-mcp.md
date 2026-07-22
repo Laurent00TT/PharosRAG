@@ -395,7 +395,7 @@ agentic 平均 1.22 轮检索 + 每轮一次 LLM sufficiency 判断,延迟与 to
 
 ### Lab 1(CPU):起一个 fake 后端守护进程,亲手观察去重与结构化错误
 
-前置:WSL `conda activate navikb`(或任何装了本仓 + fastapi/uvicorn 的环境),不碰 GPU/网络。
+前置:WSL `conda activate pharos`(或任何装了本仓 + fastapi/uvicorn 的环境),不碰 GPU/网络。
 
 ```bash
 cd <repo>/tests
@@ -436,11 +436,11 @@ pytest tests/test_service.py tests/test_sessions.py tests/test_adapter.py tests/
 
 ### Lab 3(GPU/WSL,可选):Tier1 三路对比冒烟
 
-前置:WSL navikb 环境、`.env` 有 DEEPSEEK_API_KEY、先 `sudo systemctl stop pharos`(评估要拷库,
+前置:WSL pharos 环境、`.env` 有 DEEPSEEK_API_KEY、先 `sudo systemctl stop pharos`(评估要拷库,
 守护进程持锁见 eval/_common 的 copy_demo)。
 
 ```bash
-conda activate navikb
+conda activate pharos
 python eval/gen_gold.py --per-doc 6          # 若 gold.jsonl 不存在
 python eval/run_eval.py --mode both --judge deepseek --limit 5
 ```

@@ -4,7 +4,7 @@
 **决定 vLLM 方案生死的一个数**:cosine(vLLM 出的查询向量, 官方脚本出的向量)。>0.9999 = G1 GO
 (vLLM 能查现有库);否则现有库不能被 vLLM 查(向量漂移→top-k 错位),须先对齐或全库重建。
 
-**为什么分时两步**:官方(navikb, transformers 4.57)与 vLLM(vllm env, transformers 5.10)在不同 conda 环境,
+**为什么分时两步**:官方(pharos, transformers 4.57)与 vLLM(vllm env, transformers 5.10)在不同 conda 环境,
 且 8B 双加载会 OOM。故 `--step official` 先出向量存档 → `--step vllm` 再出向量并比对。
 
 **等价前提(照抄官方 recipe,否则假阴)**:两端都用 `[{system:instruction},{user:text}]` 会话 +
@@ -14,8 +14,8 @@
 跑:
   # 0) 腾 GPU(停 torch inference 容器)
   docker compose --env-file .env.compose stop inference
-  # 1) 官方向量(navikb)
-  conda activate navikb && python scripts/vllm_equiv_probe.py --step official
+  # 1) 官方向量(pharos)
+  conda activate pharos && python scripts/vllm_equiv_probe.py --step official
   # 2) vLLM 向量 + 比对(vllm env)
   conda activate vllm    && python scripts/vllm_equiv_probe.py --step vllm
 """
@@ -68,7 +68,7 @@ def _out_path(out_dir: str) -> str:
 
 
 def step_official(out_dir: str) -> None:
-    """navikb:用官方 Qwen3VLEmbedder 出全维向量,存档。这是**权威**(现有库就是它建的)。"""
+    """pharos:用官方 Qwen3VLEmbedder 出全维向量,存档。这是**权威**(现有库就是它建的)。"""
     import torch
     scripts = os.path.join(EMB_MODEL, "scripts")
     if scripts not in sys.path:
@@ -93,7 +93,7 @@ def step_vllm(out_dir: str) -> None:
     """vllm env:vLLM pooling 出向量,与官方存档比 cosine → G0/G1 判定。"""
     p = _out_path(out_dir)
     if not os.path.exists(p):
-        raise SystemExit(f"未找到官方存档 {p};先在 navikb 跑 --step official。")
+        raise SystemExit(f"未找到官方存档 {p};先在 pharos 跑 --step official。")
     ref = np.load(p)                # allow_pickle=False(默认):只读数值数组,无反序列化风险
     ref_vecs = ref["vecs"]
 

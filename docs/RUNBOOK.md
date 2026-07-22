@@ -1,12 +1,12 @@
 # RUNBOOK —— 本地启动与运维速查
 
-pharos 跑在 **WSL Ubuntu + conda env `navikb`**(已含 GPU 栈:torch cu128 / transformers / qdrant-client / jieba / mcp)。
-下面命令都假设你已 `conda activate navikb` 并 `cd` 到 pharos 仓根。运维细节见 [OPERATIONS.md](OPERATIONS.md)。
+pharos 跑在 **WSL Ubuntu + conda env `pharos`**(已含 GPU 栈:torch cu128 / transformers / qdrant-client / jieba / mcp)。
+下面命令都假设你已 `conda activate pharos` 并 `cd` 到 pharos 仓根。运维细节见 [OPERATIONS.md](OPERATIONS.md)。
 
 ## 0. 一次性准备
 
 ```bash
-conda activate navikb
+conda activate pharos
 cd <pharos 仓根>                     # 本机 clone 路径
 pip install -e .[dev]                # src-layout 可编辑安装(引擎已折入,import 名不变)
 cp .env.example .env                 # 填 DEEPSEEK_API_KEY;示例库用 PHAROS_TENANT=demo

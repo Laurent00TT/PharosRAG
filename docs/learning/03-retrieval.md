@@ -267,7 +267,7 @@ agentic RAG 多跳常重发相同 query,`encode_query` 做了 256 容量的 LRU(
 
 **Lab A:BM25 分词与 tf 双计防护(CPU,已实测可跑)**
 
-前置:仓库依赖环境(WSL `navikb` conda 环境,或任何装了 `jieba`/`qdrant-client`/`numpy` 的 Python);仓库根目录执行。
+前置:仓库依赖环境(WSL `pharos` conda 环境,或任何装了 `jieba`/`qdrant-client`/`numpy` 的 Python);仓库根目录执行。
 
 ```bash
 PYTHONPATH=src python -c "
@@ -290,7 +290,7 @@ pytest tests/engine/test_remote.py -v -k "retry or backoff or readiness or degra
 
 **Lab C(可选,GPU+WSL):复现 rerank 收益**
 
-前置:WSL `navikb` 环境、4090、Qwen3-VL 双模型、`parsed/` 真实数据(见 [EVALUATION.md §7](../components/embedder/EVALUATION.md))。
+前置:WSL `pharos` 环境、4090、Qwen3-VL 双模型、`parsed/` 真实数据(见 [EVALUATION.md §7](../components/embedder/EVALUATION.md))。
 
 ```bash
 cd eval/component_retrieval && python eval_rerank.py

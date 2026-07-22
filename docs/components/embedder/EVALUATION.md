@@ -155,4 +155,4 @@ python index_eval.py && python eval.py    # #1 单路召回 + #2 RRF 权重
 python retok.py                           # #3 tokenizer 重标(独立,无需 index)
 ```
 
-需 WSL `navikb` 环境(GPU=4090)+ Qwen3-VL + BGE-M3 模型 + `parsed/` 真实数据。详见 [`eval/component_retrieval/README.md`](../../../eval/component_retrieval/README.md)。
+需 WSL `pharos` 环境(GPU=4090)+ Qwen3-VL + BGE-M3 模型 + `parsed/` 真实数据。详见 [`eval/component_retrieval/README.md`](../../../eval/component_retrieval/README.md)。

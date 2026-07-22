@@ -2,7 +2,7 @@
 """Phase 1 端到端冒烟:pharos(remote 后端)→ vLLM 适配器 → vLLM serve,打真库出真命中。
 证明"应用层一字不改、PHAROS_INFERENCE_URL 指向适配器即从 FastAPI 切到 vLLM"(docs/VLLM_PLAN.md Phase 1)。
 
-前置(同一 WSL invocation 内已起):vllm serve :8000 + 适配器 :8900。本脚本(navikb,0 GPU—remote 模式)
+前置(同一 WSL invocation 内已起):vllm serve :8000 + 适配器 :8900。本脚本(pharos,0 GPU—remote 模式)
 构造 Retriever(inference_url=适配器)打嵌入式真库。跑:
   PHAROS_INFERENCE_URL=http://localhost:8900 python scripts/vllm_adapter_smoke.py
 """

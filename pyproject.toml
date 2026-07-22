@@ -22,8 +22,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# dense(Qwen3-VL-Embedding-8B)+ reranker,GPU 重依赖;本机在 WSL navikb(torch cu128)。
-gpu = ["transformers>=4.57.0", "qwen-vl-utils>=0.0.14", "torch>=2.8.0", "accelerate", "scipy", "einops"]  # scipy/einops:模型加载传递依赖,pytorch base 不带(裸机 navikb 有故曾被掩盖;E 真容器实测补全)
+# dense(Qwen3-VL-Embedding-8B)+ reranker,GPU 重依赖;本机在 WSL pharos(torch cu128)。
+gpu = ["transformers>=4.57.0", "qwen-vl-utils>=0.0.14", "torch>=2.8.0", "accelerate", "scipy", "einops"]  # scipy/einops:模型加载传递依赖,pytorch base 不带(裸机 pharos 有故曾被掩盖;E 真容器实测补全)
 # 解析编排(MinerU 客户端 + chunker.meta 页码元数据;见 scripts/README)
 parse = ["pypdf", "requests", "python-dotenv"]
 # 表格分块(xlsx)

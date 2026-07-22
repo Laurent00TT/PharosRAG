@@ -49,7 +49,7 @@
 ## 怎么跑
 
 ```bash
-conda activate navikb
+conda activate pharos
 python eval/gen_gold.py --per-doc 6        # 生成 gold.jsonl(~24 条)
 python eval/run_eval.py --mode both        # 四指标 + 双层归因;结果落 results_single.json / results_agentic.json
 python eval/acl_regression.py              # ACL 隔离回归,退出码 0=无泄漏

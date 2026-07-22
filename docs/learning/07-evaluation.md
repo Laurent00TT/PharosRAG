@@ -306,7 +306,7 @@ python aggregate.py        # 指纹修正后:打印 single 报表(n=1, judged=1,
 
 第一次跑触发 [aggregate.py:71](../../eval/aggregate.py#L71) 的拒绝出数——体感一下"防张冠李戴是机械强制的,不靠人自觉"。做完删掉 `eval/` 下的 `results_single.json`、`verdicts.json`、`_judge/`。
 
-### GPU/WSL 附加(前置:WSL + conda navikb + 4090,先 `sudo systemctl stop pharos`)
+### GPU/WSL 附加(前置:WSL + conda pharos + 4090,先 `sudo systemctl stop pharos`)
 
 - 全量 ACL 回归:`python eval/acl_regression.py; echo exit=$?` ——五节 65 项全 PASS、退出码 0,第五节现场演示"废掉出口闸仍 0 泄漏"。
 - Tier1 冒烟:`python eval/run_eval.py --mode both --judge deepseek --limit 5`(需 .env 有 DEEPSEEK_API_KEY;无 gold 先跑 `python eval/gen_gold.py --per-doc 6`)——逐题打印五指标,结束输出双层归因 Δ,rows 里能看到 ctx_text 与 retried/retry_kept 字段。

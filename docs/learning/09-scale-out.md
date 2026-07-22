@@ -238,7 +238,7 @@ nginx 是唯一对外入口(`127.0.0.1:8080`),pharos 改 `expose: 8787` 不发�
 
 ### 实验 1(CPU 可跑):remote 失败模式全谱走一遍
 
-前置:WSL `conda activate navikb && cd ~/projects/pharos && pip install -e '.[dev]'`(未装齐依赖时 pytest 是 collection error,不是真失败)。
+前置:WSL `conda activate pharos && cd ~/projects/pharos && pip install -e '.[dev]'`(未装齐依赖时 pytest 是 collection error,不是真失败)。
 
 ```bash
 pytest tests/engine/test_remote.py -v          # 27 个测试,纯 CPU-mock,不碰 GPU

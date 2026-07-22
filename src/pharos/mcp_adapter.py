@@ -36,7 +36,7 @@ _client = httpx.Client(
 )
 
 _DOWN_HINT = ("Pharos 守护进程未启动或不可达(PHAROS_URL={url})。"
-              "请先在 WSL 里运行:conda activate navikb && python -m pharos serve")
+              "请先在 WSL 里运行:conda activate pharos && python -m pharos serve")
 
 
 def _call(method: str, path: str, json: dict | None = None, params: dict | None = None) -> dict:

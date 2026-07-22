@@ -1,5 +1,5 @@
 """GPU 等价性测试(P1-2:local↔remote 检索向量数学等价的根据)。需真 GPU + Qwen3-VL 模型,CI 无 GPU 自动 skip。
-手动跑:conda activate navikb && pytest tests/engine/test_equivalence_gpu.py -v
+手动跑:conda activate pharos && pytest tests/engine/test_equivalence_gpu.py -v
 
 **这里只覆盖截维实现的一致性(torch vs numpy),不是完整 local↔remote 等价**(阶段B审查 M1 澄清):
 - `_mrl`(torch)与 `_mrl_np`(numpy)对同一份 fp32 全维截维,验证两实现逐元素一致;
@@ -23,7 +23,7 @@ def _gpu_ready() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _gpu_ready(), reason="需真 GPU + Qwen3-VL 模型(navikb 环境);CI 跳过")
+pytestmark = pytest.mark.skipif(not _gpu_ready(), reason="需真 GPU + Qwen3-VL 模型(pharos 环境);CI 跳过")
 
 
 def test_mrl_torch_numpy_consistent_on_fp32_output():

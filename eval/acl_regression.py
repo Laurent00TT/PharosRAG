@@ -9,7 +9,7 @@
   docB  t1 / public                            -> t1 任何身份可见
   docC  t2 / public                            -> 仅 t2 可见(对 t1 跨租户不可见)
   docD  t1 / restricted / allow=[g_finance]    -> 仅 g_finance 可见
-用法:conda activate navikb && python eval/acl_regression.py   (退出码 0=全过,1=有泄漏)
+用法:conda activate pharos && python eval/acl_regression.py   (退出码 0=全过,1=有泄漏)
 """
 from __future__ import annotations
 

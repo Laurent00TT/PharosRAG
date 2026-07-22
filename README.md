@@ -63,7 +63,7 @@ docker compose --env-file .env.compose up -d --scale pharos=3   # 入口 http://
 服务交给 systemd 托管,开机自启、崩了自愈。团队成员日常要做的,就是拿到自己那把 API key,然后:
 
 ```bash
-conda activate navikb
+conda activate pharos
 pip install -e .[dev]                          # src-layout,可编辑安装
 
 python -m pharos ask "库里关于 X 的内容有哪些?"   # 闭管道问答,答案带引用
@@ -148,5 +148,5 @@ GPU 端到端的 0-leak 回归(`eval/acl_regression.py`,跑在 WSL + 4090)、并
 
 <div align="center">
 <br/>
-<sub>Pharos · 自建的多格式 agentic RAG · 本机 4090 / WSL <code>navikb</code></sub>
+<sub>Pharos · 自建的多格式 agentic RAG · 本机 4090 / WSL <code>pharos</code></sub>
 </div>

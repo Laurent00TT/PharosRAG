@@ -19,5 +19,5 @@
 
 ## 跑
 
-`pip install -e .[dev]` 后 `pytest -q`(navikb 环境已具全部依赖)。契约不漂移由
+`pip install -e .[dev]` 后 `pytest -q`(pharos 环境已具全部依赖)。契约不漂移由
 `tests/test_review_fixes.py::test_transports_contract_no_drift` 把门(HTTP 适配器与 stdio 两传输六工具 docstring 同文 + `_INSTRUCTIONS` 同源自 `toolcore`)。

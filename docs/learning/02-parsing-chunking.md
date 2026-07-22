@@ -307,7 +307,7 @@ python -m pytest -q tests/engine/test_core.py -k "placeholder_table or table_ret
 
 先看两个测试绿着:占位表格(无 caption/footnote/表体)被丢弃、正常表格的检索信号含表头+行标签。然后把 [src/chunker/core.py:379](../../src/chunker/core.py#L379) 的 `and (cap or foot or el.table_body)` 门控临时去掉重跑——`test_placeholder_table_still_dropped` 转红:面包屑单独把检索文本撑成非空,幽灵块复活,其后所有 chunk 的 id 平移。这就是"+23 幽灵块让全库 gold 错位"那个 bug 的最小模型,也是理解 §4 延期纪律的最短路径。改完还原。
 
-**(可选,GPU/WSL)est_tokens 重标定**:在 WSL 的 `navikb` 环境加载 Qwen3-VL tokenizer(模型在 `~/models/Qwen3-VL-Embedding-8B`),对 sidecar 目录(`~/rag_sidecar`)里若干 doc 的 chunk text 算真实 token 数,与 `chunk.n_tokens` 散点对比、按 doc_type 分组看 char/token 比——复现"英文散文 ≈3.85-4.0、财报 5.08、中文研报 1.51,单值无法兼顾两簇但两个误差方向都有兜底"的那次"验证后不改"决策。
+**(可选,GPU/WSL)est_tokens 重标定**:在 WSL 的 `pharos` 环境加载 Qwen3-VL tokenizer(模型在 `~/models/Qwen3-VL-Embedding-8B`),对 sidecar 目录(`~/rag_sidecar`)里若干 doc 的 chunk text 算真实 token 数,与 `chunk.n_tokens` 散点对比、按 doc_type 分组看 char/token 比——复现"英文散文 ≈3.85-4.0、财报 5.08、中文研报 1.51,单值无法兼顾两簇但两个误差方向都有兜底"的那次"验证后不改"决策。
 
 ---
 

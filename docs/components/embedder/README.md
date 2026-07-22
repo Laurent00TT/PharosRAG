@@ -52,7 +52,7 @@ for r in ret.search_with_context("...query...", User(tenant="t1", principals=["g
 
 ## 环境
 
-WSL Ubuntu conda env `navikb`(torch 2.8.0+cu128,GPU=4090)。依赖见 `requirements.txt`。
+WSL Ubuntu conda env `pharos`(torch 2.8.0+cu128,GPU=4090)。依赖见 `requirements.txt`。
 dense 模型用 modelscope 下到 `~/models/Qwen3-VL-Embedding-8B`(~16GB)。
 
 ## 状态

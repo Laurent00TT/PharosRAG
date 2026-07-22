@@ -1,12 +1,12 @@
 # Pharos 测试文档
 
 > 两道门:CPU 单测(每改必跑,一套 pytest 全绿=179 项)/ GPU 冒烟 + ACL 回归(投产前跑)。
-> 数字均为 WSL `navikb`(4090)真实运行结果,非估算。
+> 数字均为 WSL `pharos`(4090)真实运行结果,非估算。
 
 ## 1. CPU 单测(单仓一套 pytest = 179 项 = 产品 59 + 引擎 120,~数秒,不碰 Qdrant/GPU/网络)
 
 ```bash
-conda activate navikb && cd pharos && python -m pytest -q
+conda activate pharos && cd pharos && python -m pytest -q
 ```
 
 产品面 59 项在 `tests/`;引擎面 120 项在 `tests/engine/`(折叠进本仓后同一套 pytest 一并跑,
