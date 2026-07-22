@@ -165,7 +165,7 @@ mode/strategy 等枚举校验故意**不在 pydantic 层做**(否则变 422),留
 | 风险 | 现状 | 缓解 |
 |---|---|---|
 | 守护进程单点(无多副本) | 当前规模可接受 | systemd 自愈 + 适配器结构化降级 + hint 指向恢复动作 |
-| 适配器与 stdio 直连契约漂移 | 合仓后为单仓结构化契约测试(适配器 vs `mcp_stdio` docstring 相等 + `_INSTRUCTIONS` 单一来源自 toolcore) | 一条 pytest 套件(179 passed)全绿才算过;COMPONENT_NOTES 记录接缝 |
+| 适配器与 stdio 直连契约漂移 | 合仓后为单仓结构化契约测试(适配器 vs `mcp_stdio` docstring 相等 + `_INSTRUCTIONS` 单一来源自 toolcore) | 一条 pytest 套件全绿才算过(基数见 [TESTING.md §1](TESTING.md));COMPONENT_NOTES 记录接缝 |
 | index 与 serve 抢锁 | 单客户端锁 | indexer 捕获锁错误给明确提示;文档要求先停 serve |
 | 端口暴露即数据暴露 | 默认 127.0.0.1 | PHAROS_API_KEY;公网/HTTPS 明确非目标 |
 | LLM 上游故障 | /v1/ask 返回 ask_failed(retriable) | 细节只进服务端日志,不外泄 |

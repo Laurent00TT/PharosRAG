@@ -97,8 +97,8 @@
 ### 1.3 约束(不可违反)
 
 1. **向后兼容**:`inference_url` 空 = local(进程内 GPU),默认行为**零改动**。回归基线 = 当前 CPU 测试套件全绿
-   (基数以 pharos 环境 `pytest tests` 实测为准;`grep -c 'def test_'` = 185,含 4 个 remote 骨架测试 →
-   "local 零破坏"应扣除这 4 个,即 181;⚠ [DESIGN.md](DESIGN.md):166 记的是 "179 passed",两处需对齐,见 §9)。
+   (基数以 [TESTING.md §1](TESTING.md) 为准 —— 那是全仓唯一权威;当时另有 4 个 remote 骨架测试,
+   判"local 零破坏"时应扣除)。
 2. **引擎改动最小**:靠依赖注入 + 工厂(`make_dense`/`make_reranker`),不改 local 代码路径。
 3. **等价性**:local 与 remote 产出的**最终检索向量数学等价** —— 同一个库能 local 建、remote 查,不错位。
    这是硬约束,靠"全维返回 + 客户端截维"结构性保证,并用测试证明(阶段 B)。
@@ -627,7 +627,7 @@ Plan B 并存 + go/no-go 探针就位,等价/吞吐过门才升 Plan A**;inferen
 
 ## 9. 落地后需回填的文档
 
-- [DESIGN.md](DESIGN.md) §1 非目标:移除"水平扩展/多副本";D1 **纠正"换 url 即可"**为"配置面换 url,另需 store 三分支 + 数据迁移 + ACL server 重测";`:166` 测试基数 **179 → 与实测对齐**
+- ✅ [DESIGN.md](DESIGN.md) §1 非目标:移除"水平扩展/多副本";D1 **纠正"换 url 即可"**为"配置面换 url,另需 store 三分支 + 数据迁移 + ACL server 重测";测试基数已收敛到 [TESTING.md §1](TESTING.md) 单一来源
 - [ROADMAP.md](ROADMAP.md) v2 方向:"Qdrant server / 多副本"从候选移到已交付;同样纠正"换 url 即可"
 - [OPERATIONS.md](OPERATIONS.md):补推理服务运维(启动/预热/失败降级/重试语义)、多副本运维(滚更/单副本故障/大锁边界)
 - [README.md](../README.md):架构图改画"应用层无 GPU 多副本 + 独立推理服务"

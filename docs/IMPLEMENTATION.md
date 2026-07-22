@@ -20,7 +20,7 @@ src/pharos/
   identity.py     多身份(D10):keys 文件解析/生成(fail-closed 校验)/身份 dataclass
   obs.py          可观测(D11):Stats(端点计数+延迟分位)+ RequestLog(JSONL,截断在本层)
 src/{chunker,embedder,generator}/  三个组件包(pip install -e '.[dev]',src-layout 可编辑安装)
-tests/            179 项(产品 59 + 引擎 120 在 tests/engine/);_fakes.py 提供 FakeRetriever/make_app
+tests/            产品面 + 引擎面(在 tests/engine/)同一套 pytest;_fakes.py 提供 FakeRetriever/make_app
 ```
 
 ## 2. 请求路径
@@ -100,5 +100,5 @@ engine.py 只做工厂装配,不再有跨仓接缝。
   transport 共用同一套契约(单一来源)。组件测试一行未改跑绿 = 拆分无回归的证据。
 - **产品层分层搭建**:config/engine/sessions → service(FastAPI)+ mcp_adapter + indexer + cli →
   身份(identity)+ 观测(obs)。每加一层补 CPU 单测(fake retriever + MockLLM,不碰 GPU/网络)。
-- **每层两道把关**:CPU 单测(逻辑,产品 59 + 引擎 120 = 179 项)+ GPU 冒烟/压测/演练(真库真行为);
+- **每层两道把关**:CPU 单测(逻辑,产品面 + 引擎面同一套;基数见 [TESTING.md §1](TESTING.md))+ GPU 冒烟/压测/演练(真库真行为);
   行为质量(smart-ask)与服务面(多身份)各经一轮对抗评审 + 自核实修复。全部数字与实录见 [TESTING.md](TESTING.md)。

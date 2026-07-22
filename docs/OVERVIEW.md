@@ -33,7 +33,7 @@ Pharos 是一个**自包含单仓的多格式 agentic RAG 系统**:把 PDF / 扫
 | **consume**(agentic) | `src/pharos`(`toolcore`) | retriever 暴露成 **6 个 MCP 工具**(retrieve/list_documents/get_document/get_outline/expand/retrieve_grouped),经三入口(`pharos serve` / `pharos mcp` / `pharos mcp --direct`)对外;ACL 身份启动绑定不可篡改 | ✅ 工具单测 + 契约无漂移测 + 真索引连通 |
 | **measure** | `eval` | 去偏评估闭环:合成 gold → 跑系统 → 裁判(Tier1 deepseek 可复现 / Tier2 双 Claude 权威)→ 五指标 + 双层归因 + ACL 回归 | ✅ 见 §8 |
 
-**单一 pytest 套件:179 passed**(product 59 + engine 120,后者收在 `tests/engine/`)。CI 门槛拆两级:CPU CI = pytest(含 embedder `test_acl.py` ACL 谓词);GPU 发版前 = `eval/acl_regression.py`(WSL+4090,端到端 0 泄漏,不进 CPU CI)。
+**单一 pytest 套件**(产品面 + 引擎面,后者收在 `tests/engine/`;基数见 [TESTING.md §1](TESTING.md))。CI 门槛拆两级:CPU CI = pytest(含 embedder `test_acl.py` ACL 谓词);GPU 发版前 = `eval/acl_regression.py`(WSL+4090,端到端 0 泄漏,不进 CPU CI)。
 
 ## 4. 亮点①:eager 廉价骨架 + 查询期 small-to-big
 
@@ -98,7 +98,7 @@ Pharos 是一个**自包含单仓的多格式 agentic RAG 系统**:把 PDF / 扫
 
 ## 10. 当前状态 + 怎么用
 
-**功能全部完成**:五组件 + MCP 三入口建好、单一 pytest 套件 **179 passed** + 88 题去偏评估 + 5 批对抗加固,git 干净。当前版本 **v0.3.0**。
+**功能全部完成**:五组件 + MCP 三入口建好、单一 pytest 套件全绿(基数见 [TESTING.md §1](TESTING.md))+ 88 题去偏评估 + 5 批对抗加固,git 干净。当前版本 **v0.3.0**。
 
 **已投产**:生产索引 `~/rag_real`(`PHAROS_INDEX_DIR`)≈ **77 篇真文档 / 7652 chunk**(14 类:论文/财报/研报/法规/政府/手册/幻灯/NASA 技报/新闻…);评估用库 `~/rag_eval_big`(evalbig)≈ 15 篇 / 1409 chunk。配置统一走仓根一个 `.env`(`PHAROS_*` 命名空间;`RAG_*`/`RAG_EVAL_*` 仅保留一版弃用别名),语料目录 `PHAROS_CORPUS_DIR`、索引目录 `PHAROS_INDEX_DIR`。
 

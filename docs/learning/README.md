@@ -196,7 +196,7 @@
 |---|---|---|
 | 生产库 `~/rag_real` | ≈ **77 篇 / 7652 chunk** | 14 类真实文档 |
 | 评估库 evalbig | ≈ 15 篇 / 1409 chunk | 5 英文论文 + 4 英文财报 + 6 中文研报 |
-| pytest 套件 | **179 passed**(v0.3.0 OVERVIEW 口径) | 另一时点口径:写作前对抗审查全仓 `pytest tests -q` 基线 **224/4skip** → **259 passed/5skip**(新增 36 用例),起真 Qdrant server **264/0skip**——与 179 非同一时点/统计口径,**勿相加** |
+| pytest 套件 | **179 passed**(历史口径,当时 OVERVIEW 所记;现行基数见 [TESTING §1](../TESTING.md)) | 另一时点口径:写作前对抗审查全仓 `pytest tests -q` 基线 **224/4skip** → **259 passed/5skip**(新增 36 用例),起真 Qdrant server **264/0skip**——与 179 非同一时点/统计口径,**勿相加** |
 | 多副本吞吐上界 | ~**3.2 req/s** | =单卡 GPU 前向串行,`--scale` 不改变它 |
 | vLLM 等价性 probe | cosine **0.99956**;88 题 top-k **87/88** 一致 | go/no-go 门,判据设在业务影响层 |
 

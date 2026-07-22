@@ -72,7 +72,7 @@ sudo systemctl start pharos
 ## 6. 测试 / 门
 
 ```bash
-pytest -q                            # CPU 门:179(产品 59 + 引擎 120)
+pytest -q                            # CPU 门:产品面 + 引擎面一套跑完(基数见 docs/TESTING.md §1)
 python eval/acl_regression.py        # GPU 发布前门:ACL 0 泄漏(需停守护进程)
 ```
 

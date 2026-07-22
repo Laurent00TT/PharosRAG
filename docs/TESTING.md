@@ -1,15 +1,22 @@
 # Pharos 测试文档
 
-> 两道门:CPU 单测(每改必跑,一套 pytest 全绿=179 项)/ GPU 冒烟 + ACL 回归(投产前跑)。
+> 两道门:CPU 单测(每改必跑,一套 pytest 全绿,基数见 §1)/ GPU 冒烟 + ACL 回归(投产前跑)。
 > 数字均为 WSL `pharos`(4090)真实运行结果,非估算。
 
-## 1. CPU 单测(单仓一套 pytest = 179 项 = 产品 59 + 引擎 120,~数秒,不碰 Qdrant/GPU/网络)
+## 1. CPU 单测(单仓一套 pytest,~20 秒,不碰 Qdrant/GPU/网络)
 
 ```bash
 conda activate pharos && cd pharos && python -m pytest -q
 ```
 
-产品面 59 项在 `tests/`;引擎面 120 项在 `tests/engine/`(折叠进本仓后同一套 pytest 一并跑,
+> **本节 §1 是全仓测试基数的唯一权威来源。** 其余文档一律链回这里,不复述数字——
+> 早先一个过期基数被抄进七份文档,套件长起来后无人同步,于是七处一起错。
+>
+> **实测**(2026-07-22,WSL `pharos` / RTX 4090):`264 collected` → **`259 passed, 5 skipped`**。
+> 分解:产品面 **85 项**(6 个文件,在 `tests/`)+ 引擎面 **179 项**(13 个文件,在 `tests/engine/`,
+> 其中 5 项因缺 GPU / Qdrant server 自动 skip,见各文件的 skip 理由)。
+
+产品面在 `tests/`;引擎面在 `tests/engine/`(折叠进本仓后同一套 pytest 一并跑,
 含 embedder `test_acl.py` 的 ACL 谓词单测)。CPU CI 门槛 = 这一套 pytest 全绿。
 
 | 文件 | 覆盖 |
@@ -24,20 +31,17 @@ conda activate pharos && cd pharos && python -m pytest -q
 工具语义本体(already_returned/omitted_budget/预算含资产/无权不泄存在性…)的单一来源是
 `src/pharos/toolcore.py`,由 `tests/engine/` 下的工具语义测试覆盖(与产品面同一套 pytest 一并跑)。
 
-**实测**:产品面 `59 passed`(六个测试文件:sessions/service/adapter/review_fixes/smart/team);
-连同 `tests/engine/` 的 120 项,单仓一套 pytest 合计 **179 passed**。
+产品面的六个测试文件:sessions / service / adapter / review_fixes / smart / team。基数见本节开头。
 
 ## 2. 引擎面测试(已折叠进本仓 `tests/engine/`)
 
-引擎折叠进本仓后不再是独立仓、也无独立门:引擎面 120 项与产品面 59 项同一条命令
-(`python -m pytest -q`)一并跑。契约不漂测试(适配器 vs `mcp_stdio` docstring 逐字同文、
+引擎折叠进本仓后不再是独立仓、也无独立门:引擎面与产品面同一条命令
+(`python -m pytest -q`)一并跑,基数见 §1。契约不漂测试(适配器 vs `mcp_stdio` docstring 逐字同文、
 `_INSTRUCTIONS` 单一来源自 `toolcore`)已是**仓内结构性**测试,不再需要跨仓 exec。
 
 ```bash
-python -m pytest tests/engine -q               # 引擎面 120 项(可单独跑;通常与产品面合并跑)
+python -m pytest tests/engine -q               # 只跑引擎面(可单独跑;通常与产品面合并跑)
 ```
-
-**实测**:`120 passed`(引擎面)/ 全套 `179 passed`。
 
 ## 3. GPU 冒烟(真库 ~/rag_real,77 篇 / 7652 chunk)
 
@@ -164,7 +168,7 @@ bob 读 stats → 403、alice → 200。
 agent 撞服务端限流未跑完,**不依赖投票、逐条自核实**。核实后修一批**健壮性/文档/观测完整性**缺陷并
 钉回归测试(test_team.py 相关项):观测崩溃跳过记录→try/finally;结构化失败(200)漏计 errors→按业务
 status 补判;query 截断层耦合→下放 obs 层;name 唯一性 + 禁 `|`;keys new 裸抛→复用 load_keys 校验;
-备份漏 .env / 缺 mkdir;RTO 冷热标注;若干文档字段不一致。回归:单仓一套 pytest(179)全绿。
+备份漏 .env / 缺 mkdir;RTO 冷热标注;若干文档字段不一致。回归:单仓一套 pytest 全绿。
 
 ## 5. 未覆盖(诚实清单)
 

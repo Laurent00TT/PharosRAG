@@ -1,6 +1,6 @@
 # tests/ —— 统一测试树
 
-引擎折入 pharos 后,原来「两仓各自 pytest」塌缩成**一套 pytest**(共 179 项)。
+引擎折入 pharos 后,原来「两仓各自 pytest」塌缩成**一套 pytest**(基数见 [docs/TESTING.md §1](../docs/TESTING.md))。
 
 ## 布局
 
@@ -14,7 +14,7 @@
 
 ## 绿灯门(两档 —— 见不变量 #1)
 
-- **CPU CI 门** = `pytest`(全 179 项;含 embedder `test_acl.py` 的 **ACL 谓词级**断言)。任何 import/store/命名空间改动后必跑。
+- **CPU CI 门** = `pytest`(含 embedder `test_acl.py` 的 **ACL 谓词级**断言)。任何 import/store/命名空间改动后必跑。
 - **GPU 发布前门** = `python eval/acl_regression.py`(WSL + 4090;44+ 端到端「RRF 融合出口 0 泄漏」断言,**硬依赖 GPU**,不进 CPU CI)。
 
 ## 跑
