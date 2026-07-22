@@ -19,6 +19,11 @@ conda activate pharos && cd pharos && python -m pytest -q
 产品面在 `tests/`;引擎面在 `tests/engine/`(折叠进本仓后同一套 pytest 一并跑,
 含 embedder `test_acl.py` 的 ACL 谓词单测)。CPU CI 门槛 = 这一套 pytest 全绿。
 
+**CI 在哪跑**:[`.github/workflows/ci.yml`](../.github/workflows/ci.yml),每次 push/PR 触发。
+两档:① 只装 `[dev]`(py3.10 + 3.12)—— 跑的正是本文档承诺给贡献者的那条命令;
+② 额外装 CPU torch(py3.12)—— 让 `test_remote.py` 里比对 torch↔numpy 截维等价的 5 条断言
+真跑而不是 skip(那是"local 建库 / remote 查询不错位"的底线)。GPU 那道门不进 CI,见 §3。
+
 | 文件 | 覆盖 |
 |---|---|
 | test_sessions.py | 同会话同 set / 跨会话隔离 / LRU 逐出有界 / touch 刷新 |

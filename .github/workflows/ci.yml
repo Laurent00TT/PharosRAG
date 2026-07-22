@@ -1,0 +1,60 @@
+# CI — CPU 门(docs/TESTING.md §1):不碰 GPU / Qdrant server / 网络,~20 秒跑完。
+# 投产前的另一道门(GPU 冒烟 + eval/acl_regression.py 端到端 0 泄漏)需要 4090 与真库,
+# 不进 CI,仍是手动关 —— 见 docs/TESTING.md §3。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 只读 token:本工作流不写回仓库,也不发布任何东西。
+permissions:
+  contents: read
+
+# 同一分支上新推送时取消旧运行,避免排队。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    # 这一档跑的正是 README / tests/README 承诺给贡献者的那条命令。
+    # 它必须在**只装 [dev]** 的环境下绿 —— 曾经不绿(5 个测试裸 import torch,
+    # 而 [dev] 只有 pytest),现已用 pytest.importorskip 修好,这个 job 就是防它回归。
+    name: pytest (py${{ matrix.python-version }}, 仅 [dev])
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 与 pyproject 的 requires-python = ">=3.10" 对齐,两端各测一个。
+        # 3.10 上实测可解析(numpy 落到 2.2.6)并全绿,不是照抄声明。
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev]'
+      - run: pytest -q
+
+  tests-with-cpu-torch:
+    # 有 5 条断言比对 torch 与 numpy 的截维/归一化数学是否等价 —— 它守的是
+    # "local 建库、remote 查询不错位"这条数据正确性底线(见 tests/engine/test_remote.py)。
+    # 没有 torch 时它们诚实 skip;这里单独装 CPU torch 让它们真跑,
+    # 而不是把 200MB 的 torch 塞进 [dev] 拖慢每个贡献者。
+    name: pytest (py3.12, + CPU torch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e '.[dev,table]'
+      # CPU wheel 专用 index,不拉 CUDA(约 200MB vs 2GB+)
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pytest -q

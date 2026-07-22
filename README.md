@@ -4,10 +4,11 @@
 
 # Pharos
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Laurent00TT/pharos/ci.yml?branch=main&style=flat-square&labelColor=0B1E3A&label=CI)](https://github.com/Laurent00TT/pharos/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-MIT-1D9E75?style=flat-square&labelColor=0B1E3A)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.10+-F5B84A?style=flat-square&labelColor=0B1E3A)
-![RAG](https://img.shields.io/badge/RAG-agentic%20%2B%20闭管道-6FA8DC?style=flat-square&labelColor=0B1E3A)
-![Exits](https://img.shields.io/badge/出口-HTTP%20%2B%20MCP-F5B84A?style=flat-square&labelColor=0B1E3A)
-![Docs](https://img.shields.io/badge/学习文档-12%20篇-1D9E75?style=flat-square&labelColor=0B1E3A)
+![Exits](https://img.shields.io/badge/出口-HTTP%20%2B%20MCP-6FA8DC?style=flat-square&labelColor=0B1E3A)
+[![Docs](https://img.shields.io/badge/学习文档-12%20篇-1D9E75?style=flat-square&labelColor=0B1E3A)](docs/learning/)
 
 **把 PDF、扫描件、docx、pptx、xlsx 变成一个能问答、带企业级权限、答案可溯源的本地知识库。**
 几个 RAG 组件各自打磨到位,再收进同一个仓库,拼成一套能直接交给小团队用的服务:多身份鉴权、可观测、systemd 托管都是现成的。

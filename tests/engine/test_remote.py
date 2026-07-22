@@ -72,7 +72,7 @@ def test_factory_selects_backend():
 
 def test_remote_dense_load_noop_and_mrl_equivalent_to_local():
     # RemoteDense._load 不加载模型;客户端 numpy 截维 == Dense._mrl 的 torch 截维(数学等价 => local 建/remote 查不错位)
-    import torch
+    torch = pytest.importorskip("torch", reason="对照组要 CPU torch(在 [gpu] extra 里,不在 [dev]);CI 单独装")
     rd = RemoteDense(EmbedConfig(inference_url="http://x", dense_dim=1024))
     rd._load()
     assert rd._model is None
@@ -261,7 +261,7 @@ def test_mrl_fp32_normalize_on_bf16_input():
     """阶段B审查 M1:真实建库入口是 **bf16 张量**进 Dense._mrl(model.process 返回 bf16)。fp32 修复(先 .float()
     再截+normalize)-> norm=1.0;反向守卫证明 bf16 上 normalize 会坏(norm≈1.002)。删 dense.py:_mrl 的 .float()
     本测试即红——守住 P1-2 修复。纯 CPU(torch CPU),进 CI,不需 GPU。"""
-    import torch
+    torch = pytest.importorskip("torch", reason="需 CPU torch(在 [gpu] extra 里,不在 [dev]);CI 单独装")
     import torch.nn.functional as F
 
     from embedder.dense import Dense

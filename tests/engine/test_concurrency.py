@@ -12,6 +12,7 @@ import types
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from embedder.config import EmbedConfig
 from embedder.dense import Dense
@@ -115,7 +116,7 @@ def test_store_lock_serializes_upsert():        # 写路径(最危险:np.append 
 
 # ---------- ③/③b Dense/Reranker._fwd_lock 串行 GPU 前向 ----------
 def test_dense_fwd_lock_serializes():
-    import torch
+    torch = pytest.importorskip("torch", reason="需 CPU torch(在 [gpu] extra 里,不在 [dev]);CI 单独装")
     d = Dense(EmbedConfig(dense_dim=1024))
     probe = _OverlapProbe(4, lambda: torch.zeros(1, 4096))   # _mrl 截到 1024 + renorm(真 torch CPU)
     d._model = SimpleNamespace(process=probe)                # 已设 _model -> _load 快返回,不碰真 GPU
@@ -186,6 +187,7 @@ def _load_single_flight(model_cls_setter, load_fn):
 
 
 def test_dense_load_single_flight():
+    pytest.importorskip("torch", reason="被测的 Dense._load 路径内部要 torch;CI 单独装 CPU torch")
     d = Dense(EmbedConfig())
     d._assert_gpu = lambda: None
 
@@ -197,6 +199,7 @@ def test_dense_load_single_flight():
 
 
 def test_reranker_load_single_flight():         # 审查缺口③:reranker _load 也 double-check
+    pytest.importorskip("torch", reason="被测的 Reranker._load 路径内部要 torch;CI 单独装 CPU torch")
     from embedder.rerank import Reranker
     rr = Reranker(EmbedConfig())
     rr._assert_gpu = lambda: None
