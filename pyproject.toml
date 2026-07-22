@@ -8,6 +8,7 @@ version = "0.3.0"
 description = "Pharos(法罗斯):自包含多格式 agentic RAG 系统 —— 解析→分块→混合检索→生成,HTTP 闭管道问答 + MCP 双出口"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
 # 核心 = 闭管道跑起来的最小集(引擎三包折入后,其运行依赖并入此处)。
 # GPU dense/rerank 走 [gpu] extra;解析/表格/office 各自 extra;详见 requirements-gpu.txt。
 dependencies = [
