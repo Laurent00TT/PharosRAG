@@ -4,7 +4,7 @@
 
 # Pharos
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Laurent00TT/pharos/ci.yml?branch=main&style=flat-square&labelColor=0B1E3A&label=CI)](https://github.com/Laurent00TT/pharos/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/Laurent00TT/PharosRAG/ci.yml?branch=main&style=flat-square&labelColor=0B1E3A&label=CI)](https://github.com/Laurent00TT/PharosRAG/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-1D9E75?style=flat-square&labelColor=0B1E3A)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.10+-F5B84A?style=flat-square&labelColor=0B1E3A)
 ![Exits](https://img.shields.io/badge/exits-HTTP%20%2B%20MCP-6FA8DC?style=flat-square&labelColor=0B1E3A)
