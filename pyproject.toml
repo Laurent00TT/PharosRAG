@@ -15,7 +15,7 @@ dependencies = [
     "fastapi>=0.110",       # HTTP 服务
     "uvicorn>=0.29",
     "httpx>=0.27",          # MCP 适配器 -> 守护进程
-    "mcp>=1.0",             # MCP 出口
+    "mcp>=1.0,<2",          # MCP 出口;2.0 移除了 mcp.server.fastmcp,升级需迁移 mcp_stdio
     "openai>=1.30",         # generator 的 OpenAI-compatible LLM(DeepSeek)
     "qdrant-client>=1.12",  # embedder 向量库(named dense+sparse, RRF, Modifier.IDF)
     "jieba",                # embedder BM25 sparse 中文分词(纯 CPU)
