@@ -49,7 +49,7 @@ pharos mcp --direct(stdio 直连,│     ├─ Retriever(Qdrant 嵌入式/serve
 
 ### 2.1 toolcore:工具语义单一来源(D3)
 
-六个工具(retrieve / list_documents / get_document / get_outline / expand / retrieve_grouped)的入参校验、结构化结果、跨调用去重、token 预算、错误映射、agent 使用契约 `_INSTRUCTIONS`,全部收在 [src/pharos/toolcore.py:1-13](../../src/pharos/toolcore.py#L1)——纯 stdlib,不 import FastMCP/embedder/GPU,retriever 与 user 靠 duck typing 注入。HTTP 端点与两个 MCP 绑定都只做 transport 绑定,语义零复制。
+六个工具(retrieve / list_documents / get_document / get_outline / expand / retrieve_grouped)的入参校验、结构化结果、跨调用去重、token 预算、错误映射、agent 使用契约 `_INSTRUCTIONS`,全部收在 [src/pharos/toolcore.py:1-13](../../src/pharos/toolcore.py#L1)——纯 stdlib,不 import MCPServer/embedder/GPU,retriever 与 user 靠 duck typing 注入。HTTP 端点与两个 MCP 绑定都只做 transport 绑定,语义零复制。
 
 这层契约里有三条经对抗评审打磨出来的细节链,值得背下来:
 

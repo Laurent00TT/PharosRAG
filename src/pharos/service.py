@@ -269,7 +269,7 @@ def create_app(cfg: config.PharosConfig | None = None, retriever=None, user=None
 
     @app.get("/v1/instructions")
     def instructions():
-        """agent 使用契约(与引擎 stdio server 的 FastMCP instructions 同文)。"""
+        """agent 使用契约(与引擎 stdio server 的 MCPServer instructions 同文)。"""
         return {"status": "ok", "instructions": tc._INSTRUCTIONS}
 
     # ---------- 检索工具面(六个,与 MCP 工具一一对应,语义同 toolcore)----------

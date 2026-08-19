@@ -12,7 +12,7 @@
 ### N1:mcp_server 工具语义与 stdio transport 耦合 —— 拆出 toolcore
 
 - **异议**:六个工具的校验/结构化构建/去重/预算/错误映射(经 R1-R5 五轮评审打磨的核心资产)
-  全在 stdio server 里与 FastMCP 绑定。Pharos 的 HTTP 端点若复制这套逻辑,契约必然漂移
+  全在 stdio server 里与 MCPServer 绑定。Pharos 的 HTTP 端点若复制这套逻辑,契约必然漂移
   (同一个 already_returned 语义两处实现,改一处忘一处)。
 - **动作**:纯移动拆分出 `toolcore.py`(transport 无关、纯 stdlib、retriever/user 依赖注入),
   stdio 侧(现 `src/pharos/mcp_stdio.py`)保留 stdio 绑定 + 显式 re-export。**逻辑零改动**。

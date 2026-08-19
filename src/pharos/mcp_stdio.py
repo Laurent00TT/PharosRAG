@@ -16,7 +16,7 @@
   retrieve_grouped(query, doc_ids, top_k)  跨多篇分组检索(对比/汇总)
 
 **分层**:工具语义(校验/构建/去重/预算/错误映射/契约文本)在同目录 toolcore.py(纯 stdlib、transport
-无关),本文件只做 stdio 绑定:FastMCP 注册 + 环境身份 + lazy retriever + 进程级会话集合。Pharos 守护进程
+无关),本文件只做 stdio 绑定:MCPServer 注册 + 环境身份 + lazy retriever + 进程级会话集合。Pharos 守护进程
 (HTTP API / MCP 薄适配器,见 projects/pharos)复用同一 toolcore,契约不漂移。
 
 配置(环境变量,统一 PHAROS_*,与守护进程同一 .env):PHAROS_TENANT(必需,否则 fail-closed 空)、
@@ -28,7 +28,7 @@ dense 模型(Qwen3-VL 8B,GPU)在**首次 retrieve 时 lazy 加载**(启动快,�
 from __future__ import annotations
 
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from embedder import EmbedConfig, Retriever, User
 
@@ -42,7 +42,8 @@ from .toolcore import (                                 # noqa: F401  (re-export
     _retrieve_impl, _list_impl, _get_document_impl, _outline_impl, _expand_impl, _grouped_impl,
 )
 
-mcp = FastMCP("rag", instructions=_INSTRUCTIONS)
+# instructions 必须关键字传参:mcp 2.x 在它之前插入了 title/description 位置参,位置传参会静默错位
+mcp = MCPServer("rag", instructions=_INSTRUCTIONS)
 _retriever: Retriever | None = None
 
 
@@ -84,7 +85,7 @@ def _bound_user() -> User:
 _RETURNED_KEYS: set = set()
 
 
-# --- MCP 工具(薄包装:绑定身份 + lazy 取 retriever。返回结构化 dict,FastMCP 产 structuredContent)---
+# --- MCP 工具(薄包装:绑定身份 + lazy 取 retriever。返回结构化 dict,MCPServer 产 structuredContent)---
 @mcp.tool()
 def retrieve(query: str, top_k: int | None = None, rerank: bool = False, doc_ids: list[str] | None = None,
              doc_type: str | None = None, kind: str | None = None, mode: str = "full",

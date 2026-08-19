@@ -17,12 +17,13 @@ import uuid
 from urllib.parse import quote
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from . import config
 from . import toolcore as _tc
 
-mcp = FastMCP("rag", instructions=_tc._INSTRUCTIONS)
+# instructions 必须关键字传参:mcp 2.x 在它之前插入了 title/description 位置参,位置传参会静默错位
+mcp = MCPServer("rag", instructions=_tc._INSTRUCTIONS)
 _SESSION_ID = uuid.uuid4().hex
 
 # 读超时放宽到 10 分钟:守护进程首次 retrieve 会 lazy 加载 8B 模型(1-2 分钟),适配器不能先超时

@@ -1,12 +1,12 @@
 """mcp_server 工具层核心(transport 无关,纯 stdlib)。
 
-server.py(stdio FastMCP)与 Pharos 守护进程(HTTP API + MCP 薄适配器)共用这一层:
+server.py(stdio MCPServer)与 Pharos 守护进程(HTTP API + MCP 薄适配器)共用这一层:
 入参校验 / 结构化结果构建 / 跨调用去重 / token 预算 / 错误映射 / agent 使用契约(_INSTRUCTIONS)。
 拆分自 server.py(R1-R5 对抗评审后的版本),**逻辑零改动**——只是把"工具语义"与"transport 绑定"
 分开,让同一套契约在 stdio 与 HTTP 两种消费方式下不漂移。拆分留痕与动机见
 pharos/docs/COMPONENT_NOTES.md(projects/pharos 仓)。
 
-依赖约定:本模块**不 import FastMCP / embedder / GPU 相关**(仅 os 与 stdlib)——无 GPU 环境的
+依赖约定:本模块**不 import MCPServer / embedder / GPU 相关**(仅 os 与 stdlib)——无 GPU 环境的
 薄适配器也能 import 它取 _INSTRUCTIONS 与错误构造。retriever / user 全部依赖注入(duck typing:
 retriever 需有 search_with_context/get_document/get_outline/expand/search_grouped/store.list_documents;
 user 需有 .tenant)。
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 
-# B6:server-level 使用契约(stdio 经 FastMCP instructions 下发;Pharos 适配器同文下发)——grounding 防幻觉 /
+# B6:server-level 使用契约(stdio 经 MCPServer instructions 下发;Pharos 适配器同文下发)——grounding 防幻觉 /
 # 工具路由何时检索 / 何时停 / 不可信数据 / 引用锚 / 结构化状态恢复。是 agentic 路径对应闭管道 grounding SYSTEM 的等价物。
 _INSTRUCTIONS = """本服务把一个**本地多格式知识库**的检索暴露成工具,供你按需取证回答(agentic RAG)。约定:
 
@@ -208,7 +208,7 @@ def _safe_doc_call(fn, ref: str):
         return _err("backend_unavailable", "检索后端暂不可用,请稍后重试。", retriable=True)
 
 
-# --- 内部实现(可单测,不依赖 FastMCP / GPU):身份/入参校验 + 构建 ---
+# --- 内部实现(可单测,不依赖 MCPServer / GPU):身份/入参校验 + 构建 ---
 def _retrieve_impl(retriever, user, query: str, top_k, rerank: bool,
                    doc_ids=None, doc_type=None, kind=None, mode: str = "full",
                    strategy: str = "hybrid", rerank_top_n=None, returned_keys=None) -> dict:

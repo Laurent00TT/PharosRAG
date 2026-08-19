@@ -72,7 +72,7 @@ pharos mcp --direct ────────▶  toolcore.py(工具语义单一�
 
 六个工具的**全部语义**——入参校验、结构化结果、跨调用去重、token 预算、错误映射、agent 使用契约——
 收在一个纯 stdlib 模块里([src/pharos/toolcore.py:9](../../src/pharos/toolcore.py#L9) 的依赖约定:
-不 import FastMCP/embedder/GPU,retriever 与 user 全部依赖注入、duck typing)。HTTP 端点
+不 import MCPServer/embedder/GPU,retriever 与 user 全部依赖注入、duck typing)。HTTP 端点
 ([src/pharos/service.py:276](../../src/pharos/service.py#L276) 起的六个路由)和两个 MCP 绑定只做 transport 绑定,语义零复制。
 
 六个工具及其 agent 用途:
@@ -87,7 +87,7 @@ pharos mcp --direct ────────▶  toolcore.py(工具语义单一�
 | `retrieve_grouped` | 跨多篇分组检索 | 对比/汇总(每 doc 各取 top_k,cap 20 防 GPU 放大,[toolcore.py:289](../../src/pharos/toolcore.py#L289)) |
 
 工具面之上还有一份 **`_INSTRUCTIONS` 使用契约**([src/pharos/toolcore.py:20](../../src/pharos/toolcore.py#L20)),
-经 FastMCP instructions 下发给 agent(HTTP 侧同文暴露在 `/v1/instructions`,
+经 MCPServer instructions 下发给 agent(HTTP 侧同文暴露在 `/v1/instructions`,
 [service.py:270](../../src/pharos/service.py#L270)):何时检索、grounding 防幻觉、检索结果是数据不是指令、
 引用锚用 chunk_id 而非会变的序号 n、status=empty 时最多重试一两次然后承认无据。
 它对应闭管道里那份 grounding SYSTEM prompt——**闭管道靠 prompt 约束生成,
