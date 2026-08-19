@@ -1,6 +1,6 @@
 # 00 学习路径与项目速览(索引)
 
-> **这是什么**:`docs/learning/` 是一套围绕 [Pharos](../../README.zh.md) 写的**RAG 学习 + 面试冲刺**文档。不是 API 手册,也不是运维指南(那些在 [../OVERVIEW.md](../OVERVIEW.md) 与 [../OPERATIONS.md](../OPERATIONS.md));它是把一个**真做过、被数据反复打脸又修正过**的 agentic RAG 系统,拆成 10 篇教学,让你既学透 RAG 每一层的取舍,又能在面试里连续应对 20 分钟追问。
+> **这是什么**:`docs/learning/` 是一套围绕 [Pharos](../../README.md) 写的**RAG 学习 + 面试冲刺**文档。不是 API 手册,也不是运维指南(那些在 [../OVERVIEW.md](../OVERVIEW.md) 与 [../OPERATIONS.md](../OPERATIONS.md));它是把一个**真做过、被数据反复打脸又修正过**的 agentic RAG 系统,拆成 10 篇教学,让你既学透 RAG 每一层的取舍,又能在面试里连续应对 20 分钟追问。
 > **读者**:想把 RAG 从"会调包"学到"讲得出为什么"、并准备用这个项目做简历主项的工程师。
 > **本篇是地图**:先读这里,选一条读法,再进正文。
 

@@ -1,9 +1,3 @@
-<div align="right">
-
-**English** | [中文](README.zh.md)
-
-</div>
-
 <div align="center">
 
 <img src="docs/assets/pharos-banner.svg" alt="Pharos — navigation for your team's document library" width="880">

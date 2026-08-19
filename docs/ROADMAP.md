@@ -1,6 +1,6 @@
 # Pharos 路线图
 
-已交付能力见 [README](../README.zh.md) 与各设计/实测文档;本文只记**往哪走**与**明确不做**。
+已交付能力见 [README](../README.md) 与各设计/实测文档;本文只记**往哪走**与**明确不做**。
 (已落地功能的动机/负结果/实测留档:检索智能见 [TESTING §3](TESTING.md) + [COMPONENT_NOTES](COMPONENT_NOTES.md);
 团队服务面见 [DESIGN D10-D12](DESIGN.md) + [OPERATIONS](OPERATIONS.md)。)
 
