@@ -59,6 +59,8 @@ pharos 对这四个问题各给了一个答案,且每个答案都有"被否决�
 
 dense 层用 Qwen3-VL-Embedding-8B,**复用模型自带的官方脚本**(last-token pooling),不自写 pooling/forward——自己写要担和官方脚本数值漂移的风险,不值得([src/embedder/dense.py:58-63](../../src/embedder/dense.py#L58))。文本与图像编码进同一个 4096 维空间。
 
+选型补一个业界坐标:同家族的 Qwen3-Embedding 文本版发布时(2025-06)曾登顶 MTEB 多语言榜,2026-07 口径仍在第一梯队(已被 Llama-Embed-Nemotron、KaLM-Embedding 等后来者超越;MTEB 2026 已换代 v2,引用名次必须标时点与版本)。选 VL 变体是为"图文同空间"这个硬需求。榜单只回答组件选型,"在你的语料上行不行"要靠自建评测——组件榜与系统验收的分工见 [07 评估方法论](07-evaluation.md)。
+
 索引期按 chunker 打的 `image_only` flag 分流([src/embedder/embed.py:70-85](../../src/embedder/embed.py#L70)):
 
 - **纯图 chunk**(无 caption 无正文)→ `encode_image` 得图像向量,**跳过 sparse**——纯图没有可检索文字,BM25 无意义;召回全靠图文同空间,文字 query 直接跨模态命中;

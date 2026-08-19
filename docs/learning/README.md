@@ -63,6 +63,7 @@
 | "讲个你排查过的最难的 bug" | [10](10-methodology-stories.md) §5 | 忠实度假结论 / ③ 表格 / vLLM 三次误判 |
 | "为什么不用 LangChain" | [01](01-rag-overview.md) §6 | 价值恰在框架帮不了的地方(heading 树 / ACL 下推 / 评估) |
 | "88 题够吗 / gold 是模型合成可信吗" | [07](07-evaluation.md) §8 | 承认小样本;配对归因;趋势尺不是绝对分 |
+| "业界有没有统一的 RAG 评测基准" | [07](07-evaluation.md) §1 / 追问 Q9 | 统一的是方法论不是数据;MTEB v2 · TREC RAG · ragas · BrowseComp 四层(2026-07 口径) |
 
 ---
 
